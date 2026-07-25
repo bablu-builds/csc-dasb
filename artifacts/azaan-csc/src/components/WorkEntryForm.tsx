@@ -231,7 +231,7 @@ export function WorkEntryForm({ initialData, onSubmit, isSubmitting = false }: W
           />
 
           <div className="space-y-2 pt-1">
-            <FormLabel className="block">बकाया राशि <span className="text-muted-foreground font-normal text-xs ml-1">(Due ₹)</span></FormLabel>
+            <label className="block text-sm font-medium leading-none">बकाया राशि <span className="text-muted-foreground font-normal text-xs ml-1">(Due ₹)</span></label>
             <div className={cn(
               "p-2.5 rounded-md border font-semibold flex items-center gap-2",
               due > 0 ? "bg-red-50 border-red-200 text-red-700" : "bg-green-50 border-green-200 text-green-700"
