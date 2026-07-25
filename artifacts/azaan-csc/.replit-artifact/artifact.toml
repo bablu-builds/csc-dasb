@@ -1,0 +1,27 @@
+kind = "web"
+previewPath = "/"
+title = "AZAAN CSC Management"
+version = "1.0.0"
+id = "artifacts/azaan-csc"
+router = "path"
+
+[[services]]
+name = "web"
+paths = [ "/" ]
+localPort = 23363
+
+[services.development]
+run = "pnpm --filter @workspace/azaan-csc run dev"
+
+[services.production]
+build = [ "pnpm", "--filter", "@workspace/azaan-csc", "run", "build" ]
+serve = "static"
+publicDir = "artifacts/azaan-csc/dist/public"
+
+[[services.production.rewrites]]
+from = "/*"
+to = "/index.html"
+
+[services.env]
+PORT = "23363"
+BASE_PATH = "/"
