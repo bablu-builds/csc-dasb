@@ -4,14 +4,16 @@ import { useLocation } from 'wouter';
 import { Loader2 } from 'lucide-react';
 
 export function ProtectedRoute({ children }: { children: React.ReactNode }) {
-  const { user, loading } = useAuth();
+  const { user, loading, isConfigured } = useAuth();
   const [, setLocation] = useLocation();
 
   useEffect(() => {
+    // If Firebase is not configured, allow demo access — no redirect
+    if (!isConfigured) return;
     if (!loading && !user) {
       setLocation('/login');
     }
-  }, [user, loading, setLocation]);
+  }, [user, loading, setLocation, isConfigured]);
 
   if (loading) {
     return (
@@ -20,6 +22,9 @@ export function ProtectedRoute({ children }: { children: React.ReactNode }) {
       </div>
     );
   }
+
+  // Demo mode: Firebase not configured, show pages with mock data
+  if (!isConfigured) return <>{children}</>;
 
   if (!user) return null;
 

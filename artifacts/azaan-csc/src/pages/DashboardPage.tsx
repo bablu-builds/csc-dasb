@@ -1,16 +1,34 @@
 import { useState, useEffect } from 'react';
 import { WorkEntry, subscribeToWorkEntries } from '@/lib/firestore';
-import { isToday, isThisMonth, differenceInDays } from 'date-fns';
+import { isToday, isThisMonth, differenceInDays, subDays } from 'date-fns';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { IndianRupee, Users, Clock, AlertTriangle, FileText } from 'lucide-react';
 import { Link } from 'wouter';
 import { Button } from '@/components/ui/button';
+import { isConfigured } from '@/lib/firebase';
+import { Timestamp } from 'firebase/firestore';
+
+// Demo data shown when Firebase is not yet connected
+const DEMO_ENTRIES: WorkEntry[] = [
+  { id: '1', customerName: 'Ravi Kumar', mobile: '9876543210', category: 'PAN Card', workDetail: 'New PAN card application', date: Timestamp.fromDate(new Date()), totalAmount: 150, paidAmount: 150, dueAmount: 0, status: 'Completed', address: 'Mohalla Ganj', createdAt: Timestamp.fromDate(new Date()) },
+  { id: '2', customerName: 'Sunita Devi', mobile: '9123456780', category: 'Aadhar Card', workDetail: 'Address update', date: Timestamp.fromDate(subDays(new Date(), 2)), totalAmount: 100, paidAmount: 50, dueAmount: 50, status: 'Pending', address: 'Station Road', createdAt: Timestamp.fromDate(subDays(new Date(), 2)) },
+  { id: '3', customerName: 'Mohd. Salim', mobile: '9988776655', category: 'Railway/Bus Ticket Booking', workDetail: 'Patna to Delhi - 2 tickets', date: Timestamp.fromDate(subDays(new Date(), 5)), totalAmount: 500, paidAmount: 300, dueAmount: 200, status: 'Pending', address: 'Civil Lines', createdAt: Timestamp.fromDate(subDays(new Date(), 5)) },
+  { id: '4', customerName: 'Geeta Sharma', mobile: '9876500001', category: 'Jati Praman Patra', workDetail: 'Caste certificate for college', date: Timestamp.fromDate(subDays(new Date(), 9)), totalAmount: 200, paidAmount: 0, dueAmount: 200, status: 'Pending', address: 'Purana Bazar', createdAt: Timestamp.fromDate(subDays(new Date(), 9)) },
+  { id: '5', customerName: 'Ajay Singh', mobile: '9012345678', category: 'Driving Licence (DL)', workDetail: 'DL renewal', date: Timestamp.fromDate(new Date()), totalAmount: 300, paidAmount: 300, dueAmount: 0, status: 'Completed', address: 'Shastri Nagar', createdAt: Timestamp.fromDate(new Date()) },
+  { id: '6', customerName: 'Priya Yadav', mobile: '8800123456', category: 'Bijli Bill Payment', workDetail: 'July electricity bill', date: Timestamp.fromDate(subDays(new Date(), 1)), totalAmount: 850, paidAmount: 850, dueAmount: 0, status: 'Completed', address: 'Nehru Colony', createdAt: Timestamp.fromDate(subDays(new Date(), 1)) },
+  { id: '7', customerName: 'Ramesh Paswan', mobile: '7700654321', category: 'Ration Card', workDetail: 'New ration card member addition', date: Timestamp.fromDate(subDays(new Date(), 12)), totalAmount: 250, paidAmount: 100, dueAmount: 150, status: 'Pending', address: 'Indira Nagar', createdAt: Timestamp.fromDate(subDays(new Date(), 12)) },
+];
 
 export default function DashboardPage() {
   const [entries, setEntries] = useState<WorkEntry[]>([]);
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
+    if (!isConfigured) {
+      setEntries(DEMO_ENTRIES);
+      setLoading(false);
+      return;
+    }
     const unsubscribe = subscribeToWorkEntries((data) => {
       setEntries(data);
       setLoading(false);
