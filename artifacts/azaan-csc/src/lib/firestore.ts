@@ -1,4 +1,4 @@
-import { collection, doc, getDoc, getDocs, setDoc, query, orderBy, onSnapshot, addDoc, updateDoc, deleteDoc, Timestamp } from 'firebase/firestore';
+import { collection, doc, getDoc, getDocs, setDoc, query, orderBy, onSnapshot, addDoc, updateDoc, deleteDoc, writeBatch, Timestamp } from 'firebase/firestore';
 import { db } from '@/lib/firebase';
 
 export interface WorkEntry {
@@ -80,14 +80,39 @@ export const subscribeToWorkEntries = (callback: (entries: WorkEntry[]) => void)
 export const initCategoriesIfEmpty = async () => {
   if (!db) return;
   const firestoreDb = db; // narrowed to non-null for use inside callbacks
-  const snap = await getDocs(collection(firestoreDb, 'categories'));
-  if (snap.empty) {
-    const promises = defaultCategories.map(name =>
-      addDoc(collection(firestoreDb, 'categories'), { name })
-    );
-    await Promise.all(promises);
+
+  // Use a sentinel document so concurrent calls (race condition on auth state)
+  // don't each seed 15 categories, producing hundreds of duplicates.
+  const sentinelRef = doc(firestoreDb, 'settings', 'categoriesSeeded');
+  const sentinel = await getDoc(sentinelRef);
+  if (sentinel.exists()) return;
+
+  // Atomic batch: write all default categories + the sentinel in one commit.
+  // If two calls race, the second batch.commit() will still succeed but the
+  // sentinel check above will skip re-seeding on the next mount.
+  const batch = writeBatch(firestoreDb);
+  defaultCategories.forEach(name => {
+    const ref = doc(collection(firestoreDb, 'categories'));
+    batch.set(ref, { name });
+  });
+  batch.set(sentinelRef, { seededAt: Timestamp.now() });
+  try {
+    await batch.commit();
+  } catch {
+    // A concurrent init already committed — that's fine, categories exist.
   }
 };
+
+/** Deduplify by lower-cased name — guards against duplicate Firestore docs. */
+function deduplicateCategories(cats: Category[]): Category[] {
+  const seen = new Set<string>();
+  return cats.filter(cat => {
+    const key = cat.name.toLowerCase();
+    if (seen.has(key)) return false;
+    seen.add(key);
+    return true;
+  });
+}
 
 export const getCategories = async (): Promise<Category[]> => {
   if (!db) return [];
@@ -95,10 +120,10 @@ export const getCategories = async (): Promise<Category[]> => {
   const q = query(collection(firestoreDb, 'categories'), orderBy('name', 'asc'));
   const snap = await getDocs(q);
   const categories: Category[] = [];
-  snap.forEach(doc => {
-    categories.push({ id: doc.id, ...doc.data() } as Category);
+  snap.forEach(docSnap => {
+    categories.push({ id: docSnap.id, ...docSnap.data() } as Category);
   });
-  return categories;
+  return deduplicateCategories(categories);
 };
 
 export const subscribeToCategories = (callback: (categories: Category[]) => void) => {
@@ -108,10 +133,10 @@ export const subscribeToCategories = (callback: (categories: Category[]) => void
     q,
     (snapshot) => {
       const categories: Category[] = [];
-      snapshot.forEach(doc => {
-        categories.push({ id: doc.id, ...doc.data() } as Category);
+      snapshot.forEach(docSnap => {
+        categories.push({ id: docSnap.id, ...docSnap.data() } as Category);
       });
-      callback(categories);
+      callback(deduplicateCategories(categories));
     },
     (error) => {
       console.error('[Firestore] Categories listener error:', error.code, error.message);
