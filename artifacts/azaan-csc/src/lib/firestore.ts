@@ -6,13 +6,13 @@ export interface WorkEntry {
   customerName: string;
   mobile: string;
   category: string;
-  workDetail: string;
+  workDetail?: string;
   date: Timestamp;
   totalAmount: number;
   paidAmount: number;
   dueAmount: number;
   status: 'Pending' | 'Completed' | 'Rejected';
-  address: string;
+  address?: string;
   createdAt: Timestamp;
   completedAt?: Timestamp;   // set automatically when status → Completed
   rejectedAt?: Timestamp;    // set automatically when status → Rejected

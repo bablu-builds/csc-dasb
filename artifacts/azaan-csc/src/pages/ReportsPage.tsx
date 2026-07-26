@@ -3,8 +3,37 @@ import { subscribeToWorkEntries, WorkEntry } from '@/lib/firestore';
 import { isToday, isThisWeek, isThisMonth, format } from 'date-fns';
 import { Download, BarChart2, TrendingUp, IndianRupee, XCircle } from 'lucide-react';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
+import { Skeleton } from '@/components/ui/skeleton';
 import { Button } from '@/components/ui/button';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
+import { formatCurrency } from '@/lib/format';
+import {
+  BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, Cell,
+} from 'recharts';
+
+const CHART_COLORS = [
+  '#2563eb', '#7c3aed', '#db2777', '#ea580c', '#16a34a',
+  '#0891b2', '#9333ea', '#dc2626', '#d97706', '#059669',
+];
+
+function ReportsSkeleton() {
+  return (
+    <div className="space-y-6 mt-4">
+      <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+        {[0, 1, 2].map(i => (
+          <Card key={i}>
+            <CardHeader className="pb-2"><Skeleton className="h-4 w-28" /></CardHeader>
+            <CardContent><Skeleton className="h-8 w-24 mb-1" /><Skeleton className="h-3 w-36" /></CardContent>
+          </Card>
+        ))}
+      </div>
+      <Card>
+        <CardHeader><Skeleton className="h-5 w-40" /></CardHeader>
+        <CardContent><Skeleton className="h-48 w-full" /></CardContent>
+      </Card>
+    </div>
+  );
+}
 
 export default function ReportsPage() {
   const [entries, setEntries] = useState<WorkEntry[]>([]);
@@ -41,12 +70,10 @@ export default function ReportsPage() {
       `"${e.rejectionReason || ''}"`,
       e.refundAmount ?? '',
     ]);
-
     const csvContent = [headers.join(','), ...rows.map(r => r.join(','))].join('\n');
     const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
     const link = document.createElement('a');
-    const url = URL.createObjectURL(blob);
-    link.setAttribute('href', url);
+    link.setAttribute('href', URL.createObjectURL(blob));
     link.setAttribute('download', `csc_report_${format(new Date(), 'yyyyMMdd')}.csv`);
     link.style.visibility = 'hidden';
     document.body.appendChild(link);
@@ -55,122 +82,177 @@ export default function ReportsPage() {
   };
 
   const ReportView = ({ periodEntries }: { periodEntries: WorkEntry[] }) => {
-    // Rejected entries are tracked separately so they don't skew earnings
     const rejectedEntries = periodEntries.filter(e => e.status === 'Rejected');
     const activeEntries = periodEntries.filter(e => e.status !== 'Rejected');
 
     const totalEarned = activeEntries.reduce((sum, e) => sum + e.paidAmount, 0);
     const totalDues = activeEntries.reduce((sum, e) => sum + e.dueAmount, 0);
     const totalEntries = activeEntries.length;
-
     const rejectedCount = rejectedEntries.length;
     const totalRefunded = rejectedEntries.reduce((sum, e) => sum + (e.refundAmount || 0), 0);
 
-    // Category breakdown (excluding rejected)
     const categoryStats = activeEntries.reduce((acc, entry) => {
-      if (!acc[entry.category]) {
-        acc[entry.category] = { count: 0, earned: 0 };
-      }
+      if (!acc[entry.category]) acc[entry.category] = { count: 0, earned: 0 };
       acc[entry.category].count += 1;
       acc[entry.category].earned += entry.paidAmount;
       return acc;
-    }, {} as Record<string, { count: number, earned: number }>);
+    }, {} as Record<string, { count: number; earned: number }>);
 
-    const sortedCategories = Object.entries(categoryStats).sort((a, b) => b[1].earned - a[1].earned);
+    const sortedCategories = Object.entries(categoryStats)
+      .sort((a, b) => b[1].earned - a[1].earned)
+      .slice(0, 10);
+
+    const chartData = sortedCategories.map(([name, stats]) => ({
+      name: name.length > 14 ? name.slice(0, 14) + '…' : name,
+      fullName: name,
+      earned: stats.earned,
+      count: stats.count,
+    }));
 
     return (
       <div className="space-y-6 mt-4">
-        {/* Main stats */}
+        {/* Summary cards */}
         <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-          <Card>
+          <Card className="border-green-200 shadow-sm">
             <CardHeader className="flex flex-row items-center justify-between pb-2">
               <CardTitle className="text-sm font-medium">Total Earned</CardTitle>
-              <TrendingUp className="h-4 w-4 text-green-600" />
+              <div className="h-8 w-8 rounded-full bg-green-50 flex items-center justify-center">
+                <TrendingUp className="h-4 w-4 text-green-600" />
+              </div>
             </CardHeader>
             <CardContent>
-              <div className="text-2xl font-bold text-green-700">₹{totalEarned}</div>
-              <p className="text-xs text-muted-foreground mt-1">Excludes refunded/rejected work</p>
-            </CardContent>
-          </Card>
-          
-          <Card>
-            <CardHeader className="flex flex-row items-center justify-between pb-2">
-              <CardTitle className="text-sm font-medium">Work Entries</CardTitle>
-              <BarChart2 className="h-4 w-4 text-blue-600" />
-            </CardHeader>
-            <CardContent>
-              <div className="text-2xl font-bold text-blue-700">{totalEntries} entries</div>
-              <p className="text-xs text-muted-foreground mt-1">Pending + completed</p>
+              <div className="text-2xl font-bold text-green-700">{formatCurrency(totalEarned)}</div>
+              <p className="text-xs text-muted-foreground mt-1">Excludes refunded / rejected work</p>
             </CardContent>
           </Card>
 
-          <Card>
+          <Card className="border-blue-100 shadow-sm">
             <CardHeader className="flex flex-row items-center justify-between pb-2">
-              <CardTitle className="text-sm font-medium">Dues Outstanding</CardTitle>
-              <IndianRupee className="h-4 w-4 text-red-600" />
+              <CardTitle className="text-sm font-medium">Work Entries</CardTitle>
+              <div className="h-8 w-8 rounded-full bg-blue-50 flex items-center justify-center">
+                <BarChart2 className="h-4 w-4 text-blue-600" />
+              </div>
             </CardHeader>
             <CardContent>
-              <div className="text-2xl font-bold text-red-700">₹{totalDues}</div>
+              <div className="text-2xl font-bold text-blue-700">{totalEntries}</div>
+              <p className="text-xs text-muted-foreground mt-1">Pending + completed entries</p>
+            </CardContent>
+          </Card>
+
+          <Card className={`shadow-sm ${totalDues > 0 ? 'border-red-200 bg-red-50/30' : ''}`}>
+            <CardHeader className="flex flex-row items-center justify-between pb-2">
+              <CardTitle className="text-sm font-medium">Dues Outstanding</CardTitle>
+              <div className="h-8 w-8 rounded-full bg-red-50 flex items-center justify-center">
+                <IndianRupee className="h-4 w-4 text-red-600" />
+              </div>
+            </CardHeader>
+            <CardContent>
+              <div className="text-2xl font-bold text-red-700">{formatCurrency(totalDues)}</div>
+              <p className="text-xs text-muted-foreground mt-1">Unpaid amounts</p>
             </CardContent>
           </Card>
         </div>
 
-        {/* Rejected / Refunded breakdown */}
-        {(rejectedCount > 0 || true) && (
-          <Card className="border-slate-200 bg-slate-50">
-            <CardHeader className="flex flex-row items-center justify-between pb-2">
-              <CardTitle className="text-sm font-medium text-slate-700 flex items-center gap-2">
-                <XCircle className="h-4 w-4" />
-                Rejected / Refunded Work
-              </CardTitle>
-            </CardHeader>
-            <CardContent>
-              {rejectedCount === 0 ? (
-                <p className="text-sm text-muted-foreground">No rejected entries in this period.</p>
-              ) : (
-                <div className="grid grid-cols-2 gap-6">
-                  <div>
-                    <div className="text-2xl font-bold text-slate-700">{rejectedCount}</div>
-                    <p className="text-xs text-muted-foreground mt-1">Rejected entries</p>
-                  </div>
-                  <div>
-                    <div className="text-2xl font-bold text-slate-700">₹{totalRefunded}</div>
-                    <p className="text-xs text-muted-foreground mt-1">Total refunded</p>
-                  </div>
+        {/* Rejected breakdown */}
+        <Card className="border-slate-200 bg-slate-50 shadow-sm">
+          <CardHeader className="flex flex-row items-center justify-between pb-2">
+            <CardTitle className="text-sm font-medium text-slate-700 flex items-center gap-2">
+              <XCircle className="h-4 w-4" />
+              Rejected / Refunded Work
+            </CardTitle>
+          </CardHeader>
+          <CardContent>
+            {rejectedCount === 0 ? (
+              <p className="text-sm text-muted-foreground">No rejected entries in this period.</p>
+            ) : (
+              <div className="grid grid-cols-2 gap-6">
+                <div>
+                  <div className="text-2xl font-bold text-slate-700">{rejectedCount}</div>
+                  <p className="text-xs text-muted-foreground mt-1">Rejected entries</p>
                 </div>
-              )}
-            </CardContent>
-          </Card>
-        )}
+                <div>
+                  <div className="text-2xl font-bold text-slate-700">{formatCurrency(totalRefunded)}</div>
+                  <p className="text-xs text-muted-foreground mt-1">Total refunded</p>
+                </div>
+              </div>
+            )}
+          </CardContent>
+        </Card>
 
-        {/* Category breakdown */}
-        <Card>
+        {/* Category chart + table */}
+        <Card className="shadow-sm">
           <CardHeader>
-            <CardTitle className="text-lg">Category Breakdown</CardTitle>
+            <CardTitle className="text-base font-semibold">Category Breakdown</CardTitle>
           </CardHeader>
           <CardContent>
             {sortedCategories.length === 0 ? (
-              <div className="text-center text-muted-foreground py-8">No data for this period</div>
+              <div className="text-center text-muted-foreground py-12">
+                <BarChart2 className="h-10 w-10 mx-auto mb-3 opacity-20" />
+                <p className="text-sm">No data for this period</p>
+              </div>
             ) : (
-              <div className="overflow-x-auto">
-                <table className="w-full text-sm">
-                  <thead>
-                    <tr className="border-b text-muted-foreground">
-                      <th className="text-left pb-2 font-medium">Category</th>
-                      <th className="text-right pb-2 font-medium">Count</th>
-                      <th className="text-right pb-2 font-medium">Earned</th>
-                    </tr>
-                  </thead>
-                  <tbody className="divide-y">
-                    {sortedCategories.map(([category, stats]) => (
-                      <tr key={category}>
-                        <td className="py-3 font-medium">{category}</td>
-                        <td className="py-3 text-right">{stats.count}</td>
-                        <td className="py-3 text-right font-semibold">₹{stats.earned}</td>
+              <div className="space-y-6">
+                {/* Bar chart */}
+                <ResponsiveContainer width="100%" height={220}>
+                  <BarChart data={chartData} margin={{ top: 4, right: 8, left: 0, bottom: 40 }}>
+                    <CartesianGrid strokeDasharray="3 3" className="opacity-40" />
+                    <XAxis
+                      dataKey="name"
+                      tick={{ fontSize: 10 }}
+                      tickLine={false}
+                      angle={-35}
+                      textAnchor="end"
+                      interval={0}
+                    />
+                    <YAxis
+                      tick={{ fontSize: 11 }}
+                      tickLine={false}
+                      axisLine={false}
+                      tickFormatter={(v) => v === 0 ? '₹0' : `₹${(v / 1000).toFixed(1)}k`}
+                    />
+                    <Tooltip
+                      formatter={(value: number, _: string, props: any) => [
+                        formatCurrency(value),
+                        props.payload.fullName,
+                      ]}
+                      contentStyle={{ borderRadius: '8px', fontSize: '12px' }}
+                    />
+                    <Bar dataKey="earned" radius={[4, 4, 0, 0]}>
+                      {chartData.map((_, i) => (
+                        <Cell key={i} fill={CHART_COLORS[i % CHART_COLORS.length]} />
+                      ))}
+                    </Bar>
+                  </BarChart>
+                </ResponsiveContainer>
+
+                {/* Table */}
+                <div className="overflow-x-auto">
+                  <table className="w-full text-sm">
+                    <thead>
+                      <tr className="border-b text-muted-foreground">
+                        <th className="text-left pb-2 font-medium">Category</th>
+                        <th className="text-right pb-2 font-medium">Entries</th>
+                        <th className="text-right pb-2 font-medium">Earned</th>
                       </tr>
-                    ))}
-                  </tbody>
-                </table>
+                    </thead>
+                    <tbody className="divide-y">
+                      {sortedCategories.map(([category, stats]) => (
+                        <tr key={category} className="hover:bg-muted/30 transition-colors">
+                          <td className="py-2.5 font-medium">{category}</td>
+                          <td className="py-2.5 text-right text-muted-foreground">{stats.count}</td>
+                          <td className="py-2.5 text-right font-semibold text-green-700">{formatCurrency(stats.earned)}</td>
+                        </tr>
+                      ))}
+                    </tbody>
+                    <tfoot className="border-t-2">
+                      <tr>
+                        <td className="pt-2.5 font-bold">Total</td>
+                        <td className="pt-2.5 text-right font-bold">{sortedCategories.reduce((s, [, v]) => s + v.count, 0)}</td>
+                        <td className="pt-2.5 text-right font-bold text-green-700">{formatCurrency(sortedCategories.reduce((s, [, v]) => s + v.earned, 0))}</td>
+                      </tr>
+                    </tfoot>
+                  </table>
+                </div>
               </div>
             )}
           </CardContent>
@@ -179,12 +261,6 @@ export default function ReportsPage() {
     );
   };
 
-  if (loading) return <div className="p-8 text-center animate-pulse">Loading reports...</div>;
-
-  const dailyEntries = entries.filter(e => isToday(e.date.toDate()));
-  const weeklyEntries = entries.filter(e => isThisWeek(e.date.toDate(), { weekStartsOn: 1 }));
-  const monthlyEntries = entries.filter(e => isThisMonth(e.date.toDate()));
-
   return (
     <div className="space-y-6">
       <div className="flex flex-col md:flex-row justify-between md:items-center gap-4">
@@ -192,27 +268,33 @@ export default function ReportsPage() {
           <h1 className="text-2xl font-bold tracking-tight">Reports</h1>
           <p className="text-muted-foreground text-sm mt-1">Business performance and analytics</p>
         </div>
-        <Button onClick={exportCSV} variant="outline" className="flex items-center gap-2">
+        <Button onClick={exportCSV} variant="outline" className="gap-2" disabled={loading}>
           <Download className="h-4 w-4" />
           Export CSV (All Data)
         </Button>
       </div>
 
-      <Tabs defaultValue="daily" className="w-full">
+      <Tabs defaultValue="monthly" className="w-full">
         <TabsList className="grid w-full grid-cols-3 max-w-[400px]">
-          <TabsTrigger value="daily">Daily</TabsTrigger>
-          <TabsTrigger value="weekly">Weekly</TabsTrigger>
-          <TabsTrigger value="monthly">Monthly</TabsTrigger>
+          <TabsTrigger value="daily">Today</TabsTrigger>
+          <TabsTrigger value="weekly">This Week</TabsTrigger>
+          <TabsTrigger value="monthly">This Month</TabsTrigger>
         </TabsList>
-        <TabsContent value="daily">
-          <ReportView periodEntries={dailyEntries} />
-        </TabsContent>
-        <TabsContent value="weekly">
-          <ReportView periodEntries={weeklyEntries} />
-        </TabsContent>
-        <TabsContent value="monthly">
-          <ReportView periodEntries={monthlyEntries} />
-        </TabsContent>
+        {loading ? (
+          <ReportsSkeleton />
+        ) : (
+          <>
+            <TabsContent value="daily">
+              <ReportView periodEntries={entries.filter(e => isToday(e.date.toDate()))} />
+            </TabsContent>
+            <TabsContent value="weekly">
+              <ReportView periodEntries={entries.filter(e => isThisWeek(e.date.toDate(), { weekStartsOn: 1 }))} />
+            </TabsContent>
+            <TabsContent value="monthly">
+              <ReportView periodEntries={entries.filter(e => isThisMonth(e.date.toDate()))} />
+            </TabsContent>
+          </>
+        )}
       </Tabs>
     </div>
   );
