@@ -40,7 +40,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     if (!auth) return;
     try {
       await firebaseSignOut(auth);
-      toast({ title: "लॉग आउट (Logged out)", description: "You have been successfully logged out." });
+      toast({ title: "Logged out", description: "You have been successfully logged out." });
     } catch (error: any) {
       toast({ variant: "destructive", title: "Error logging out", description: error.message });
     }

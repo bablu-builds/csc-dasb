@@ -67,7 +67,7 @@ export default function ReportsPage() {
         <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
           <Card>
             <CardHeader className="flex flex-row items-center justify-between pb-2">
-              <CardTitle className="text-sm font-medium">Total Earned (कमाई)</CardTitle>
+              <CardTitle className="text-sm font-medium">Total Earned</CardTitle>
               <TrendingUp className="h-4 w-4 text-green-600" />
             </CardHeader>
             <CardContent>
@@ -77,7 +77,7 @@ export default function ReportsPage() {
           
           <Card>
             <CardHeader className="flex flex-row items-center justify-between pb-2">
-              <CardTitle className="text-sm font-medium">New Work (काम)</CardTitle>
+              <CardTitle className="text-sm font-medium">Work Entries</CardTitle>
               <BarChart2 className="h-4 w-4 text-blue-600" />
             </CardHeader>
             <CardContent>
@@ -87,7 +87,7 @@ export default function ReportsPage() {
 
           <Card>
             <CardHeader className="flex flex-row items-center justify-between pb-2">
-              <CardTitle className="text-sm font-medium">New Dues (बकाया)</CardTitle>
+              <CardTitle className="text-sm font-medium">Dues Outstanding</CardTitle>
               <IndianRupee className="h-4 w-4 text-red-600" />
             </CardHeader>
             <CardContent>
@@ -98,7 +98,7 @@ export default function ReportsPage() {
 
         <Card>
           <CardHeader>
-            <CardTitle className="text-lg">Category Breakdown (श्रेणी के अनुसार)</CardTitle>
+            <CardTitle className="text-lg">Category Breakdown</CardTitle>
           </CardHeader>
           <CardContent>
             {sortedCategories.length === 0 ? (
@@ -141,7 +141,7 @@ export default function ReportsPage() {
     <div className="space-y-6">
       <div className="flex flex-col md:flex-row justify-between md:items-center gap-4">
         <div>
-          <h1 className="text-2xl font-bold tracking-tight">रिपोर्ट (Reports)</h1>
+          <h1 className="text-2xl font-bold tracking-tight">Reports</h1>
           <p className="text-muted-foreground text-sm mt-1">Business performance and analytics</p>
         </div>
         <Button onClick={exportCSV} variant="outline" className="flex items-center gap-2">

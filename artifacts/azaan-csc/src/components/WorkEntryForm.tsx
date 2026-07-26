@@ -94,7 +94,7 @@ export function WorkEntryForm({ initialData, onSubmit, isSubmitting = false }: W
             name="customerName"
             render={({ field }) => (
               <FormItem>
-                <FormLabel>ग्राहक का नाम <span className="text-muted-foreground font-normal text-xs ml-1">(Customer Name)</span> *</FormLabel>
+                <FormLabel>Customer Name *</FormLabel>
                 <FormControl>
                   <Input placeholder="Enter name" {...field} />
                 </FormControl>
@@ -108,7 +108,7 @@ export function WorkEntryForm({ initialData, onSubmit, isSubmitting = false }: W
             name="mobile"
             render={({ field }) => (
               <FormItem>
-                <FormLabel>मोबाइल नंबर <span className="text-muted-foreground font-normal text-xs ml-1">(Mobile)</span> *</FormLabel>
+                <FormLabel>Mobile Number *</FormLabel>
                 <FormControl>
                   <Input placeholder="10 digits" maxLength={10} {...field} />
                 </FormControl>
@@ -122,7 +122,7 @@ export function WorkEntryForm({ initialData, onSubmit, isSubmitting = false }: W
             name="category"
             render={({ field }) => (
               <FormItem>
-                <FormLabel>काम की श्रेणी <span className="text-muted-foreground font-normal text-xs ml-1">(Category)</span> *</FormLabel>
+                <FormLabel>Work Category *</FormLabel>
                 <Select onValueChange={field.onChange} defaultValue={field.value}>
                   <FormControl>
                     <SelectTrigger>
@@ -147,7 +147,7 @@ export function WorkEntryForm({ initialData, onSubmit, isSubmitting = false }: W
             name="date"
             render={({ field }) => (
               <FormItem className="flex flex-col pt-2">
-                <FormLabel className="mb-1">तारीख <span className="text-muted-foreground font-normal text-xs ml-1">(Date)</span> *</FormLabel>
+                <FormLabel className="mb-1">Date *</FormLabel>
                 <Popover>
                   <PopoverTrigger asChild>
                     <FormControl>
@@ -186,7 +186,7 @@ export function WorkEntryForm({ initialData, onSubmit, isSubmitting = false }: W
           name="workDetail"
           render={({ field }) => (
             <FormItem>
-              <FormLabel>काम का विवरण <span className="text-muted-foreground font-normal text-xs ml-1">(Work Detail)</span></FormLabel>
+              <FormLabel>Work Detail / Notes</FormLabel>
               <FormControl>
                 <Textarea placeholder="Optional notes about the work..." {...field} />
               </FormControl>
@@ -201,7 +201,7 @@ export function WorkEntryForm({ initialData, onSubmit, isSubmitting = false }: W
             name="totalAmount"
             render={({ field }) => (
               <FormItem>
-                <FormLabel>कुल राशि <span className="text-muted-foreground font-normal text-xs ml-1">(Total ₹)</span></FormLabel>
+                <FormLabel>Total Amount (₹)</FormLabel>
                 <FormControl>
                   <div className="relative">
                     <IndianRupee className="absolute left-3 top-2.5 h-4 w-4 text-muted-foreground" />
@@ -218,7 +218,7 @@ export function WorkEntryForm({ initialData, onSubmit, isSubmitting = false }: W
             name="paidAmount"
             render={({ field }) => (
               <FormItem>
-                <FormLabel>जमा राशि <span className="text-muted-foreground font-normal text-xs ml-1">(Paid ₹)</span></FormLabel>
+                <FormLabel>Paid Amount (₹)</FormLabel>
                 <FormControl>
                   <div className="relative">
                     <IndianRupee className="absolute left-3 top-2.5 h-4 w-4 text-muted-foreground" />
@@ -231,7 +231,7 @@ export function WorkEntryForm({ initialData, onSubmit, isSubmitting = false }: W
           />
 
           <div className="space-y-2 pt-1">
-            <label className="block text-sm font-medium leading-none">बकाया राशि <span className="text-muted-foreground font-normal text-xs ml-1">(Due ₹)</span></label>
+            <label className="block text-sm font-medium leading-none">Due Amount (₹)</label>
             <div className={cn(
               "p-2.5 rounded-md border font-semibold flex items-center gap-2",
               due > 0 ? "bg-red-50 border-red-200 text-red-700" : "bg-green-50 border-green-200 text-green-700"
@@ -248,7 +248,7 @@ export function WorkEntryForm({ initialData, onSubmit, isSubmitting = false }: W
             name="status"
             render={({ field }) => (
               <FormItem>
-                <FormLabel>स्थिति <span className="text-muted-foreground font-normal text-xs ml-1">(Status)</span></FormLabel>
+                <FormLabel>Status</FormLabel>
                 <Select onValueChange={field.onChange} defaultValue={field.value}>
                   <FormControl>
                     <SelectTrigger>
@@ -256,8 +256,8 @@ export function WorkEntryForm({ initialData, onSubmit, isSubmitting = false }: W
                     </SelectTrigger>
                   </FormControl>
                   <SelectContent>
-                    <SelectItem value="Pending">लंबित (Pending)</SelectItem>
-                    <SelectItem value="Completed">पूर्ण (Completed)</SelectItem>
+                    <SelectItem value="Pending">Pending</SelectItem>
+                    <SelectItem value="Completed">Completed</SelectItem>
                   </SelectContent>
                 </Select>
                 <FormMessage />
@@ -270,7 +270,7 @@ export function WorkEntryForm({ initialData, onSubmit, isSubmitting = false }: W
             name="address"
             render={({ field }) => (
               <FormItem>
-                <FormLabel>पता <span className="text-muted-foreground font-normal text-xs ml-1">(Address)</span></FormLabel>
+                <FormLabel>Address</FormLabel>
                 <FormControl>
                   <Input placeholder="Optional address" {...field} />
                 </FormControl>
@@ -283,7 +283,7 @@ export function WorkEntryForm({ initialData, onSubmit, isSubmitting = false }: W
         <div className="flex justify-end pt-4">
           <Button type="submit" size="lg" disabled={isSubmitting} className="w-full md:w-auto">
             {isSubmitting && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
-            सहेजें (Save Work Entry)
+            Save Work Entry
           </Button>
         </div>
       </form>

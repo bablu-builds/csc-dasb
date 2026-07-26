@@ -70,14 +70,14 @@ export default function DashboardPage() {
   return (
     <div className="space-y-6">
       <div className="flex justify-between items-center">
-        <h1 className="text-2xl font-bold tracking-tight">Dashboard (डैशबोर्ड)</h1>
+        <h1 className="text-2xl font-bold tracking-tight">Dashboard</h1>
       </div>
 
       {/* Summary Cards */}
       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-5 gap-4">
         <Card className="bg-primary/5 border-primary/20">
           <CardHeader className="flex flex-row items-center justify-between pb-2">
-            <CardTitle className="text-sm font-medium text-primary">आज की कमाई</CardTitle>
+            <CardTitle className="text-sm font-medium text-primary">Today's Earning</CardTitle>
             <IndianRupee className="h-4 w-4 text-primary" />
           </CardHeader>
           <CardContent>
@@ -88,7 +88,7 @@ export default function DashboardPage() {
 
         <Card>
           <CardHeader className="flex flex-row items-center justify-between pb-2">
-            <CardTitle className="text-sm font-medium">इस महीने की कमाई</CardTitle>
+            <CardTitle className="text-sm font-medium">This Month's Earning</CardTitle>
             <IndianRupee className="h-4 w-4 text-muted-foreground" />
           </CardHeader>
           <CardContent>
@@ -99,7 +99,7 @@ export default function DashboardPage() {
 
         <Card>
           <CardHeader className="flex flex-row items-center justify-between pb-2">
-            <CardTitle className="text-sm font-medium">कुल ग्राहक</CardTitle>
+            <CardTitle className="text-sm font-medium">Total Customers</CardTitle>
             <Users className="h-4 w-4 text-muted-foreground" />
           </CardHeader>
           <CardContent>
@@ -110,7 +110,7 @@ export default function DashboardPage() {
 
         <Card>
           <CardHeader className="flex flex-row items-center justify-between pb-2">
-            <CardTitle className="text-sm font-medium">लंबित काम</CardTitle>
+            <CardTitle className="text-sm font-medium">Pending Work</CardTitle>
             <Clock className="h-4 w-4 text-muted-foreground" />
           </CardHeader>
           <CardContent>
@@ -121,7 +121,7 @@ export default function DashboardPage() {
 
         <Card className={totalDue > 0 ? "bg-red-50 border-red-200" : ""}>
           <CardHeader className="flex flex-row items-center justify-between pb-2">
-            <CardTitle className={`text-sm font-medium ${totalDue > 0 ? "text-red-700" : ""}`}>कुल बकाया</CardTitle>
+            <CardTitle className={`text-sm font-medium ${totalDue > 0 ? "text-red-700" : ""}`}>Total Due</CardTitle>
             <AlertTriangle className={`h-4 w-4 ${totalDue > 0 ? "text-red-600" : "text-muted-foreground"}`} />
           </CardHeader>
           <CardContent>
@@ -136,7 +136,7 @@ export default function DashboardPage() {
         <div className="flex justify-between items-center mb-4">
           <h2 className="text-lg font-semibold flex items-center gap-2">
             <AlertTriangle className="h-5 w-5 text-amber-500" />
-            जरूरी लंबित काम (Urgent Pending Work)
+            Urgent Pending Work
           </h2>
           <Link href="/pending">
             <Button variant="outline" size="sm">View All</Button>
@@ -147,7 +147,7 @@ export default function DashboardPage() {
           {pendingEntries.length === 0 ? (
             <div className="p-8 text-center text-muted-foreground flex flex-col items-center">
               <FileText className="h-12 w-12 mb-3 opacity-20" />
-              <p>कोई लंबित काम नहीं है (No pending work)</p>
+              <p>No pending work — all clear!</p>
             </div>
           ) : (
             <div className="divide-y">
@@ -175,10 +175,10 @@ export default function DashboardPage() {
                         </span>
                         {entry.daysPending > 0 ? (
                           <span className={`text-xs font-medium ${isVeryUrgent ? 'text-red-600' : isUrgent ? 'text-amber-600' : 'text-blue-600'}`}>
-                            {entry.daysPending} दिन से लंबित (Days pending)
+                            {entry.daysPending} days pending
                           </span>
                         ) : (
-                          <span className="text-xs text-green-600 font-medium">आज (Today)</span>
+                          <span className="text-xs text-green-600 font-medium">Today</span>
                         )}
                       </div>
                     </div>
@@ -186,7 +186,7 @@ export default function DashboardPage() {
                     <div className="flex items-center gap-4">
                       {entry.dueAmount > 0 && (
                         <div className="text-right">
-                          <span className="block text-xs text-muted-foreground">बकाया (Due)</span>
+                          <span className="block text-xs text-muted-foreground">Due</span>
                           <span className="font-bold text-red-600">₹{entry.dueAmount}</span>
                         </div>
                       )}

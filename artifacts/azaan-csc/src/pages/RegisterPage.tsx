@@ -78,7 +78,7 @@ export default function RegisterPage() {
 
           <Button type="submit" className="w-full" disabled={!isConfigured || loading}>
             {loading ? <Loader2 className="h-4 w-4 animate-spin mr-2" /> : null}
-            खाता बनाएं (Register)
+            Create Account
           </Button>
 
           <div className="text-center text-sm text-muted-foreground pt-4">

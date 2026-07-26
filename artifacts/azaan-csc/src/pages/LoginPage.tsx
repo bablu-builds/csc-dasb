@@ -90,7 +90,7 @@ export default function LoginPage() {
 
           <Button type="submit" className="w-full" disabled={!isConfigured || loading}>
             {loading ? <Loader2 className="h-4 w-4 animate-spin mr-2" /> : null}
-            लॉग इन करें (Login)
+            Login
           </Button>
 
           <div className="text-center text-sm text-muted-foreground pt-4">

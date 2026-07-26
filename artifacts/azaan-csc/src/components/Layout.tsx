@@ -12,12 +12,12 @@ export function Layout({ children }: { children: React.ReactNode }) {
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
 
   const navItems = [
-    { href: '/dashboard', label: 'Dashboard', hindi: 'घर', icon: LayoutDashboard },
-    { href: '/work/new', label: 'Add Work', hindi: 'नया काम', icon: PlusCircle, isPrimary: true },
-    { href: '/work', label: 'All Work', hindi: 'सभी काम', icon: List },
-    { href: '/pending', label: 'Pending', hindi: 'लंबित काम', icon: Clock },
-    { href: '/reports', label: 'Reports', hindi: 'रिपोर्ट', icon: BarChart3 },
-    { href: '/settings', label: 'Settings', hindi: 'सेटिंग', icon: Settings },
+    { href: '/dashboard', label: 'Dashboard', sub: 'Home', icon: LayoutDashboard },
+    { href: '/work/new', label: 'Add Work', sub: 'New Entry', icon: PlusCircle, isPrimary: true },
+    { href: '/work', label: 'All Work', sub: 'View all', icon: List },
+    { href: '/pending', label: 'Pending', sub: 'Incomplete', icon: Clock },
+    { href: '/reports', label: 'Reports', sub: 'Analytics', icon: BarChart3 },
+    { href: '/settings', label: 'Settings', sub: 'Configure', icon: Settings },
   ];
 
   return (
@@ -62,7 +62,7 @@ export function Layout({ children }: { children: React.ReactNode }) {
                 <item.icon className="h-5 w-5" />
                 <div className="flex flex-col">
                   <span className="text-sm">{item.label}</span>
-                  <span className={`text-xs ${item.isPrimary ? 'text-primary-foreground/80' : 'text-muted-foreground'}`}>{item.hindi}</span>
+                  <span className={`text-xs ${item.isPrimary ? 'text-primary-foreground/80' : 'text-muted-foreground'}`}>{item.sub}</span>
                 </div>
               </Link>
             );

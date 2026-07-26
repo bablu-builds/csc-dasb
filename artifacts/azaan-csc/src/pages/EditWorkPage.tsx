@@ -33,7 +33,7 @@ export default function EditWorkPage() {
     try {
       await updateWorkEntry(id, data);
       toast({
-        title: "काम अपडेट किया गया (Work Updated)",
+        title: "Work Updated Successfully",
       });
       setLocation('/work');
     } catch (error: any) {
@@ -76,8 +76,8 @@ export default function EditWorkPage() {
           <ArrowLeft className="h-5 w-5" />
         </Button>
         <div>
-          <h1 className="text-2xl font-bold">काम अपडेट करें</h1>
-          <p className="text-muted-foreground">Edit Work Entry</p>
+          <h1 className="text-2xl font-bold">Edit Work Entry</h1>
+          <p className="text-muted-foreground">Update the details below</p>
         </div>
       </div>
 

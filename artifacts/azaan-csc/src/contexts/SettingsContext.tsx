@@ -58,7 +58,7 @@ export function SettingsProvider({ children }: { children: ReactNode }) {
     try {
       await updateShopSettings(settings);
       setShopSettings(settings);
-      toast({ title: "सेटिंग्स सहेजी गईं (Settings Saved)" });
+      toast({ title: "Settings Saved" });
     } catch (err: any) {
       toast({ variant: "destructive", title: "Error", description: err.message });
       throw err;
@@ -68,7 +68,7 @@ export function SettingsProvider({ children }: { children: ReactNode }) {
   const createCategory = async (name: string) => {
     try {
       await addCategory(name);
-      toast({ title: "श्रेणी जोड़ी गई (Category Added)" });
+      toast({ title: "Category Added" });
     } catch (err: any) {
       toast({ variant: "destructive", title: "Error", description: err.message });
       throw err;
@@ -78,7 +78,7 @@ export function SettingsProvider({ children }: { children: ReactNode }) {
   const removeCategory = async (id: string) => {
     try {
       await deleteCategory(id);
-      toast({ title: "श्रेणी हटाई गई (Category Deleted)" });
+      toast({ title: "Category Deleted" });
     } catch (err: any) {
       toast({ variant: "destructive", title: "Error", description: err.message });
       throw err;

@@ -45,15 +45,15 @@ export default function SettingsPage() {
   return (
     <div className="space-y-6 max-w-4xl">
       <div>
-        <h1 className="text-2xl font-bold tracking-tight">सेटिंग (Settings)</h1>
+        <h1 className="text-2xl font-bold tracking-tight">Settings</h1>
         <p className="text-muted-foreground text-sm mt-1">Manage shop information and categories</p>
       </div>
 
       <Tabs defaultValue="shop" className="w-full">
         <TabsList className="w-full sm:w-auto grid grid-cols-3 sm:flex">
-          <TabsTrigger value="shop">दुकान (Shop Info)</TabsTrigger>
-          <TabsTrigger value="categories">श्रेणियाँ (Categories)</TabsTrigger>
-          <TabsTrigger value="staff">कर्मचारी (Staff)</TabsTrigger>
+          <TabsTrigger value="shop">Shop Info</TabsTrigger>
+          <TabsTrigger value="categories">Categories</TabsTrigger>
+          <TabsTrigger value="staff">Staff</TabsTrigger>
         </TabsList>
         
         <TabsContent value="shop" className="mt-6">
@@ -91,7 +91,7 @@ export default function SettingsPage() {
                 </div>
                 <Button type="submit" disabled={isSavingInfo}>
                   {isSavingInfo ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : null}
-                  सहेजें (Save Changes)
+                  Save Changes
                 </Button>
               </form>
             </CardContent>

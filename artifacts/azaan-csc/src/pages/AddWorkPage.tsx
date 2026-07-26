@@ -17,7 +17,7 @@ export default function AddWorkPage() {
     try {
       await createWorkEntry(data);
       toast({
-        title: "काम जोड़ा गया (Work Added)",
+        title: "Work Added Successfully",
         description: `${data.customerName} - ${data.category}`,
       });
       setLocation('/dashboard');
@@ -39,8 +39,8 @@ export default function AddWorkPage() {
           <ArrowLeft className="h-5 w-5" />
         </Button>
         <div>
-          <h1 className="text-2xl font-bold">नया काम जोड़ें</h1>
-          <p className="text-muted-foreground">Add New Work Entry</p>
+          <h1 className="text-2xl font-bold">Add New Work Entry</h1>
+          <p className="text-muted-foreground">Fill in the customer and work details below</p>
         </div>
       </div>
 

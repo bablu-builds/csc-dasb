@@ -53,7 +53,7 @@ export default function PendingWorkPage() {
         <div>
           <h1 className="text-2xl font-bold tracking-tight text-amber-700 flex items-center gap-2">
             <Clock className="h-6 w-6" />
-            लंबित काम (Pending Work)
+            Pending Work
           </h1>
           <p className="text-muted-foreground text-sm mt-1">Track uncompleted work and dues</p>
         </div>
@@ -91,7 +91,7 @@ export default function PendingWorkPage() {
               <div className="inline-flex items-center justify-center w-12 h-12 rounded-full bg-green-50 text-green-600 mb-4">
                 <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" /></svg>
               </div>
-              <p className="text-lg font-medium">कोई लंबित काम नहीं है</p>
+              <p className="text-lg font-medium">No pending work found</p>
               <p className="text-sm">All clear! No pending work found.</p>
             </div>
           ) : (
@@ -139,18 +139,18 @@ export default function PendingWorkPage() {
                             'text-blue-700 bg-blue-100 border-blue-200'}
                         `}>
                           <Clock className="h-3.5 w-3.5" />
-                          {entry.daysPending} दिन (Days)
+                          {entry.daysPending} days
                         </div>
                       ) : (
                         <div className="flex items-center gap-1.5 font-medium px-2.5 py-1 rounded-full text-xs border text-green-700 bg-green-100 border-green-200">
                           <Clock className="h-3.5 w-3.5" />
-                          आज (Today)
+                          Today
                         </div>
                       )}
                       
                       {entry.dueAmount > 0 && (
                         <div className="text-right">
-                          <span className="block text-xs text-red-600/70 font-medium">बकाया (Due)</span>
+                          <span className="block text-xs text-red-600/70 font-medium">Due</span>
                           <span className="font-bold text-red-600 text-lg">₹{entry.dueAmount}</span>
                         </div>
                       )}

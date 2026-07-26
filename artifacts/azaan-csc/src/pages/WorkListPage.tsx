@@ -90,11 +90,11 @@ export default function WorkListPage() {
     <div className="space-y-6">
       <div className="flex flex-col md:flex-row justify-between md:items-center gap-4">
         <div>
-          <h1 className="text-2xl font-bold tracking-tight">सभी काम (All Work)</h1>
+          <h1 className="text-2xl font-bold tracking-tight">All Work</h1>
           <p className="text-muted-foreground text-sm mt-1">Manage and view all customer requests</p>
         </div>
         <Link href="/work/new">
-          <Button>नया काम जोड़ें (Add New)</Button>
+          <Button>Add New Entry</Button>
         </Link>
       </div>
 
@@ -185,7 +185,7 @@ export default function WorkListPage() {
                       <Badge variant={entry.status === 'Completed' ? 'outline' : 'default'} 
                         className={entry.status === 'Pending' ? 'bg-amber-100 text-amber-800 hover:bg-amber-100 border-transparent' : 'text-green-700 bg-green-50 border-green-200'}
                       >
-                        {entry.status === 'Pending' ? 'लंबित' : 'पूर्ण'}
+                        {entry.status === 'Pending' ? 'Pending' : 'Completed'}
                       </Badge>
                     </td>
                     <td className="px-4 py-3 text-right">
