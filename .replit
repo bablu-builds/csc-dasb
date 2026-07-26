@@ -1,4 +1,4 @@
-modules = ["nodejs-24"]
+modules = ["nodejs-20", "web", "bash"]
 
 [deployment]
 router = "application"
@@ -27,3 +27,6 @@ VITE_FIREBASE_AUTH_DOMAIN = "csc-dashboard-b132b.firebaseapp.com"
 VITE_FIREBASE_MESSAGING_SENDER_ID = "260477713078"
 VITE_FIREBASE_PROJECT_ID = "csc-dashboard-b132b"
 VITE_FIREBASE_STORAGE_BUCKET = "csc-dashboard-b132b.firebasestorage.app"
+
+[nix]
+channel = "stable-25_05"
