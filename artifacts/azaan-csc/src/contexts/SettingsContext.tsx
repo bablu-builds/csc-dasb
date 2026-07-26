@@ -1,5 +1,5 @@
 import { createContext, useContext, useEffect, useState, ReactNode } from 'react';
-import { ShopSettings, getShopSettings, initCategoriesIfEmpty, Category, subscribeToCategories, updateShopSettings, addCategory, deleteCategory } from '@/lib/firestore';
+import { ShopSettings, getShopSettings, initCategoriesIfEmpty, getCategories, Category, subscribeToCategories, updateShopSettings, addCategory, deleteCategory } from '@/lib/firestore';
 import { useAuth } from '@/contexts/AuthContext';
 import { useToast } from '@/hooks/use-toast';
 
@@ -39,8 +39,11 @@ export function SettingsProvider({ children }: { children: ReactNode }) {
     const loadData = async () => {
       try {
         await initCategoriesIfEmpty();
-        const s = await getShopSettings();
+        const [s, cats] = await Promise.all([getShopSettings(), getCategories()]);
         setShopSettings(s);
+        // Seed the state immediately via getDocs so categories show even if
+        // the real-time onSnapshot listener fails (e.g. transient network error).
+        setCategories(cats);
       } catch (err: any) {
         console.error("Error loading settings:", err);
       } finally {
@@ -67,7 +70,13 @@ export function SettingsProvider({ children }: { children: ReactNode }) {
 
   const createCategory = async (name: string) => {
     try {
-      await addCategory(name);
+      const docRef = await addCategory(name);
+      // Optimistically update local state so the UI reflects the new category
+      // immediately, even if the real-time listener is slow or has failed.
+      setCategories(prev => {
+        const updated = [...prev, { id: docRef.id, name }];
+        return updated.sort((a, b) => a.name.localeCompare(b.name));
+      });
       toast({ title: "Category Added" });
     } catch (err: any) {
       toast({ variant: "destructive", title: "Error", description: err.message });
@@ -78,6 +87,8 @@ export function SettingsProvider({ children }: { children: ReactNode }) {
   const removeCategory = async (id: string) => {
     try {
       await deleteCategory(id);
+      // Optimistically remove from local state immediately.
+      setCategories(prev => prev.filter(cat => cat.id !== id));
       toast({ title: "Category Deleted" });
     } catch (err: any) {
       toast({ variant: "destructive", title: "Error", description: err.message });

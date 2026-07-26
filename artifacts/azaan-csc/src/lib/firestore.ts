@@ -79,25 +79,44 @@ export const subscribeToWorkEntries = (callback: (entries: WorkEntry[]) => void)
 // CATEGORIES
 export const initCategoriesIfEmpty = async () => {
   if (!db) return;
-  const snap = await getDocs(collection(db, 'categories'));
+  const firestoreDb = db; // narrowed to non-null for use inside callbacks
+  const snap = await getDocs(collection(firestoreDb, 'categories'));
   if (snap.empty) {
-    const promises = defaultCategories.map(name => 
-      addDoc(collection(db, 'categories'), { name })
+    const promises = defaultCategories.map(name =>
+      addDoc(collection(firestoreDb, 'categories'), { name })
     );
     await Promise.all(promises);
   }
 };
 
+export const getCategories = async (): Promise<Category[]> => {
+  if (!db) return [];
+  const firestoreDb = db; // narrowed to non-null
+  const q = query(collection(firestoreDb, 'categories'), orderBy('name', 'asc'));
+  const snap = await getDocs(q);
+  const categories: Category[] = [];
+  snap.forEach(doc => {
+    categories.push({ id: doc.id, ...doc.data() } as Category);
+  });
+  return categories;
+};
+
 export const subscribeToCategories = (callback: (categories: Category[]) => void) => {
   if (!db) return () => {};
   const q = query(collection(db, 'categories'), orderBy('name', 'asc'));
-  return onSnapshot(q, (snapshot) => {
-    const categories: Category[] = [];
-    snapshot.forEach(doc => {
-      categories.push({ id: doc.id, ...doc.data() } as Category);
-    });
-    callback(categories);
-  });
+  return onSnapshot(
+    q,
+    (snapshot) => {
+      const categories: Category[] = [];
+      snapshot.forEach(doc => {
+        categories.push({ id: doc.id, ...doc.data() } as Category);
+      });
+      callback(categories);
+    },
+    (error) => {
+      console.error('[Firestore] Categories listener error:', error.code, error.message);
+    }
+  );
 };
 
 export const addCategory = async (name: string) => {
