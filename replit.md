@@ -4,10 +4,12 @@ A staff portal dashboard for managing customer work orders, tracking earnings, a
 
 ## Run & Operate
 
-- Frontend (`azaan-csc`) and API server start automatically via Replit workflows
+- **Frontend** — workflow: `AZAAN CSC Frontend` → `PORT=5173 BASE_PATH=/ pnpm --filter @workspace/azaan-csc run dev` (port 5173)
+- **API Server** — workflow: `API Server` → `PORT=8080 pnpm --filter @workspace/api-server run dev` (port 8080)
+- Both workflows start automatically; restart them after code changes
 - `pnpm run typecheck` — full typecheck across all packages
 - `pnpm run build` — typecheck + build all packages
-- Required secrets: `VITE_FIREBASE_API_KEY` — Firebase API key (already set)
+- Required secrets: `VITE_FIREBASE_API_KEY` — Firebase API key (set as Replit Secret)
 - Other Firebase config (project ID, auth domain, etc.) are set as shared env vars in `.replit`
 
 ## Stack
