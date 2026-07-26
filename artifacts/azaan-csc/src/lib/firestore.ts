@@ -39,6 +39,13 @@ export const defaultCategories = [
 ];
 
 // WORK ENTRIES
+/** Remove keys whose value is undefined — Firestore rejects undefined field values. */
+function stripUndefined<T extends Record<string, unknown>>(obj: T): Partial<T> {
+  return Object.fromEntries(
+    Object.entries(obj).filter(([, v]) => v !== undefined)
+  ) as Partial<T>;
+}
+
 export const createWorkEntry = async (
   data: Omit<WorkEntry, 'id' | 'dueAmount' | 'createdAt' | 'completedAt' | 'rejectedAt'>
 ) => {
@@ -47,7 +54,14 @@ export const createWorkEntry = async (
   const timestamps: Partial<WorkEntry> = { createdAt: Timestamp.now() };
   if (data.status === 'Completed') timestamps.completedAt = Timestamp.now();
   if (data.status === 'Rejected') timestamps.rejectedAt = Timestamp.now();
-  return addDoc(collection(db, 'workEntries'), { ...data, ...timestamps, dueAmount });
+
+  // Only include rejectionReason / refundAmount when status is Rejected
+  const { rejectionReason, refundAmount, ...rest } = data;
+  const rejectionFields = data.status === 'Rejected'
+    ? stripUndefined({ rejectionReason, refundAmount })
+    : {};
+
+  return addDoc(collection(db, 'workEntries'), { ...rest, ...timestamps, dueAmount, ...rejectionFields });
 };
 
 export const updateWorkEntry = async (
@@ -56,7 +70,14 @@ export const updateWorkEntry = async (
 ) => {
   if (!db) throw new Error("Firebase not configured");
 
-  const updates: any = { ...data };
+  // Strip rejectionReason / refundAmount when status is not Rejected,
+  // then remove any remaining undefined values Firestore would reject.
+  const { rejectionReason, refundAmount, ...rest } = data;
+  const rejectionFields = data.status === 'Rejected'
+    ? stripUndefined({ rejectionReason, refundAmount } as Record<string, unknown>)
+    : {};
+
+  const updates: Record<string, unknown> = { ...stripUndefined(rest as Record<string, unknown>), ...rejectionFields };
 
   if (data.status === 'Rejected') {
     // Rejected: work cancelled — nothing owed; track the refund separately

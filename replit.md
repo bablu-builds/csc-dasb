@@ -1,24 +1,22 @@
-# [Project name]
+# AZAAN COMMUNICATION TOUR AND TRAVEL
 
-_Replace the heading above with the project's name, and this line with one sentence describing what this app does for users._
+A staff portal dashboard for managing customer work orders, tracking earnings, and handling pending/completed tasks for a travel and communication services agency.
 
 ## Run & Operate
 
-- `pnpm --filter @workspace/api-server run dev` — run the API server (port 5000)
+- Frontend (`azaan-csc`) and API server start automatically via Replit workflows
 - `pnpm run typecheck` — full typecheck across all packages
 - `pnpm run build` — typecheck + build all packages
-- `pnpm --filter @workspace/api-spec run codegen` — regenerate API hooks and Zod schemas from the OpenAPI spec
-- `pnpm --filter @workspace/db run push` — push DB schema changes (dev only)
-- Required env: `DATABASE_URL` — Postgres connection string
+- Required secrets: `VITE_FIREBASE_API_KEY` — Firebase API key (already set)
+- Other Firebase config (project ID, auth domain, etc.) are set as shared env vars in `.replit`
 
 ## Stack
 
-- pnpm workspaces, Node.js 24, TypeScript 5.9
-- API: Express 5
-- DB: PostgreSQL + Drizzle ORM
-- Validation: Zod (`zod/v4`), `drizzle-zod`
-- API codegen: Orval (from OpenAPI spec)
-- Build: esbuild (CJS bundle)
+- pnpm workspaces, Node.js 20, TypeScript 5.9
+- Frontend: React + Vite + Tailwind CSS (shadcn/ui components)
+- Auth & DB: Firebase Authentication + Firestore
+- API: Express 5 (separate artifact at `/api`)
+- Build: esbuild
 
 ## Where things live
 
