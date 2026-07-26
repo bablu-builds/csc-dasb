@@ -2,7 +2,7 @@ import { useState, useEffect } from 'react';
 import { WorkEntry, subscribeToWorkEntries } from '@/lib/firestore';
 import { isToday, isThisMonth, differenceInDays, subDays } from 'date-fns';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
-import { IndianRupee, Users, Clock, AlertTriangle, FileText } from 'lucide-react';
+import { IndianRupee, Users, Clock, AlertTriangle, FileText, XCircle } from 'lucide-react';
 import { Link } from 'wouter';
 import { Button } from '@/components/ui/button';
 import { isConfigured } from '@/lib/firebase';
@@ -17,6 +17,7 @@ const DEMO_ENTRIES: WorkEntry[] = [
   { id: '5', customerName: 'Ajay Singh', mobile: '9012345678', category: 'Driving Licence (DL)', workDetail: 'DL renewal', date: Timestamp.fromDate(new Date()), totalAmount: 300, paidAmount: 300, dueAmount: 0, status: 'Completed', address: 'Shastri Nagar', createdAt: Timestamp.fromDate(new Date()) },
   { id: '6', customerName: 'Priya Yadav', mobile: '8800123456', category: 'Bijli Bill Payment', workDetail: 'July electricity bill', date: Timestamp.fromDate(subDays(new Date(), 1)), totalAmount: 850, paidAmount: 850, dueAmount: 0, status: 'Completed', address: 'Nehru Colony', createdAt: Timestamp.fromDate(subDays(new Date(), 1)) },
   { id: '7', customerName: 'Ramesh Paswan', mobile: '7700654321', category: 'Ration Card', workDetail: 'New ration card member addition', date: Timestamp.fromDate(subDays(new Date(), 12)), totalAmount: 250, paidAmount: 100, dueAmount: 150, status: 'Pending', address: 'Indira Nagar', createdAt: Timestamp.fromDate(subDays(new Date(), 12)) },
+  { id: '8', customerName: 'Salma Begum', mobile: '9900112233', category: 'Voter ID Card', workDetail: 'New voter card', date: Timestamp.fromDate(subDays(new Date(), 3)), totalAmount: 150, paidAmount: 100, dueAmount: 0, status: 'Rejected', address: 'Qazi Mohalla', createdAt: Timestamp.fromDate(subDays(new Date(), 3)), rejectionReason: 'Wrong documents', refundAmount: 100 },
 ];
 
 export default function DashboardPage() {
@@ -37,14 +38,14 @@ export default function DashboardPage() {
   }, []);
 
   const today = new Date();
-  
-  // Calculations
+
+  // Exclude rejected entries from earnings so refunded work doesn't skew totals
   const todaysEarnings = entries
-    .filter(e => isToday(e.date.toDate()))
+    .filter(e => isToday(e.date.toDate()) && e.status !== 'Rejected')
     .reduce((sum, e) => sum + e.paidAmount, 0);
 
   const monthEarnings = entries
-    .filter(e => isThisMonth(e.date.toDate()))
+    .filter(e => isThisMonth(e.date.toDate()) && e.status !== 'Rejected')
     .reduce((sum, e) => sum + e.paidAmount, 0);
 
   const uniqueCustomers = new Set(entries.map(e => e.mobile)).size;
@@ -53,7 +54,11 @@ export default function DashboardPage() {
 
   const totalDue = entries.reduce((sum, e) => sum + e.dueAmount, 0);
 
-  // Today's pending/scheduled entries sorted by urgency
+  const rejectedEntries = entries.filter(e => e.status === 'Rejected');
+  const rejectedCount = rejectedEntries.length;
+  const totalRefunded = rejectedEntries.reduce((sum, e) => sum + (e.refundAmount || 0), 0);
+
+  // Pending entries sorted by urgency
   const pendingEntries = entries
     .filter(e => e.status === 'Pending')
     .map(e => ({
@@ -61,7 +66,7 @@ export default function DashboardPage() {
       daysPending: differenceInDays(today, e.date.toDate())
     }))
     .sort((a, b) => b.daysPending - a.daysPending)
-    .slice(0, 10); // Show top 10 most urgent
+    .slice(0, 10);
 
   if (loading) {
     return <div className="animate-pulse flex space-x-4">Loading dashboard...</div>;
@@ -74,7 +79,7 @@ export default function DashboardPage() {
       </div>
 
       {/* Summary Cards */}
-      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-5 gap-4">
+      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-6 gap-4">
         <Card className="bg-primary/5 border-primary/20">
           <CardHeader className="flex flex-row items-center justify-between pb-2">
             <CardTitle className="text-sm font-medium text-primary">Today's Earning</CardTitle>
@@ -127,6 +132,19 @@ export default function DashboardPage() {
           <CardContent>
             <div className={`text-2xl font-bold ${totalDue > 0 ? "text-red-700" : ""}`}>₹{totalDue}</div>
             <p className={`text-xs mt-1 ${totalDue > 0 ? "text-red-600" : "text-muted-foreground"}`}>Total due</p>
+          </CardContent>
+        </Card>
+
+        <Card className={rejectedCount > 0 ? "bg-slate-50 border-slate-200" : ""}>
+          <CardHeader className="flex flex-row items-center justify-between pb-2">
+            <CardTitle className={`text-sm font-medium ${rejectedCount > 0 ? "text-slate-700" : ""}`}>Rejected / Refunded</CardTitle>
+            <XCircle className={`h-4 w-4 ${rejectedCount > 0 ? "text-slate-500" : "text-muted-foreground"}`} />
+          </CardHeader>
+          <CardContent>
+            <div className={`text-2xl font-bold ${rejectedCount > 0 ? "text-slate-700" : ""}`}>{rejectedCount}</div>
+            <p className={`text-xs mt-1 ${rejectedCount > 0 ? "text-slate-500" : "text-muted-foreground"}`}>
+              {totalRefunded > 0 ? `₹${totalRefunded} refunded` : 'No refunds'}
+            </p>
           </CardContent>
         </Card>
       </div>

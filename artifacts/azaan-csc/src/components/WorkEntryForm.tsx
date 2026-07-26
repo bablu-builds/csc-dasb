@@ -2,7 +2,6 @@ import { useState, useEffect } from 'react';
 import { useForm } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
 import * as z from 'zod';
-import { Category } from '@/lib/firestore';
 import { useSettings } from '@/contexts/SettingsContext';
 import { Timestamp } from 'firebase/firestore';
 import { format } from 'date-fns';
@@ -25,7 +24,7 @@ import {
   SelectTrigger,
   SelectValue,
 } from '@/components/ui/select';
-import { CalendarIcon, Loader2, IndianRupee } from 'lucide-react';
+import { CalendarIcon, Loader2, IndianRupee, XCircle } from 'lucide-react';
 import { Calendar } from '@/components/ui/calendar';
 import {
   Popover,
@@ -42,8 +41,10 @@ const formSchema = z.object({
   date: z.date(),
   totalAmount: z.coerce.number().min(0, 'Amount cannot be negative'),
   paidAmount: z.coerce.number().min(0, 'Amount cannot be negative'),
-  status: z.enum(['Pending', 'Completed']),
+  status: z.enum(['Pending', 'Completed', 'Rejected']),
   address: z.string().optional(),
+  rejectionReason: z.string().optional(),
+  refundAmount: z.coerce.number().min(0, 'Amount cannot be negative').optional(),
 });
 
 export type WorkEntryFormData = z.infer<typeof formSchema>;
@@ -69,15 +70,17 @@ export function WorkEntryForm({ initialData, onSubmit, isSubmitting = false }: W
       paidAmount: initialData?.paidAmount || 0,
       status: initialData?.status || 'Pending',
       address: initialData?.address || '',
+      rejectionReason: initialData?.rejectionReason || '',
+      refundAmount: initialData?.refundAmount ?? undefined,
     },
   });
 
   const total = form.watch('totalAmount');
   const paid = form.watch('paidAmount');
+  const status = form.watch('status');
   const due = Math.max(0, (total || 0) - (paid || 0));
 
   const handleSubmit = async (values: WorkEntryFormData) => {
-    // Convert JS Date to Firestore Timestamp
     const dataWithTimestamp = {
       ...values,
       date: Timestamp.fromDate(values.date)
@@ -258,6 +261,7 @@ export function WorkEntryForm({ initialData, onSubmit, isSubmitting = false }: W
                   <SelectContent>
                     <SelectItem value="Pending">Pending</SelectItem>
                     <SelectItem value="Completed">Completed</SelectItem>
+                    <SelectItem value="Rejected">Rejected</SelectItem>
                   </SelectContent>
                 </Select>
                 <FormMessage />
@@ -279,6 +283,52 @@ export function WorkEntryForm({ initialData, onSubmit, isSubmitting = false }: W
             )}
           />
         </div>
+
+        {/* Rejection fields — only shown when status is Rejected */}
+        {status === 'Rejected' && (
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-6 p-4 bg-red-50 rounded-lg border border-red-200">
+            <div className="col-span-full flex items-center gap-2 text-red-700 font-medium text-sm mb-1">
+              <XCircle className="h-4 w-4" />
+              Rejection Details
+            </div>
+            <FormField
+              control={form.control}
+              name="rejectionReason"
+              render={({ field }) => (
+                <FormItem>
+                  <FormLabel>Rejection Reason (optional)</FormLabel>
+                  <FormControl>
+                    <Input placeholder="e.g. Wrong documents, Customer cancelled" {...field} />
+                  </FormControl>
+                  <FormMessage />
+                </FormItem>
+              )}
+            />
+            <FormField
+              control={form.control}
+              name="refundAmount"
+              render={({ field }) => (
+                <FormItem>
+                  <FormLabel>Refund Amount (₹, optional)</FormLabel>
+                  <FormControl>
+                    <div className="relative">
+                      <IndianRupee className="absolute left-3 top-2.5 h-4 w-4 text-muted-foreground" />
+                      <Input
+                        type="number"
+                        className="pl-9"
+                        placeholder="0"
+                        {...field}
+                        value={field.value ?? ''}
+                        onChange={e => field.onChange(e.target.value === '' ? undefined : e.target.value)}
+                      />
+                    </div>
+                  </FormControl>
+                  <FormMessage />
+                </FormItem>
+              )}
+            />
+          </div>
+        )}
 
         <div className="flex justify-end pt-4">
           <Button type="submit" size="lg" disabled={isSubmitting} className="w-full md:w-auto">

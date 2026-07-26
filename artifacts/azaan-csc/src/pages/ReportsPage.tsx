@@ -1,7 +1,7 @@
 import { useState, useEffect } from 'react';
 import { subscribeToWorkEntries, WorkEntry } from '@/lib/firestore';
 import { isToday, isThisWeek, isThisMonth, format } from 'date-fns';
-import { Download, BarChart2, TrendingUp, IndianRupee } from 'lucide-react';
+import { Download, BarChart2, TrendingUp, IndianRupee, XCircle } from 'lucide-react';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
@@ -19,7 +19,11 @@ export default function ReportsPage() {
   }, []);
 
   const exportCSV = () => {
-    const headers = ['Date', 'Customer Name', 'Mobile', 'Category', 'Work Detail', 'Total Amount', 'Paid Amount', 'Due Amount', 'Status', 'Address'];
+    const headers = [
+      'Date', 'Customer Name', 'Mobile', 'Category', 'Work Detail',
+      'Total Amount', 'Paid Amount', 'Due Amount', 'Status', 'Address',
+      'Created At', 'Completed At', 'Rejected At', 'Rejection Reason', 'Refund Amount',
+    ];
     const rows = entries.map(e => [
       format(e.date.toDate(), 'yyyy-MM-dd'),
       `"${e.customerName}"`,
@@ -30,7 +34,12 @@ export default function ReportsPage() {
       e.paidAmount,
       e.dueAmount,
       e.status,
-      `"${e.address || ''}"`
+      `"${e.address || ''}"`,
+      e.createdAt ? format(e.createdAt.toDate(), 'yyyy-MM-dd HH:mm') : '',
+      e.completedAt ? format(e.completedAt.toDate(), 'yyyy-MM-dd HH:mm') : '',
+      e.rejectedAt ? format(e.rejectedAt.toDate(), 'yyyy-MM-dd HH:mm') : '',
+      `"${e.rejectionReason || ''}"`,
+      e.refundAmount ?? '',
     ]);
 
     const csvContent = [headers.join(','), ...rows.map(r => r.join(','))].join('\n');
@@ -46,12 +55,19 @@ export default function ReportsPage() {
   };
 
   const ReportView = ({ periodEntries }: { periodEntries: WorkEntry[] }) => {
-    const totalEarned = periodEntries.reduce((sum, e) => sum + e.paidAmount, 0);
-    const totalDues = periodEntries.reduce((sum, e) => sum + e.dueAmount, 0);
-    const totalEntries = periodEntries.length;
+    // Rejected entries are tracked separately so they don't skew earnings
+    const rejectedEntries = periodEntries.filter(e => e.status === 'Rejected');
+    const activeEntries = periodEntries.filter(e => e.status !== 'Rejected');
 
-    // Category breakdown
-    const categoryStats = periodEntries.reduce((acc, entry) => {
+    const totalEarned = activeEntries.reduce((sum, e) => sum + e.paidAmount, 0);
+    const totalDues = activeEntries.reduce((sum, e) => sum + e.dueAmount, 0);
+    const totalEntries = activeEntries.length;
+
+    const rejectedCount = rejectedEntries.length;
+    const totalRefunded = rejectedEntries.reduce((sum, e) => sum + (e.refundAmount || 0), 0);
+
+    // Category breakdown (excluding rejected)
+    const categoryStats = activeEntries.reduce((acc, entry) => {
       if (!acc[entry.category]) {
         acc[entry.category] = { count: 0, earned: 0 };
       }
@@ -64,6 +80,7 @@ export default function ReportsPage() {
 
     return (
       <div className="space-y-6 mt-4">
+        {/* Main stats */}
         <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
           <Card>
             <CardHeader className="flex flex-row items-center justify-between pb-2">
@@ -72,6 +89,7 @@ export default function ReportsPage() {
             </CardHeader>
             <CardContent>
               <div className="text-2xl font-bold text-green-700">₹{totalEarned}</div>
+              <p className="text-xs text-muted-foreground mt-1">Excludes refunded/rejected work</p>
             </CardContent>
           </Card>
           
@@ -82,6 +100,7 @@ export default function ReportsPage() {
             </CardHeader>
             <CardContent>
               <div className="text-2xl font-bold text-blue-700">{totalEntries} entries</div>
+              <p className="text-xs text-muted-foreground mt-1">Pending + completed</p>
             </CardContent>
           </Card>
 
@@ -96,6 +115,35 @@ export default function ReportsPage() {
           </Card>
         </div>
 
+        {/* Rejected / Refunded breakdown */}
+        {(rejectedCount > 0 || true) && (
+          <Card className="border-slate-200 bg-slate-50">
+            <CardHeader className="flex flex-row items-center justify-between pb-2">
+              <CardTitle className="text-sm font-medium text-slate-700 flex items-center gap-2">
+                <XCircle className="h-4 w-4" />
+                Rejected / Refunded Work
+              </CardTitle>
+            </CardHeader>
+            <CardContent>
+              {rejectedCount === 0 ? (
+                <p className="text-sm text-muted-foreground">No rejected entries in this period.</p>
+              ) : (
+                <div className="grid grid-cols-2 gap-6">
+                  <div>
+                    <div className="text-2xl font-bold text-slate-700">{rejectedCount}</div>
+                    <p className="text-xs text-muted-foreground mt-1">Rejected entries</p>
+                  </div>
+                  <div>
+                    <div className="text-2xl font-bold text-slate-700">₹{totalRefunded}</div>
+                    <p className="text-xs text-muted-foreground mt-1">Total refunded</p>
+                  </div>
+                </div>
+              )}
+            </CardContent>
+          </Card>
+        )}
+
+        {/* Category breakdown */}
         <Card>
           <CardHeader>
             <CardTitle className="text-lg">Category Breakdown</CardTitle>
@@ -134,7 +182,7 @@ export default function ReportsPage() {
   if (loading) return <div className="p-8 text-center animate-pulse">Loading reports...</div>;
 
   const dailyEntries = entries.filter(e => isToday(e.date.toDate()));
-  const weeklyEntries = entries.filter(e => isThisWeek(e.date.toDate(), { weekStartsOn: 1 })); // Monday start
+  const weeklyEntries = entries.filter(e => isThisWeek(e.date.toDate(), { weekStartsOn: 1 }));
   const monthlyEntries = entries.filter(e => isThisMonth(e.date.toDate()));
 
   return (

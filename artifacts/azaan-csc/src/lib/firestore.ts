@@ -11,9 +11,13 @@ export interface WorkEntry {
   totalAmount: number;
   paidAmount: number;
   dueAmount: number;
-  status: 'Pending' | 'Completed';
+  status: 'Pending' | 'Completed' | 'Rejected';
   address: string;
   createdAt: Timestamp;
+  completedAt?: Timestamp;   // set automatically when status → Completed
+  rejectedAt?: Timestamp;    // set automatically when status → Rejected
+  rejectionReason?: string;  // optional text reason for rejection
+  refundAmount?: number;     // amount refunded to customer on rejection
 }
 
 export interface Category {
@@ -35,27 +39,41 @@ export const defaultCategories = [
 ];
 
 // WORK ENTRIES
-export const createWorkEntry = async (data: Omit<WorkEntry, 'id' | 'dueAmount' | 'createdAt'>) => {
+export const createWorkEntry = async (
+  data: Omit<WorkEntry, 'id' | 'dueAmount' | 'createdAt' | 'completedAt' | 'rejectedAt'>
+) => {
   if (!db) throw new Error("Firebase not configured");
-  const dueAmount = data.totalAmount - data.paidAmount;
-  return addDoc(collection(db, 'workEntries'), {
-    ...data,
-    dueAmount,
-    createdAt: Timestamp.now()
-  });
+  const dueAmount = data.status === 'Rejected' ? 0 : data.totalAmount - data.paidAmount;
+  const timestamps: Partial<WorkEntry> = { createdAt: Timestamp.now() };
+  if (data.status === 'Completed') timestamps.completedAt = Timestamp.now();
+  if (data.status === 'Rejected') timestamps.rejectedAt = Timestamp.now();
+  return addDoc(collection(db, 'workEntries'), { ...data, ...timestamps, dueAmount });
 };
 
-export const updateWorkEntry = async (id: string, data: Partial<Omit<WorkEntry, 'id' | 'dueAmount' | 'createdAt'>>) => {
+export const updateWorkEntry = async (
+  id: string,
+  data: Partial<Omit<WorkEntry, 'id' | 'dueAmount' | 'createdAt' | 'completedAt' | 'rejectedAt'>>
+) => {
   if (!db) throw new Error("Firebase not configured");
-  
-  let updates: any = { ...data };
-  
-  // If either totalAmount or paidAmount is provided, we should probably recalculate dueAmount
-  // To keep it simple, if both are in data, update it.
-  if (data.totalAmount !== undefined && data.paidAmount !== undefined) {
-    updates.dueAmount = data.totalAmount - data.paidAmount;
+
+  const updates: any = { ...data };
+
+  if (data.status === 'Rejected') {
+    // Rejected: work cancelled — nothing owed; track the refund separately
+    updates.rejectedAt = Timestamp.now();
+    updates.dueAmount = 0;
+  } else if (data.status === 'Completed') {
+    updates.completedAt = Timestamp.now();
+    if (data.totalAmount !== undefined && data.paidAmount !== undefined) {
+      updates.dueAmount = data.totalAmount - data.paidAmount;
+    }
+  } else {
+    // Pending (or no status change)
+    if (data.totalAmount !== undefined && data.paidAmount !== undefined) {
+      updates.dueAmount = data.totalAmount - data.paidAmount;
+    }
   }
-  
+
   return updateDoc(doc(db, 'workEntries', id), updates);
 };
 

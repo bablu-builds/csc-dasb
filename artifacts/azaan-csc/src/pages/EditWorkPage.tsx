@@ -3,9 +3,10 @@ import { useLocation, useParams } from 'wouter';
 import { updateWorkEntry, subscribeToWorkEntries, WorkEntry } from '@/lib/firestore';
 import { useToast } from '@/hooks/use-toast';
 import { WorkEntryForm, WorkEntryFormData } from '@/components/WorkEntryForm';
-import { ArrowLeft, Loader2 } from 'lucide-react';
+import { ArrowLeft, Loader2, Clock, CheckCircle2, XCircle } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Timestamp } from 'firebase/firestore';
+import { format, formatDistanceStrict } from 'date-fns';
 
 export default function EditWorkPage() {
   const { id } = useParams();

@@ -1,9 +1,9 @@
 import { useState, useEffect } from 'react';
 import { subscribeToWorkEntries, deleteWorkEntry, WorkEntry } from '@/lib/firestore';
 import { useSettings } from '@/contexts/SettingsContext';
-import { format } from 'date-fns';
+import { format, formatDistanceStrict } from 'date-fns';
 import { Link } from 'wouter';
-import { Search, Filter, MoreHorizontal, Edit, Trash2, IndianRupee, History } from 'lucide-react';
+import { Search, MoreHorizontal, Edit, Trash2, IndianRupee, History, Clock, CheckCircle2, XCircle } from 'lucide-react';
 import { Input } from '@/components/ui/input';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
@@ -38,6 +38,28 @@ import {
   DialogTitle,
 } from "@/components/ui/dialog";
 
+function StatusBadge({ status }: { status: WorkEntry['status'] }) {
+  if (status === 'Completed') {
+    return (
+      <Badge variant="outline" className="text-green-700 bg-green-50 border-green-200">
+        Completed
+      </Badge>
+    );
+  }
+  if (status === 'Rejected') {
+    return (
+      <Badge variant="outline" className="text-red-700 bg-red-50 border-red-200">
+        Rejected
+      </Badge>
+    );
+  }
+  return (
+    <Badge className="bg-amber-100 text-amber-800 hover:bg-amber-100 border-transparent">
+      Pending
+    </Badge>
+  );
+}
+
 export default function WorkListPage() {
   const [entries, setEntries] = useState<WorkEntry[]>([]);
   const [loading, setLoading] = useState(true);
@@ -48,8 +70,6 @@ export default function WorkListPage() {
   const { toast } = useToast();
   
   const [entryToDelete, setEntryToDelete] = useState<string | null>(null);
-  
-  // Mobile Number History Modal state
   const [selectedMobile, setSelectedMobile] = useState<string | null>(null);
 
   useEffect(() => {
@@ -77,10 +97,8 @@ export default function WorkListPage() {
       e.customerName.toLowerCase().includes(searchTerm.toLowerCase()) ||
       e.mobile.includes(searchTerm) ||
       e.category.toLowerCase().includes(searchTerm.toLowerCase());
-    
     const matchesStatus = statusFilter === 'All' || e.status === statusFilter;
     const matchesCategory = categoryFilter === 'All' || e.category === categoryFilter;
-
     return matchesSearch && matchesStatus && matchesCategory;
   });
 
@@ -118,6 +136,7 @@ export default function WorkListPage() {
                 <SelectItem value="All">All Status</SelectItem>
                 <SelectItem value="Pending">Pending</SelectItem>
                 <SelectItem value="Completed">Completed</SelectItem>
+                <SelectItem value="Rejected">Rejected</SelectItem>
               </SelectContent>
             </Select>
             <Select value={categoryFilter} onValueChange={setCategoryFilter}>
@@ -154,7 +173,10 @@ export default function WorkListPage() {
                 <tr><td colSpan={7} className="px-4 py-8 text-center text-muted-foreground">No entries found</td></tr>
               ) : (
                 filteredEntries.map(entry => (
-                  <tr key={entry.id} className="border-b last:border-0 hover:bg-muted/30 transition-colors">
+                  <tr
+                    key={entry.id}
+                    className={`border-b last:border-0 hover:bg-muted/30 transition-colors ${entry.status === 'Rejected' ? 'opacity-75' : ''}`}
+                  >
                     <td className="px-4 py-3 whitespace-nowrap">
                       {format(entry.date.toDate(), 'dd MMM yyyy')}
                     </td>
@@ -173,6 +195,9 @@ export default function WorkListPage() {
                     </td>
                     <td className="px-4 py-3 text-right">
                       {entry.totalAmount}
+                      {entry.status === 'Rejected' && entry.refundAmount ? (
+                        <span className="block text-xs text-red-600">Refund: ₹{entry.refundAmount}</span>
+                      ) : null}
                     </td>
                     <td className="px-4 py-3 text-right font-medium">
                       {entry.dueAmount > 0 ? (
@@ -182,11 +207,7 @@ export default function WorkListPage() {
                       )}
                     </td>
                     <td className="px-4 py-3 text-center">
-                      <Badge variant={entry.status === 'Completed' ? 'outline' : 'default'} 
-                        className={entry.status === 'Pending' ? 'bg-amber-100 text-amber-800 hover:bg-amber-100 border-transparent' : 'text-green-700 bg-green-50 border-green-200'}
-                      >
-                        {entry.status === 'Pending' ? 'Pending' : 'Completed'}
-                      </Badge>
+                      <StatusBadge status={entry.status} />
                     </td>
                     <td className="px-4 py-3 text-right">
                       <DropdownMenu>
@@ -233,6 +254,7 @@ export default function WorkListPage() {
         </AlertDialogContent>
       </AlertDialog>
 
+      {/* Customer History Modal */}
       <Dialog open={!!selectedMobile} onOpenChange={(open) => !open && setSelectedMobile(null)}>
         <DialogContent className="max-w-2xl max-h-[80vh] overflow-y-auto">
           <DialogHeader>
@@ -241,26 +263,71 @@ export default function WorkListPage() {
             </DialogTitle>
           </DialogHeader>
           <div className="mt-4 space-y-4">
-            {mobileHistoryEntries.map(entry => (
-              <div key={entry.id} className="border rounded-lg p-4 flex flex-col sm:flex-row justify-between gap-4">
-                <div>
-                  <div className="font-semibold">{entry.customerName}</div>
-                  <div className="text-sm text-muted-foreground mt-1">{format(entry.date.toDate(), 'dd MMM yyyy')}</div>
-                  <div className="mt-2"><Badge variant="secondary">{entry.category}</Badge></div>
-                </div>
-                <div className="text-right flex flex-col justify-between">
-                  <div>
-                    <span className={`text-xs font-semibold px-2 py-1 rounded ${entry.status === 'Completed' ? 'bg-green-100 text-green-800' : 'bg-amber-100 text-amber-800'}`}>
-                      {entry.status}
-                    </span>
+            {mobileHistoryEntries.map(entry => {
+              const resolvedAt = entry.status === 'Completed' ? entry.completedAt : entry.status === 'Rejected' ? entry.rejectedAt : null;
+              const duration = resolvedAt && entry.createdAt
+                ? formatDistanceStrict(resolvedAt.toDate(), entry.createdAt.toDate())
+                : null;
+
+              return (
+                <div key={entry.id} className={`border rounded-lg p-4 space-y-3 ${entry.status === 'Rejected' ? 'border-red-200 bg-red-50/30' : ''}`}>
+                  <div className="flex flex-col sm:flex-row justify-between gap-3">
+                    <div>
+                      <div className="font-semibold">{entry.customerName}</div>
+                      <div className="text-sm text-muted-foreground mt-0.5">
+                        {format(entry.date.toDate(), 'dd MMM yyyy')}
+                      </div>
+                      <div className="mt-2 flex flex-wrap gap-2">
+                        <Badge variant="secondary">{entry.category}</Badge>
+                        <StatusBadge status={entry.status} />
+                      </div>
+                    </div>
+                    <div className="text-right shrink-0">
+                      <div className="text-sm font-medium">Total: ₹{entry.totalAmount}</div>
+                      {entry.dueAmount > 0 && (
+                        <div className="text-sm text-red-600 mt-0.5">Due: ₹{entry.dueAmount}</div>
+                      )}
+                      {entry.status === 'Rejected' && entry.refundAmount ? (
+                        <div className="text-sm text-red-600 mt-0.5">Refund: ₹{entry.refundAmount}</div>
+                      ) : null}
+                    </div>
                   </div>
-                  <div className="mt-3 text-sm">
-                    Total: ₹{entry.totalAmount}
-                    {entry.dueAmount > 0 && <span className="text-red-600 ml-2 block sm:inline">Due: ₹{entry.dueAmount}</span>}
+
+                  {/* Timestamps */}
+                  <div className="text-xs text-muted-foreground space-y-1 pt-2 border-t">
+                    {entry.createdAt && (
+                      <div className="flex items-center gap-1.5">
+                        <Clock className="h-3 w-3" />
+                        Created: {format(entry.createdAt.toDate(), 'dd MMM yyyy, h:mm a')}
+                      </div>
+                    )}
+                    {entry.status === 'Completed' && entry.completedAt ? (
+                      <div className="flex items-center gap-1.5 text-green-700">
+                        <CheckCircle2 className="h-3 w-3" />
+                        Completed: {format(entry.completedAt.toDate(), 'dd MMM yyyy, h:mm a')}
+                        {duration && <span className="ml-1 text-muted-foreground">(in {duration})</span>}
+                      </div>
+                    ) : entry.status === 'Rejected' && entry.rejectedAt ? (
+                      <div className="flex flex-col gap-1">
+                        <div className="flex items-center gap-1.5 text-red-700">
+                          <XCircle className="h-3 w-3" />
+                          Rejected: {format(entry.rejectedAt.toDate(), 'dd MMM yyyy, h:mm a')}
+                          {duration && <span className="ml-1 text-muted-foreground">(after {duration})</span>}
+                        </div>
+                        {entry.rejectionReason && (
+                          <div className="text-muted-foreground ml-4">Reason: {entry.rejectionReason}</div>
+                        )}
+                      </div>
+                    ) : entry.status === 'Pending' ? (
+                      <div className="flex items-center gap-1.5 text-amber-600">
+                        <Clock className="h-3 w-3" />
+                        Still pending
+                      </div>
+                    ) : null}
                   </div>
                 </div>
-              </div>
-            ))}
+              );
+            })}
           </div>
         </DialogContent>
       </Dialog>
