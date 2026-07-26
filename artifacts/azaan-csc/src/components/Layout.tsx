@@ -1,25 +1,31 @@
 import { Link, useLocation } from 'wouter';
 import { useAuth } from '@/contexts/AuthContext';
 import { useSettings } from '@/contexts/SettingsContext';
-import { LayoutDashboard, PlusCircle, List, Clock, BarChart3, Settings, LogOut, Menu, Store, X, Trash2 } from 'lucide-react';
+import { LayoutDashboard, PlusCircle, List, Clock, BarChart3, Settings, LogOut, Menu, Store, X, Trash2, ShieldCheck, User } from 'lucide-react';
 import { useState } from 'react';
 import { Button } from '@/components/ui/button';
+import { Badge } from '@/components/ui/badge';
 
 export function Layout({ children }: { children: React.ReactNode }) {
-  const { logout, isConfigured } = useAuth();
+  const { logout, isConfigured, role, userProfile } = useAuth();
   const { shopSettings } = useSettings();
   const [location] = useLocation();
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
 
-  const navItems = [
-    { href: '/dashboard', label: 'Dashboard', sub: 'Home', icon: LayoutDashboard },
-    { href: '/work/new', label: 'Add Work', sub: 'New Entry', icon: PlusCircle, isPrimary: true },
-    { href: '/work', label: 'All Work', sub: 'View all', icon: List },
-    { href: '/pending', label: 'Pending', sub: 'Incomplete', icon: Clock },
-    { href: '/reports', label: 'Reports', sub: 'Analytics', icon: BarChart3 },
-    { href: '/settings', label: 'Settings', sub: 'Configure', icon: Settings },
-    { href: '/deleted', label: 'Deleted Items', sub: 'Recycle bin', icon: Trash2 },
+  const isOwner = role === 'owner';
+
+  const allNavItems = [
+    { href: '/dashboard', label: 'Dashboard', sub: 'Home', icon: LayoutDashboard, ownerOnly: false },
+    { href: '/work/new', label: 'Add Work', sub: 'New Entry', icon: PlusCircle, isPrimary: true, ownerOnly: false },
+    { href: '/work', label: 'All Work', sub: 'View all', icon: List, ownerOnly: false },
+    { href: '/pending', label: 'Pending', sub: 'Incomplete', icon: Clock, ownerOnly: false },
+    { href: '/reports', label: 'Reports', sub: 'Analytics', icon: BarChart3, ownerOnly: true },
+    { href: '/settings', label: 'Settings', sub: 'Configure', icon: Settings, ownerOnly: false },
+    { href: '/deleted', label: 'Deleted Items', sub: 'Recycle bin', icon: Trash2, ownerOnly: false },
   ];
+
+  // Filter nav items based on role
+  const navItems = allNavItems.filter(item => !item.ownerOnly || isOwner);
 
   return (
     <div className="min-h-[100dvh] flex flex-col md:flex-row bg-background">
@@ -70,7 +76,29 @@ export function Layout({ children }: { children: React.ReactNode }) {
           })}
         </nav>
 
-        <div className="p-4 border-t">
+        {/* User info + role badge + logout */}
+        <div className="p-4 border-t space-y-3">
+          {userProfile && (
+            <div className="flex items-center gap-2 px-2">
+              <div className="h-8 w-8 rounded-full bg-muted flex items-center justify-center flex-shrink-0">
+                <User className="h-4 w-4 text-muted-foreground" />
+              </div>
+              <div className="flex-1 min-w-0">
+                <p className="text-sm font-medium truncate">{userProfile.displayName}</p>
+                <p className="text-xs text-muted-foreground truncate">{userProfile.email}</p>
+              </div>
+              <Badge
+                variant={isOwner ? 'default' : 'secondary'}
+                className={`shrink-0 text-xs ${isOwner ? 'bg-primary/90' : ''}`}
+              >
+                {isOwner ? (
+                  <><ShieldCheck className="h-3 w-3 mr-1" />Owner</>
+                ) : (
+                  'Staff'
+                )}
+              </Badge>
+            </div>
+          )}
           <Button 
             variant="ghost" 
             className="w-full justify-start text-muted-foreground hover:text-foreground"

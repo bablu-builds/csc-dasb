@@ -26,6 +26,7 @@ import {
   Dialog, DialogContent, DialogHeader, DialogTitle,
 } from '@/components/ui/dialog';
 import { formatCurrency } from '@/lib/format';
+import { UserCircle2 } from 'lucide-react';
 
 type SortField = 'date' | 'totalAmount' | 'dueAmount' | 'status' | 'customerName';
 type SortDir = 'asc' | 'desc';
@@ -333,6 +334,12 @@ export default function WorkListPage() {
                         <Badge variant="secondary">{entry.category}</Badge>
                         <StatusBadge status={entry.status} />
                       </div>
+                      {entry.addedBy && (
+                        <div className="mt-2 flex items-center gap-1.5 text-xs text-muted-foreground">
+                          <UserCircle2 className="h-3.5 w-3.5" />
+                          Added by: <span className="font-medium text-foreground">{entry.addedBy}</span>
+                        </div>
+                      )}
                     </div>
                     <div className="text-right shrink-0">
                       <div className="text-sm font-medium">Total: {formatCurrency(entry.totalAmount)}</div>

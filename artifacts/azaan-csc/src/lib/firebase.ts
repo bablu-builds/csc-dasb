@@ -5,7 +5,7 @@ import { getFirestore } from 'firebase/firestore';
 // These values come from your Firebase project settings.
 // In Replit: go to "Secrets" (lock icon) and add each key below.
 // In GitHub Pages: add them as Repository secrets and expose via GitHub Actions.
-const firebaseConfig = {
+export const firebaseConfig = {
   apiKey: import.meta.env.VITE_FIREBASE_API_KEY,
   authDomain: import.meta.env.VITE_FIREBASE_AUTH_DOMAIN,
   projectId: import.meta.env.VITE_FIREBASE_PROJECT_ID,

@@ -1,0 +1,2 @@
+- [Role system & staff creation](role-system.md) — Secondary Firebase app trick for staff account creation without interrupting owner's session; role stored in Firestore users/{uid}.
+- [Firestore rules deployment](firestore-rules.md) — Rules live in firestore.rules; must be deployed via Firebase CLI or pasted into Firebase Console manually.

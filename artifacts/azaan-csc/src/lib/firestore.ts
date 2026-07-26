@@ -1,5 +1,119 @@
-import { collection, doc, getDoc, getDocs, setDoc, query, orderBy, onSnapshot, addDoc, updateDoc, deleteDoc, writeBatch, Timestamp } from 'firebase/firestore';
-import { db } from '@/lib/firebase';
+import {
+  collection, doc, getDoc, getDocs, setDoc, query, orderBy, where, limit,
+  onSnapshot, addDoc, updateDoc, deleteDoc, writeBatch, Timestamp,
+} from 'firebase/firestore';
+import { initializeApp, deleteApp } from 'firebase/app';
+import { getAuth, createUserWithEmailAndPassword, signOut as firebaseSignOut } from 'firebase/auth';
+import { db, firebaseConfig } from '@/lib/firebase';
+
+// ─── USER PROFILES ──────────────────────────────────────────────────────────
+
+export interface UserProfile {
+  uid?: string;
+  email: string;
+  displayName: string;
+  role: 'owner' | 'staff';
+  createdAt: Timestamp;
+  invitedBy?: string; // owner email, only for staff
+}
+
+/** Fetch a user's profile document. Returns null if not found. */
+export const getUserProfile = async (uid: string): Promise<UserProfile | null> => {
+  if (!db) return null;
+  const snap = await getDoc(doc(db, 'users', uid));
+  if (!snap.exists()) return null;
+  return { uid: snap.id, ...snap.data() } as UserProfile;
+};
+
+/**
+ * Called when a logged-in user has no `users/{uid}` document yet.
+ * If no user docs exist at all → create this user as owner (first-time setup).
+ * If user docs exist but this user isn't one of them → unauthorised (caller should sign out).
+ * Returns the created profile or null if the user should be signed out.
+ */
+export const bootstrapUserProfile = async (
+  uid: string,
+  email: string,
+  displayName: string,
+): Promise<UserProfile | null> => {
+  if (!db) return null;
+  // Check if any user profiles exist
+  const usersSnap = await getDocs(query(collection(db, 'users'), limit(1)));
+  if (!usersSnap.empty) {
+    // Users already exist — this account has no profile; shouldn't be here
+    return null;
+  }
+  // First-ever user → owner
+  const profile: UserProfile = {
+    email,
+    displayName,
+    role: 'owner',
+    createdAt: Timestamp.now(),
+  };
+  await setDoc(doc(db, 'users', uid), profile);
+  return { uid, ...profile };
+};
+
+/** Subscribe to all staff members (role = 'staff'). */
+export const subscribeToStaff = (callback: (staff: UserProfile[]) => void) => {
+  if (!db) return () => {};
+  const q = query(collection(db, 'users'), where('role', '==', 'staff'), orderBy('createdAt', 'asc'));
+  return onSnapshot(q, (snap) => {
+    const staff: UserProfile[] = [];
+    snap.forEach(d => staff.push({ uid: d.id, ...d.data() } as UserProfile));
+    callback(staff);
+  }, (err) => {
+    console.error('[Firestore] Staff listener error:', err.code, err.message);
+  });
+};
+
+/**
+ * Create a staff Firebase Auth account + Firestore profile without interrupting the owner's session.
+ * Uses a secondary (temporary) Firebase app instance so the owner stays signed in.
+ */
+export const createStaffAccount = async (
+  name: string,
+  email: string,
+  password: string,
+  ownerEmail: string,
+): Promise<void> => {
+  if (!db) throw new Error('Firebase not configured');
+
+  // Spin up a temporary second Firebase app
+  const tempAppName = `staff-creation-${Date.now()}`;
+  const secondaryApp = initializeApp(firebaseConfig, tempAppName);
+  const secondaryAuth = getAuth(secondaryApp);
+
+  try {
+    const cred = await createUserWithEmailAndPassword(secondaryAuth, email, password);
+    const uid = cred.user.uid;
+
+    // Write Firestore profile as owner's client (owner is still logged in on primary app)
+    await setDoc(doc(db, 'users', uid), {
+      email,
+      displayName: name,
+      role: 'staff',
+      createdAt: Timestamp.now(),
+      invitedBy: ownerEmail,
+    } satisfies Omit<UserProfile, 'uid'>);
+  } finally {
+    // Always clean up — sign out from secondary app and destroy it
+    await firebaseSignOut(secondaryAuth).catch(() => {});
+    await deleteApp(secondaryApp).catch(() => {});
+  }
+};
+
+/**
+ * Revoke a staff member's access by removing their Firestore profile.
+ * They can still authenticate with Firebase Auth, but the app will log them out
+ * because their profile no longer exists.
+ */
+export const revokeStaffAccess = async (uid: string): Promise<void> => {
+  if (!db) throw new Error('Firebase not configured');
+  await deleteDoc(doc(db, 'users', uid));
+};
+
+// ─── WORK ENTRIES ────────────────────────────────────────────────────────────
 
 export interface WorkEntry {
   id?: string;
@@ -20,6 +134,7 @@ export interface WorkEntry {
   refundAmount?: number;     // amount refunded to customer on rejection
   isDeleted?: boolean;       // soft-delete flag
   deletedAt?: Timestamp;     // when it was soft-deleted
+  addedBy?: string;          // display name / email of who created it (immutable after creation)
 }
 
 export interface Category {
@@ -63,12 +178,17 @@ export const createWorkEntry = async (
     ? stripUndefined({ rejectionReason, refundAmount })
     : {};
 
-  return addDoc(collection(db, 'workEntries'), { ...rest, ...timestamps, dueAmount, ...rejectionFields });
+  return addDoc(collection(db, 'workEntries'), {
+    ...stripUndefined(rest as Record<string, unknown>),
+    ...timestamps,
+    dueAmount,
+    ...rejectionFields,
+  });
 };
 
 export const updateWorkEntry = async (
   id: string,
-  data: Partial<Omit<WorkEntry, 'id' | 'dueAmount' | 'createdAt' | 'completedAt' | 'rejectedAt'>>
+  data: Partial<Omit<WorkEntry, 'id' | 'dueAmount' | 'createdAt' | 'completedAt' | 'rejectedAt' | 'addedBy'>>
 ) => {
   if (!db) throw new Error("Firebase not configured");
 

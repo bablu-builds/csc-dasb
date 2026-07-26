@@ -1,7 +1,7 @@
 import { useState } from 'react';
 import { useAuth } from '@/contexts/AuthContext';
 import { Link, useLocation } from 'wouter';
-import { signInWithEmailAndPassword } from 'firebase/auth';
+import { signInWithEmailAndPassword, sendPasswordResetEmail } from 'firebase/auth';
 import { auth } from '@/lib/firebase';
 import { useToast } from '@/hooks/use-toast';
 import { Button } from '@/components/ui/button';
@@ -14,6 +14,8 @@ export default function LoginPage() {
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [loading, setLoading] = useState(false);
+  const [resetSent, setResetSent] = useState(false);
+  const [sendingReset, setSendingReset] = useState(false);
   const { isConfigured, user } = useAuth();
   const { shopSettings } = useSettings();
   const [, setLocation] = useLocation();
@@ -37,6 +39,23 @@ export default function LoginPage() {
       toast({ variant: "destructive", title: "Login Failed", description: err.message });
     } finally {
       setLoading(false);
+    }
+  };
+
+  const handleForgotPassword = async () => {
+    if (!auth || !email.trim()) {
+      toast({ variant: 'destructive', title: 'Enter your email first', description: 'Type your email address above, then click Forgot Password.' });
+      return;
+    }
+    setSendingReset(true);
+    try {
+      await sendPasswordResetEmail(auth, email.trim());
+      setResetSent(true);
+      toast({ title: 'Reset email sent', description: `Check ${email} for a password reset link.` });
+    } catch (err: any) {
+      toast({ variant: 'destructive', title: 'Error', description: err.message });
+    } finally {
+      setSendingReset(false);
     }
   };
 
@@ -93,7 +112,18 @@ export default function LoginPage() {
             Login
           </Button>
 
-          <div className="text-center text-sm text-muted-foreground pt-4">
+          <div className="flex items-center justify-between text-sm pt-2">
+            <button
+              type="button"
+              onClick={handleForgotPassword}
+              disabled={sendingReset || !isConfigured}
+              className="text-muted-foreground hover:text-primary transition-colors disabled:opacity-50"
+            >
+              {sendingReset ? <span className="flex items-center gap-1"><Loader2 className="h-3 w-3 animate-spin" />Sending…</span> : 'Forgot password?'}
+            </button>
+            {resetSent && <span className="text-green-600 text-xs">Reset email sent ✓</span>}
+          </div>
+          <div className="text-center text-sm text-muted-foreground pt-2">
             Don't have an account? <Link href="/register" className="text-primary hover:underline">Register</Link>
           </div>
         </form>

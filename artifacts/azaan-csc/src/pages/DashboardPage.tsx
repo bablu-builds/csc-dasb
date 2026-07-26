@@ -1,5 +1,6 @@
 import { useState, useEffect } from 'react';
 import { WorkEntry, subscribeToWorkEntries, updateWorkEntry } from '@/lib/firestore';
+import { useAuth } from '@/contexts/AuthContext';
 import { isToday, isThisMonth, differenceInDays, subDays, format } from 'date-fns';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Skeleton } from '@/components/ui/skeleton';
@@ -60,6 +61,8 @@ export default function DashboardPage() {
   const [completingId, setCompletingId] = useState<string | null>(null);
   const { toast } = useToast();
   const [, setLocation] = useLocation();
+  const { role } = useAuth();
+  const isOwner = role === 'owner';
 
   useEffect(() => {
     if (!isConfigured) {
@@ -76,7 +79,7 @@ export default function DashboardPage() {
 
   const today = new Date();
 
-  // Stats
+  // Stats (computed for all roles, but only rendered for owners)
   const todaysEarnings = entries.filter(e => isToday(e.date.toDate()) && e.status !== 'Rejected').reduce((s, e) => s + e.paidAmount, 0);
   const monthEarnings = entries.filter(e => isThisMonth(e.date.toDate()) && e.status !== 'Rejected').reduce((s, e) => s + e.paidAmount, 0);
   const uniqueCustomers = new Set(entries.map(e => e.mobile)).size;
@@ -93,7 +96,7 @@ export default function DashboardPage() {
     .filter(e => e.daysPending >= 3 || e.dueAmount > 0)
     .sort((a, b) => b.daysPending - a.daysPending);
 
-  // Last 7 days earnings chart
+  // Last 7 days earnings chart (owner only)
   const chartData = Array.from({ length: 7 }).map((_, i) => {
     const day = subDays(today, 6 - i);
     const dayStr = format(day, 'dd MMM');
@@ -225,119 +228,123 @@ export default function DashboardPage() {
         </div>
       </div>
 
-      {/* ── SUMMARY CARDS ─────────────────────────────────────────────── */}
-      <div className="grid grid-cols-2 md:grid-cols-3 xl:grid-cols-6 gap-4">
-        <Card className="bg-primary/5 border-primary/20 shadow-sm hover:shadow-md transition-shadow">
-          <CardHeader className="flex flex-row items-center justify-between pb-2">
-            <CardTitle className="text-xs font-medium text-primary uppercase tracking-wide">Today's Earning</CardTitle>
-            <div className="h-8 w-8 rounded-full bg-primary/10 flex items-center justify-center">
-              <IndianRupee className="h-4 w-4 text-primary" />
-            </div>
+      {/* ── SUMMARY CARDS — owner only ────────────────────────────────── */}
+      {isOwner && (
+        <div className="grid grid-cols-2 md:grid-cols-3 xl:grid-cols-6 gap-4">
+          <Card className="bg-primary/5 border-primary/20 shadow-sm hover:shadow-md transition-shadow">
+            <CardHeader className="flex flex-row items-center justify-between pb-2">
+              <CardTitle className="text-xs font-medium text-primary uppercase tracking-wide">Today's Earning</CardTitle>
+              <div className="h-8 w-8 rounded-full bg-primary/10 flex items-center justify-center">
+                <IndianRupee className="h-4 w-4 text-primary" />
+              </div>
+            </CardHeader>
+            <CardContent>
+              <div className="text-2xl font-bold text-primary">{formatCurrency(todaysEarnings)}</div>
+              <p className="text-xs text-muted-foreground mt-1">Today</p>
+            </CardContent>
+          </Card>
+
+          <Card className="shadow-sm hover:shadow-md transition-shadow">
+            <CardHeader className="flex flex-row items-center justify-between pb-2">
+              <CardTitle className="text-xs font-medium uppercase tracking-wide text-muted-foreground">This Month</CardTitle>
+              <div className="h-8 w-8 rounded-full bg-blue-50 flex items-center justify-center">
+                <TrendingUp className="h-4 w-4 text-blue-600" />
+              </div>
+            </CardHeader>
+            <CardContent>
+              <div className="text-2xl font-bold">{formatCurrency(monthEarnings)}</div>
+              <p className="text-xs text-muted-foreground mt-1">Monthly earned</p>
+            </CardContent>
+          </Card>
+
+          <Card className="shadow-sm hover:shadow-md transition-shadow">
+            <CardHeader className="flex flex-row items-center justify-between pb-2">
+              <CardTitle className="text-xs font-medium uppercase tracking-wide text-muted-foreground">Customers</CardTitle>
+              <div className="h-8 w-8 rounded-full bg-purple-50 flex items-center justify-center">
+                <Users className="h-4 w-4 text-purple-600" />
+              </div>
+            </CardHeader>
+            <CardContent>
+              <div className="text-2xl font-bold">{uniqueCustomers}</div>
+              <p className="text-xs text-muted-foreground mt-1">Unique customers</p>
+            </CardContent>
+          </Card>
+
+          <Card className="shadow-sm hover:shadow-md transition-shadow">
+            <CardHeader className="flex flex-row items-center justify-between pb-2">
+              <CardTitle className="text-xs font-medium uppercase tracking-wide text-muted-foreground">Pending</CardTitle>
+              <div className="h-8 w-8 rounded-full bg-amber-50 flex items-center justify-center">
+                <Clock className="h-4 w-4 text-amber-600" />
+              </div>
+            </CardHeader>
+            <CardContent>
+              <div className="text-2xl font-bold text-amber-700">{pendingCount}</div>
+              <p className="text-xs text-muted-foreground mt-1">Incomplete work</p>
+            </CardContent>
+          </Card>
+
+          <Card className={`shadow-sm hover:shadow-md transition-shadow ${totalDue > 0 ? 'bg-red-50 border-red-200' : ''}`}>
+            <CardHeader className="flex flex-row items-center justify-between pb-2">
+              <CardTitle className={`text-xs font-medium uppercase tracking-wide ${totalDue > 0 ? 'text-red-700' : 'text-muted-foreground'}`}>Total Due</CardTitle>
+              <div className={`h-8 w-8 rounded-full flex items-center justify-center ${totalDue > 0 ? 'bg-red-100' : 'bg-muted'}`}>
+                <AlertTriangle className={`h-4 w-4 ${totalDue > 0 ? 'text-red-600' : 'text-muted-foreground'}`} />
+              </div>
+            </CardHeader>
+            <CardContent>
+              <div className={`text-2xl font-bold ${totalDue > 0 ? 'text-red-700' : ''}`}>{formatCurrency(totalDue)}</div>
+              <p className={`text-xs mt-1 ${totalDue > 0 ? 'text-red-500' : 'text-muted-foreground'}`}>Outstanding dues</p>
+            </CardContent>
+          </Card>
+
+          <Card className="shadow-sm hover:shadow-md transition-shadow">
+            <CardHeader className="flex flex-row items-center justify-between pb-2">
+              <CardTitle className="text-xs font-medium uppercase tracking-wide text-muted-foreground">Rejected</CardTitle>
+              <div className="h-8 w-8 rounded-full bg-slate-100 flex items-center justify-center">
+                <XCircle className="h-4 w-4 text-slate-500" />
+              </div>
+            </CardHeader>
+            <CardContent>
+              <div className="text-2xl font-bold text-slate-700">{rejectedCount}</div>
+              <p className="text-xs mt-1 text-slate-500">
+                {totalRefunded > 0 ? `${formatCurrency(totalRefunded)} refunded` : 'No refunds'}
+              </p>
+            </CardContent>
+          </Card>
+        </div>
+      )}
+
+      {/* ── EARNINGS CHART — owner only ───────────────────────────────── */}
+      {isOwner && (
+        <Card className="shadow-sm">
+          <CardHeader>
+            <CardTitle className="text-base font-semibold flex items-center gap-2">
+              <TrendingUp className="h-4 w-4 text-primary" />
+              Earnings — Last 7 Days
+            </CardTitle>
           </CardHeader>
           <CardContent>
-            <div className="text-2xl font-bold text-primary">{formatCurrency(todaysEarnings)}</div>
-            <p className="text-xs text-muted-foreground mt-1">Today</p>
+            {chartData.every(d => d.earned === 0) ? (
+              <div className="h-48 flex flex-col items-center justify-center text-muted-foreground">
+                <FileText className="h-10 w-10 mb-2 opacity-20" />
+                <p className="text-sm">No earnings data yet — add work entries to see the chart</p>
+              </div>
+            ) : (
+              <ResponsiveContainer width="100%" height={200}>
+                <BarChart data={chartData} margin={{ top: 4, right: 8, left: 0, bottom: 0 }}>
+                  <CartesianGrid strokeDasharray="3 3" className="opacity-40" />
+                  <XAxis dataKey="day" tick={{ fontSize: 11 }} tickLine={false} />
+                  <YAxis tick={{ fontSize: 11 }} tickLine={false} axisLine={false}
+                    tickFormatter={v => v === 0 ? '0' : `₹${v >= 1000 ? `${(v / 1000).toFixed(1)}k` : v}`} />
+                  <Tooltip formatter={(v: number) => [formatCurrency(v), 'Earned']} contentStyle={{ borderRadius: '8px', fontSize: '12px' }} />
+                  <Bar dataKey="earned" fill="hsl(221 79% 48%)" radius={[4, 4, 0, 0]} />
+                </BarChart>
+              </ResponsiveContainer>
+            )}
           </CardContent>
         </Card>
+      )}
 
-        <Card className="shadow-sm hover:shadow-md transition-shadow">
-          <CardHeader className="flex flex-row items-center justify-between pb-2">
-            <CardTitle className="text-xs font-medium uppercase tracking-wide text-muted-foreground">This Month</CardTitle>
-            <div className="h-8 w-8 rounded-full bg-blue-50 flex items-center justify-center">
-              <TrendingUp className="h-4 w-4 text-blue-600" />
-            </div>
-          </CardHeader>
-          <CardContent>
-            <div className="text-2xl font-bold">{formatCurrency(monthEarnings)}</div>
-            <p className="text-xs text-muted-foreground mt-1">Monthly earned</p>
-          </CardContent>
-        </Card>
-
-        <Card className="shadow-sm hover:shadow-md transition-shadow">
-          <CardHeader className="flex flex-row items-center justify-between pb-2">
-            <CardTitle className="text-xs font-medium uppercase tracking-wide text-muted-foreground">Customers</CardTitle>
-            <div className="h-8 w-8 rounded-full bg-purple-50 flex items-center justify-center">
-              <Users className="h-4 w-4 text-purple-600" />
-            </div>
-          </CardHeader>
-          <CardContent>
-            <div className="text-2xl font-bold">{uniqueCustomers}</div>
-            <p className="text-xs text-muted-foreground mt-1">Unique customers</p>
-          </CardContent>
-        </Card>
-
-        <Card className="shadow-sm hover:shadow-md transition-shadow">
-          <CardHeader className="flex flex-row items-center justify-between pb-2">
-            <CardTitle className="text-xs font-medium uppercase tracking-wide text-muted-foreground">Pending</CardTitle>
-            <div className="h-8 w-8 rounded-full bg-amber-50 flex items-center justify-center">
-              <Clock className="h-4 w-4 text-amber-600" />
-            </div>
-          </CardHeader>
-          <CardContent>
-            <div className="text-2xl font-bold text-amber-700">{pendingCount}</div>
-            <p className="text-xs text-muted-foreground mt-1">Incomplete work</p>
-          </CardContent>
-        </Card>
-
-        <Card className={`shadow-sm hover:shadow-md transition-shadow ${totalDue > 0 ? 'bg-red-50 border-red-200' : ''}`}>
-          <CardHeader className="flex flex-row items-center justify-between pb-2">
-            <CardTitle className={`text-xs font-medium uppercase tracking-wide ${totalDue > 0 ? 'text-red-700' : 'text-muted-foreground'}`}>Total Due</CardTitle>
-            <div className={`h-8 w-8 rounded-full flex items-center justify-center ${totalDue > 0 ? 'bg-red-100' : 'bg-muted'}`}>
-              <AlertTriangle className={`h-4 w-4 ${totalDue > 0 ? 'text-red-600' : 'text-muted-foreground'}`} />
-            </div>
-          </CardHeader>
-          <CardContent>
-            <div className={`text-2xl font-bold ${totalDue > 0 ? 'text-red-700' : ''}`}>{formatCurrency(totalDue)}</div>
-            <p className={`text-xs mt-1 ${totalDue > 0 ? 'text-red-500' : 'text-muted-foreground'}`}>Outstanding dues</p>
-          </CardContent>
-        </Card>
-
-        <Card className="shadow-sm hover:shadow-md transition-shadow">
-          <CardHeader className="flex flex-row items-center justify-between pb-2">
-            <CardTitle className="text-xs font-medium uppercase tracking-wide text-muted-foreground">Rejected</CardTitle>
-            <div className="h-8 w-8 rounded-full bg-slate-100 flex items-center justify-center">
-              <XCircle className="h-4 w-4 text-slate-500" />
-            </div>
-          </CardHeader>
-          <CardContent>
-            <div className="text-2xl font-bold text-slate-700">{rejectedCount}</div>
-            <p className="text-xs mt-1 text-slate-500">
-              {totalRefunded > 0 ? `${formatCurrency(totalRefunded)} refunded` : 'No refunds'}
-            </p>
-          </CardContent>
-        </Card>
-      </div>
-
-      {/* ── EARNINGS CHART ────────────────────────────────────────────── */}
-      <Card className="shadow-sm">
-        <CardHeader>
-          <CardTitle className="text-base font-semibold flex items-center gap-2">
-            <TrendingUp className="h-4 w-4 text-primary" />
-            Earnings — Last 7 Days
-          </CardTitle>
-        </CardHeader>
-        <CardContent>
-          {chartData.every(d => d.earned === 0) ? (
-            <div className="h-48 flex flex-col items-center justify-center text-muted-foreground">
-              <FileText className="h-10 w-10 mb-2 opacity-20" />
-              <p className="text-sm">No earnings data yet — add work entries to see the chart</p>
-            </div>
-          ) : (
-            <ResponsiveContainer width="100%" height={200}>
-              <BarChart data={chartData} margin={{ top: 4, right: 8, left: 0, bottom: 0 }}>
-                <CartesianGrid strokeDasharray="3 3" className="opacity-40" />
-                <XAxis dataKey="day" tick={{ fontSize: 11 }} tickLine={false} />
-                <YAxis tick={{ fontSize: 11 }} tickLine={false} axisLine={false}
-                  tickFormatter={v => v === 0 ? '0' : `₹${v >= 1000 ? `${(v / 1000).toFixed(1)}k` : v}`} />
-                <Tooltip formatter={(v: number) => [formatCurrency(v), 'Earned']} contentStyle={{ borderRadius: '8px', fontSize: '12px' }} />
-                <Bar dataKey="earned" fill="hsl(221 79% 48%)" radius={[4, 4, 0, 0]} />
-              </BarChart>
-            </ResponsiveContainer>
-          )}
-        </CardContent>
-      </Card>
-
-      {/* ── BOTTOM ROW: Urgent Pending + Recent Activity ──────────────── */}
+      {/* ── BOTTOM ROW: Pending + Recent Activity ─────────────────────── */}
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
         <div>
           <div className="flex justify-between items-center mb-3">
@@ -415,10 +422,16 @@ export default function DashboardPage() {
                   <div key={entry.id} className="p-3 flex items-center justify-between gap-3 hover:bg-muted/30 transition-colors">
                     <div className="min-w-0">
                       <div className="font-medium text-sm truncate">{entry.customerName}</div>
-                      <div className="flex items-center gap-2 mt-0.5">
+                      <div className="flex items-center gap-2 mt-0.5 flex-wrap">
                         <span className="text-xs text-muted-foreground">{entry.category}</span>
                         <span className="text-xs text-muted-foreground">·</span>
                         <span className="text-xs text-muted-foreground">{format(entry.date.toDate(), 'dd MMM')}</span>
+                        {entry.addedBy && (
+                          <>
+                            <span className="text-xs text-muted-foreground">·</span>
+                            <span className="text-xs text-muted-foreground italic">{entry.addedBy}</span>
+                          </>
+                        )}
                       </div>
                     </div>
                     <div className="flex items-center gap-2 shrink-0">

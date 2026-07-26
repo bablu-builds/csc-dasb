@@ -1,7 +1,8 @@
 import { useState, useEffect } from 'react';
 import { subscribeToWorkEntries, WorkEntry } from '@/lib/firestore';
+import { useAuth } from '@/contexts/AuthContext';
 import { isToday, isThisWeek, isThisMonth, format } from 'date-fns';
-import { Download, BarChart2, TrendingUp, IndianRupee, XCircle } from 'lucide-react';
+import { ShieldCheck, Download, BarChart2, TrendingUp, IndianRupee, XCircle } from 'lucide-react';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Skeleton } from '@/components/ui/skeleton';
 import { Button } from '@/components/ui/button';
@@ -38,14 +39,32 @@ function ReportsSkeleton() {
 export default function ReportsPage() {
   const [entries, setEntries] = useState<WorkEntry[]>([]);
   const [loading, setLoading] = useState(true);
+  const { role } = useAuth();
 
+  // Only subscribe when user is the owner (role may be null while loading)
   useEffect(() => {
+    if (role !== 'owner') { setLoading(false); return; }
     const unsubscribe = subscribeToWorkEntries((data) => {
       setEntries(data);
       setLoading(false);
     });
     return () => unsubscribe();
-  }, []);
+  }, [role]);
+
+  // Staff cannot see the Reports page — must be after all hooks
+  if (role === 'staff') {
+    return (
+      <div className="flex flex-col items-center justify-center py-24 text-center gap-4">
+        <div className="h-16 w-16 rounded-full bg-muted flex items-center justify-center">
+          <ShieldCheck className="h-8 w-8 text-muted-foreground" />
+        </div>
+        <h2 className="text-xl font-semibold">Access Restricted</h2>
+        <p className="text-muted-foreground max-w-xs">
+          Income reports are only visible to the Owner. Contact your owner if you need this information.
+        </p>
+      </div>
+    );
+  }
 
   const exportCSV = () => {
     const headers = [

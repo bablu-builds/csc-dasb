@@ -1,6 +1,7 @@
 import { useState } from 'react';
 import { useLocation } from 'wouter';
 import { createWorkEntry } from '@/lib/firestore';
+import { useAuth } from '@/contexts/AuthContext';
 import { useToast } from '@/hooks/use-toast';
 import { WorkEntryForm, WorkEntryFormData } from '@/components/WorkEntryForm';
 import { ArrowLeft } from 'lucide-react';
@@ -10,12 +11,15 @@ import { Timestamp } from 'firebase/firestore';
 export default function AddWorkPage() {
   const [, setLocation] = useLocation();
   const { toast } = useToast();
+  const { userProfile } = useAuth();
   const [isSubmitting, setIsSubmitting] = useState(false);
 
   const handleSubmit = async (data: Omit<WorkEntryFormData, 'date'> & { date: Timestamp }) => {
     setIsSubmitting(true);
     try {
-      await createWorkEntry(data);
+      // Record who added this entry — set at creation, never editable afterward
+      const addedBy = userProfile?.displayName || userProfile?.email || 'Unknown';
+      await createWorkEntry({ ...data, addedBy });
       toast({
         title: "Work Added Successfully",
         description: `${data.customerName} - ${data.category}`,

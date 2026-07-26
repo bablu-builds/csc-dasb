@@ -22,15 +22,31 @@ A staff portal dashboard for managing customer work orders, tracking earnings, a
 
 ## Where things live
 
-_Populate as you build — short repo map plus pointers to the source-of-truth file for DB schema, API contracts, theme files, etc._
+- `artifacts/azaan-csc/src/lib/firebase.ts` — Firebase init + exports `firebaseConfig` (needed for secondary app)
+- `artifacts/azaan-csc/src/lib/firestore.ts` — All Firestore CRUD; UserProfile type; staff management functions
+- `artifacts/azaan-csc/src/contexts/AuthContext.tsx` — Auth state + role (`owner`/`staff`) + userProfile
+- `artifacts/azaan-csc/src/pages/SettingsPage.tsx` — Shop info, categories, and Staff Management (owner-only)
+- `artifacts/azaan-csc/src/pages/DashboardPage.tsx` — Full view for owner; staff see pending + activity only (no income data)
+- `artifacts/azaan-csc/src/pages/ReportsPage.tsx` — Owner-only; staff see a permission-denied screen
+- `firestore.rules` — Firestore security rules (deploy via Firebase CLI: `firebase deploy --only firestore:rules`)
 
 ## Architecture decisions
 
-_Populate as you build — non-obvious choices a reader couldn't infer from the code (3-5 bullets)._
+- **Role system via Firestore `users` collection**: Each authenticated user has a `users/{uid}` doc with `role: 'owner' | 'staff'`. The very first user to log in is auto-created as owner (bootstrapUserProfile). All subsequent staff are created by the owner from Settings → Staff Management.
+- **Secondary Firebase app for staff creation**: `createStaffAccount` in firestore.ts spins up a temporary named Firebase app instance to call `createUserWithEmailAndPassword` without interrupting the owner's session (standard client-side Firebase behavior would otherwise sign in as the new user).
+- **`addedBy` field on work entries**: Set at creation time from the logged-in user's `displayName` in their Firestore profile. Excluded from `updateWorkEntry` type so it can never be overwritten. Displayed read-only in the edit page header and customer history modal.
+- **Client-side role enforcement + Firestore rules**: UI hides restricted pages/sections, but Firestore security rules (`firestore.rules`) also enforce owner-only writes to `users` and `settings` collections as a backend safety net.
+- **Staff revocation**: Deleting the `users/{uid}` Firestore doc. The Firebase Auth account remains but the app detects the missing profile on login and signs the user out immediately.
 
 ## Product
 
-_Describe the high-level user-facing capabilities of this app once they exist._
+**AZAAN CSC** is a staff portal for a travel/communication services agency. Features:
+- **Work entries**: create, edit, soft-delete, restore. Each entry tracks customer name, mobile, category, amounts (total/paid/due), status (Pending/Completed/Rejected), and who added it (`addedBy`).
+- **Dashboard**: Pending reminders, urgent work tracker, recent activity. Owner also sees income summary cards (today/month earnings, due amount, customer count) and a 7-day earnings chart. Staff see the operational view only.
+- **Reports**: Owner-only income analytics with daily/weekly/monthly tabs, category breakdown charts, and CSV export.
+- **Role-based access**: Owner has full access. Staff can manage work entries but cannot see income data (Dashboard financial cards, Reports page) or Staff Management settings.
+- **Staff Management** (Settings → Staff): Owner creates staff accounts directly (sets email + password, uses secondary Firebase app to preserve own session). Owner can revoke access or send password reset emails.
+- **Role badge** in sidebar shows "Owner" or "Staff" next to the logged-in user's name.
 
 ## User preferences
 
