@@ -18,6 +18,8 @@ export interface WorkEntry {
   rejectedAt?: Timestamp;    // set automatically when status → Rejected
   rejectionReason?: string;  // optional text reason for rejection
   refundAmount?: number;     // amount refunded to customer on rejection
+  isDeleted?: boolean;       // soft-delete flag
+  deletedAt?: Timestamp;     // when it was soft-deleted
 }
 
 export interface Category {
@@ -98,19 +100,50 @@ export const updateWorkEntry = async (
   return updateDoc(doc(db, 'workEntries', id), updates);
 };
 
+/** Soft-delete: marks the entry as deleted instead of removing it from Firestore. */
 export const deleteWorkEntry = async (id: string) => {
   if (!db) throw new Error("Firebase not configured");
-  return deleteDoc(doc(db, 'workEntries', id));
+  return updateDoc(doc(db, 'workEntries', id), {
+    isDeleted: true,
+    deletedAt: Timestamp.now(),
+  });
 };
 
+/** Restore a soft-deleted entry back to the active list. */
+export const restoreWorkEntry = async (id: string) => {
+  if (!db) throw new Error("Firebase not configured");
+  return updateDoc(doc(db, 'workEntries', id), {
+    isDeleted: false,
+    deletedAt: null,
+  });
+};
+
+/** Active entries only — excludes any document with isDeleted === true. */
 export const subscribeToWorkEntries = (callback: (entries: WorkEntry[]) => void) => {
   if (!db) return () => {};
   const q = query(collection(db, 'workEntries'), orderBy('date', 'desc'));
   return onSnapshot(q, (snapshot) => {
     const entries: WorkEntry[] = [];
     snapshot.forEach(doc => {
-      entries.push({ id: doc.id, ...doc.data() } as WorkEntry);
+      const data = { id: doc.id, ...doc.data() } as WorkEntry;
+      if (!data.isDeleted) entries.push(data);
     });
+    callback(entries);
+  });
+};
+
+/** Deleted entries only — for the Recycle Bin page, sorted newest-deleted first. */
+export const subscribeToDeletedEntries = (callback: (entries: WorkEntry[]) => void) => {
+  if (!db) return () => {};
+  const q = query(collection(db, 'workEntries'), orderBy('date', 'desc'));
+  return onSnapshot(q, (snapshot) => {
+    const entries: WorkEntry[] = [];
+    snapshot.forEach(doc => {
+      const data = { id: doc.id, ...doc.data() } as WorkEntry;
+      if (data.isDeleted) entries.push(data);
+    });
+    // Sort by most-recently deleted first
+    entries.sort((a, b) => (b.deletedAt?.toMillis() ?? 0) - (a.deletedAt?.toMillis() ?? 0));
     callback(entries);
   });
 };

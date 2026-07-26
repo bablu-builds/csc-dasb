@@ -18,6 +18,7 @@ import WorkListPage from '@/pages/WorkListPage';
 import PendingWorkPage from '@/pages/PendingWorkPage';
 import ReportsPage from '@/pages/ReportsPage';
 import SettingsPage from '@/pages/SettingsPage';
+import DeletedItemsPage from '@/pages/DeletedItemsPage';
 
 const queryClient = new QueryClient();
 
@@ -34,6 +35,7 @@ function AuthenticatedApp() {
           <Route path="/pending" component={PendingWorkPage} />
           <Route path="/reports" component={ReportsPage} />
           <Route path="/settings" component={SettingsPage} />
+          <Route path="/deleted" component={DeletedItemsPage} />
           <Route component={NotFound} />
         </Switch>
       </Layout>

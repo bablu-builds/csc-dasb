@@ -1,7 +1,7 @@
 import { Link, useLocation } from 'wouter';
 import { useAuth } from '@/contexts/AuthContext';
 import { useSettings } from '@/contexts/SettingsContext';
-import { LayoutDashboard, PlusCircle, List, Clock, BarChart3, Settings, LogOut, Menu, Store, X } from 'lucide-react';
+import { LayoutDashboard, PlusCircle, List, Clock, BarChart3, Settings, LogOut, Menu, Store, X, Trash2 } from 'lucide-react';
 import { useState } from 'react';
 import { Button } from '@/components/ui/button';
 
@@ -18,6 +18,7 @@ export function Layout({ children }: { children: React.ReactNode }) {
     { href: '/pending', label: 'Pending', sub: 'Incomplete', icon: Clock },
     { href: '/reports', label: 'Reports', sub: 'Analytics', icon: BarChart3 },
     { href: '/settings', label: 'Settings', sub: 'Configure', icon: Settings },
+    { href: '/deleted', label: 'Deleted Items', sub: 'Recycle bin', icon: Trash2 },
   ];
 
   return (
