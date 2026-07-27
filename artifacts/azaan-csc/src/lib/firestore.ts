@@ -15,6 +15,7 @@ export interface UserProfile {
   role: 'owner' | 'staff';
   createdAt: Timestamp;
   invitedBy?: string; // owner email, only for staff
+  canAccessFinancialServices?: boolean; // staff-only permission for AEPS, Money Transfer, Recharge
 }
 
 /** Fetch a user's profile document. Returns null if not found. */
@@ -76,6 +77,7 @@ export const createStaffAccount = async (
   email: string,
   password: string,
   ownerEmail: string,
+  canAccessFinancialServices = false,
 ): Promise<void> => {
   if (!db) throw new Error('Firebase not configured');
 
@@ -95,12 +97,19 @@ export const createStaffAccount = async (
       role: 'staff',
       createdAt: Timestamp.now(),
       invitedBy: ownerEmail,
-    } satisfies Omit<UserProfile, 'uid'>);
+      canAccessFinancialServices,
+    });
   } finally {
     // Always clean up — sign out from secondary app and destroy it
     await firebaseSignOut(secondaryAuth).catch(() => {});
     await deleteApp(secondaryApp).catch(() => {});
   }
+};
+
+/** Toggle whether a staff member can access financial service modules. */
+export const updateStaffPermissions = async (uid: string, canAccessFinancialServices: boolean): Promise<void> => {
+  if (!db) throw new Error('Firebase not configured');
+  await updateDoc(doc(db, 'users', uid), { canAccessFinancialServices });
 };
 
 /**
@@ -344,6 +353,111 @@ export const addCategory = async (name: string) => {
 export const deleteCategory = async (id: string) => {
   if (!db) throw new Error("Firebase not configured");
   return deleteDoc(doc(db, 'categories', id));
+};
+
+// ─── AEPS WITHDRAWALS ────────────────────────────────────────────────────────
+
+export interface AepsWithdrawal {
+  id?: string;
+  customerName: string;
+  bankName: string;
+  mobile?: string;       // optional
+  amount: number;
+  createdAt: Timestamp;
+  addedBy: string;
+}
+
+export const createAepsWithdrawal = async (
+  data: Omit<AepsWithdrawal, 'id' | 'createdAt'>,
+): Promise<void> => {
+  if (!db) throw new Error('Firebase not configured');
+  await addDoc(collection(db, 'aepsWithdrawals'), {
+    ...stripUndefined(data as Record<string, unknown>),
+    createdAt: Timestamp.now(),
+  });
+};
+
+export const subscribeToAepsWithdrawals = (
+  callback: (entries: AepsWithdrawal[]) => void,
+) => {
+  if (!db) return () => {};
+  const q = query(collection(db, 'aepsWithdrawals'), orderBy('createdAt', 'desc'));
+  return onSnapshot(q, (snap) => {
+    const entries: AepsWithdrawal[] = [];
+    snap.forEach(d => entries.push({ id: d.id, ...d.data() } as AepsWithdrawal));
+    callback(entries);
+  }, (err) => console.error('[Firestore] aepsWithdrawals error:', err.message));
+};
+
+// ─── ELECTRIC RECHARGES ───────────────────────────────────────────────────────
+
+export interface ElectricRecharge {
+  id?: string;
+  rechargeAmount: number;
+  profitMargin: number;
+  transferredToName: string;
+  transferredToNumber: string;
+  transferredAmount: number;
+  createdAt: Timestamp;
+  addedBy: string;
+}
+
+export const createElectricRecharge = async (
+  data: Omit<ElectricRecharge, 'id' | 'createdAt'>,
+): Promise<void> => {
+  if (!db) throw new Error('Firebase not configured');
+  await addDoc(collection(db, 'electricRecharges'), {
+    ...data,
+    createdAt: Timestamp.now(),
+  });
+};
+
+export const subscribeToElectricRecharges = (
+  callback: (entries: ElectricRecharge[]) => void,
+) => {
+  if (!db) return () => {};
+  const q = query(collection(db, 'electricRecharges'), orderBy('createdAt', 'desc'));
+  return onSnapshot(q, (snap) => {
+    const entries: ElectricRecharge[] = [];
+    snap.forEach(d => entries.push({ id: d.id, ...d.data() } as ElectricRecharge));
+    callback(entries);
+  }, (err) => console.error('[Firestore] electricRecharges error:', err.message));
+};
+
+// ─── MONEY TRANSFERS ──────────────────────────────────────────────────────────
+
+export interface MoneyTransfer {
+  id?: string;
+  senderName: string;
+  senderMobile: string;
+  recipientName: string;
+  recipientNumber: string;
+  transferAmount: number;
+  commission: number;
+  createdAt: Timestamp;
+  addedBy: string;
+}
+
+export const createMoneyTransfer = async (
+  data: Omit<MoneyTransfer, 'id' | 'createdAt'>,
+): Promise<void> => {
+  if (!db) throw new Error('Firebase not configured');
+  await addDoc(collection(db, 'moneyTransfers'), {
+    ...data,
+    createdAt: Timestamp.now(),
+  });
+};
+
+export const subscribeToMoneyTransfers = (
+  callback: (entries: MoneyTransfer[]) => void,
+) => {
+  if (!db) return () => {};
+  const q = query(collection(db, 'moneyTransfers'), orderBy('createdAt', 'desc'));
+  return onSnapshot(q, (snap) => {
+    const entries: MoneyTransfer[] = [];
+    snap.forEach(d => entries.push({ id: d.id, ...d.data() } as MoneyTransfer));
+    callback(entries);
+  }, (err) => console.error('[Firestore] moneyTransfers error:', err.message));
 };
 
 // SETTINGS

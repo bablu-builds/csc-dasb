@@ -30,6 +30,11 @@ service cloud.firestore {
       return isOwner() || isStaff();
     }
 
+    // Staff with explicit financial-services permission, or the owner
+    function canAccessFinancial() {
+      return isOwner() || (isStaff() && get(userDoc()).data.canAccessFinancialServices == true);
+    }
+
     // ── Work Entries — both owner and staff can read and write ───────────────
     match /workEntries/{entryId} {
       allow read, write: if isOwnerOrStaff();
@@ -42,18 +47,12 @@ service cloud.firestore {
     }
 
     // ── Settings (shopSettings, categoriesSeeded, etc.) ──────────────────────
-    // Both roles can read shop settings; only owner can write
     match /settings/{settingId} {
       allow read: if isOwnerOrStaff();
       allow write: if isOwner();
     }
 
     // ── Users collection ─────────────────────────────────────────────────────
-    // Any authenticated user can read (needed to fetch own role on login).
-    // Owner can create any user document (staff accounts).
-    // Any authenticated user can create their own document IF no users exist yet
-    // (first-time bootstrap — owner sets themselves up).
-    // Only owner can update or delete.
     match /users/{userId} {
       allow read: if isAuth();
       allow create: if isOwner()
@@ -61,6 +60,21 @@ service cloud.firestore {
                         && request.auth.uid == userId
                         && !exists(/databases/$(database)/documents/users/$(request.auth.uid)));
       allow update, delete: if isOwner();
+    }
+
+    // ── AEPS Withdrawals ─────────────────────────────────────────────────────
+    match /aepsWithdrawals/{id} {
+      allow read, write: if canAccessFinancial();
+    }
+
+    // ── Electric Recharges ────────────────────────────────────────────────────
+    match /electricRecharges/{id} {
+      allow read, write: if canAccessFinancial();
+    }
+
+    // ── Money Transfers ───────────────────────────────────────────────────────
+    match /moneyTransfers/{id} {
+      allow read, write: if canAccessFinancial();
     }
   }
 }

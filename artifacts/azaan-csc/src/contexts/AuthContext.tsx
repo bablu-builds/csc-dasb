@@ -8,6 +8,7 @@ interface AuthContextType {
   user: User | null;
   userProfile: UserProfile | null;
   role: 'owner' | 'staff' | null;
+  canAccessFinancialServices: boolean;
   loading: boolean;
   logout: () => Promise<void>;
   isConfigured: boolean;
@@ -17,6 +18,7 @@ const AuthContext = createContext<AuthContextType>({
   user: null,
   userProfile: null,
   role: null,
+  canAccessFinancialServices: false,
   loading: true,
   logout: async () => {},
   isConfigured,
@@ -99,6 +101,8 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       user,
       userProfile,
       role: userProfile?.role ?? null,
+      canAccessFinancialServices:
+        userProfile?.role === 'owner' || userProfile?.canAccessFinancialServices === true,
       loading,
       logout,
       isConfigured,

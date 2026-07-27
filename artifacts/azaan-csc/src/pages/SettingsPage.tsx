@@ -8,7 +8,7 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Loader2, Plus, Trash2, Users, ShieldCheck, UserX, UserPlus, Eye, EyeOff } from 'lucide-react';
 import { useToast } from '@/hooks/use-toast';
-import { UserProfile, subscribeToStaff, createStaffAccount, revokeStaffAccess } from '@/lib/firestore';
+import { UserProfile, subscribeToStaff, createStaffAccount, revokeStaffAccess, updateStaffPermissions } from '@/lib/firestore';
 import { sendPasswordResetEmail } from 'firebase/auth';
 import { auth } from '@/lib/firebase';
 import { format } from 'date-fns';
@@ -42,6 +42,8 @@ export default function SettingsPage() {
   const [isRevoking, setIsRevoking] = useState(false);
   const [lastCreated, setLastCreated] = useState<{ email: string; name: string } | null>(null);
   const [resetLoadingUid, setResetLoadingUid] = useState<string | null>(null);
+  const [newStaffFinancial, setNewStaffFinancial] = useState(false);
+  const [financialToggleUid, setFinancialToggleUid] = useState<string | null>(null);
   
   const { toast } = useToast();
 
@@ -85,11 +87,12 @@ export default function SettingsPage() {
     }
     setIsCreatingStaff(true);
     try {
-      await createStaffAccount(staffName.trim(), staffEmail.trim(), staffPassword, userProfile?.email ?? '');
+      await createStaffAccount(staffName.trim(), staffEmail.trim(), staffPassword, userProfile?.email ?? '', newStaffFinancial);
       setLastCreated({ email: staffEmail.trim(), name: staffName.trim() });
       setStaffName('');
       setStaffEmail('');
       setStaffPassword('');
+      setNewStaffFinancial(false);
       toast({ title: 'Staff account created', description: `${staffName.trim()} can now log in with the email and password you set.` });
     } catch (err: any) {
       const msg = err.code === 'auth/email-already-in-use'
@@ -111,6 +114,23 @@ export default function SettingsPage() {
       toast({ variant: 'destructive', title: 'Error sending reset email', description: err.message });
     } finally {
       setResetLoadingUid(null);
+    }
+  };
+
+  const handleToggleFinancial = async (staff: UserProfile) => {
+    if (!staff.uid) return;
+    setFinancialToggleUid(staff.uid);
+    const newVal = !staff.canAccessFinancialServices;
+    try {
+      await updateStaffPermissions(staff.uid, newVal);
+      toast({
+        title: newVal ? 'Financial access granted' : 'Financial access revoked',
+        description: `${staff.displayName} ${newVal ? 'can now' : 'can no longer'} access AEPS, Recharge & Money Transfer.`,
+      });
+    } catch (err: any) {
+      toast({ variant: 'destructive', title: 'Error updating permissions', description: err.message });
+    } finally {
+      setFinancialToggleUid(null);
     }
   };
 
@@ -304,6 +324,25 @@ export default function SettingsPage() {
                       </div>
                       <p className="text-xs text-muted-foreground">Share this password with the staff member verbally or on paper.</p>
                     </div>
+                    {/* Financial services permission toggle */}
+                    <div className="flex items-start gap-3 p-3 rounded-lg border bg-muted/40">
+                      <input
+                        type="checkbox"
+                        id="newStaffFinancial"
+                        checked={newStaffFinancial}
+                        onChange={e => setNewStaffFinancial(e.target.checked)}
+                        className="mt-0.5 h-4 w-4 rounded border-gray-300 accent-primary"
+                      />
+                      <div>
+                        <label htmlFor="newStaffFinancial" className="text-sm font-medium cursor-pointer">
+                          Allow access to AEPS, Recharge &amp; Money Transfer
+                        </label>
+                        <p className="text-xs text-muted-foreground mt-0.5">
+                          Enables this staff member to see and use the AEPS Withdrawal, Electric Recharge, and Money Transfer modules.
+                        </p>
+                      </div>
+                    </div>
+
                     <Button type="submit" disabled={isCreatingStaff || !staffName.trim() || !staffEmail.trim() || !staffPassword.trim()}>
                       {isCreatingStaff
                         ? <><Loader2 className="mr-2 h-4 w-4 animate-spin" />Creating Account…</>
@@ -330,7 +369,7 @@ export default function SettingsPage() {
                     Current Staff Members
                   </CardTitle>
                   <CardDescription>
-                    Staff members can manage work entries but cannot see income reports.
+                    Manage staff access. Use the toggle below each member to grant or revoke financial services access.
                   </CardDescription>
                 </CardHeader>
                 <CardContent>
@@ -358,18 +397,38 @@ export default function SettingsPage() {
                               </p>
                             )}
                           </div>
-                          <div className="flex items-center gap-1 shrink-0">
+                          <div className="flex flex-col sm:flex-row items-end sm:items-center gap-1.5 shrink-0">
+                            {/* Financial services toggle */}
+                            <Button
+                              variant="outline"
+                              size="sm"
+                              onClick={() => handleToggleFinancial(staff)}
+                              disabled={financialToggleUid === staff.uid}
+                              className={
+                                staff.canAccessFinancialServices
+                                  ? 'border-green-500 text-green-700 hover:bg-green-50 text-xs'
+                                  : 'text-xs text-muted-foreground'
+                              }
+                              title={staff.canAccessFinancialServices
+                                ? 'Click to revoke AEPS/Recharge/Transfer access'
+                                : 'Click to grant AEPS/Recharge/Transfer access'}
+                            >
+                              {financialToggleUid === staff.uid
+                                ? <Loader2 className="h-3.5 w-3.5 animate-spin" />
+                                : staff.canAccessFinancialServices
+                                  ? '✓ Financial Access'
+                                  : 'Grant Financial Access'}
+                            </Button>
                             <Button
                               variant="ghost"
                               size="sm"
-                              className="text-muted-foreground hover:text-foreground"
+                              className="text-muted-foreground hover:text-foreground text-xs"
                               onClick={() => handleSendPasswordReset(staff)}
                               disabled={resetLoadingUid === staff.uid}
-                              title="Send password reset email to this staff member"
                             >
                               {resetLoadingUid === staff.uid
-                                ? <Loader2 className="h-4 w-4 animate-spin" />
-                                : <span className="text-xs">Reset Password</span>}
+                                ? <Loader2 className="h-3.5 w-3.5 animate-spin" />
+                                : 'Reset Password'}
                             </Button>
                             <Button
                               variant="ghost"
@@ -377,7 +436,7 @@ export default function SettingsPage() {
                               className="text-destructive hover:text-destructive hover:bg-destructive/10"
                               onClick={() => setRevokeTarget(staff)}
                             >
-                              <UserX className="h-4 w-4 mr-1.5" />
+                              <UserX className="h-4 w-4 mr-1" />
                               Revoke
                             </Button>
                           </div>

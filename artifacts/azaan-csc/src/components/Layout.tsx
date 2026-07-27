@@ -1,13 +1,16 @@
 import { Link, useLocation } from 'wouter';
 import { useAuth } from '@/contexts/AuthContext';
 import { useSettings } from '@/contexts/SettingsContext';
-import { LayoutDashboard, PlusCircle, List, Clock, BarChart3, Settings, LogOut, Menu, Store, X, Trash2, ShieldCheck, User } from 'lucide-react';
+import {
+  LayoutDashboard, PlusCircle, List, Clock, BarChart3, Settings, LogOut,
+  Menu, Store, X, Trash2, ShieldCheck, User, Fingerprint, Zap, ArrowLeftRight,
+} from 'lucide-react';
 import { useState } from 'react';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 
 export function Layout({ children }: { children: React.ReactNode }) {
-  const { logout, isConfigured, role, userProfile } = useAuth();
+  const { logout, isConfigured, role, userProfile, canAccessFinancialServices } = useAuth();
   const { shopSettings } = useSettings();
   const [location] = useLocation();
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
@@ -15,17 +18,25 @@ export function Layout({ children }: { children: React.ReactNode }) {
   const isOwner = role === 'owner';
 
   const allNavItems = [
-    { href: '/dashboard', label: 'Dashboard', sub: 'Home', icon: LayoutDashboard, ownerOnly: false },
-    { href: '/work/new', label: 'Add Work', sub: 'New Entry', icon: PlusCircle, isPrimary: true, ownerOnly: false },
-    { href: '/work', label: 'All Work', sub: 'View all', icon: List, ownerOnly: false },
-    { href: '/pending', label: 'Pending', sub: 'Incomplete', icon: Clock, ownerOnly: false },
-    { href: '/reports', label: 'Reports', sub: 'Analytics', icon: BarChart3, ownerOnly: true },
-    { href: '/settings', label: 'Settings', sub: 'Configure', icon: Settings, ownerOnly: false },
-    { href: '/deleted', label: 'Deleted Items', sub: 'Recycle bin', icon: Trash2, ownerOnly: false },
+    { href: '/dashboard', label: 'Dashboard', sub: 'Home', icon: LayoutDashboard, ownerOnly: false, financialOnly: false },
+    { href: '/work/new', label: 'Add Work', sub: 'New Entry', icon: PlusCircle, isPrimary: true, ownerOnly: false, financialOnly: false },
+    { href: '/work', label: 'All Work', sub: 'View all', icon: List, ownerOnly: false, financialOnly: false },
+    { href: '/pending', label: 'Pending', sub: 'Incomplete', icon: Clock, ownerOnly: false, financialOnly: false },
+    { href: '/reports', label: 'Reports', sub: 'Analytics', icon: BarChart3, ownerOnly: true, financialOnly: false },
+    // ── Financial services (owner + permitted staff) ──────────────────────────
+    { href: '/aeps', label: 'AEPS Withdrawal', sub: 'Withdrawals', icon: Fingerprint, ownerOnly: false, financialOnly: true },
+    { href: '/electric-recharge', label: 'Electric Recharge', sub: 'Recharges', icon: Zap, ownerOnly: false, financialOnly: true },
+    { href: '/money-transfer', label: 'Money Transfer', sub: 'Transfers', icon: ArrowLeftRight, ownerOnly: false, financialOnly: true },
+    // ─────────────────────────────────────────────────────────────────────────
+    { href: '/settings', label: 'Settings', sub: 'Configure', icon: Settings, ownerOnly: false, financialOnly: false },
+    { href: '/deleted', label: 'Deleted Items', sub: 'Recycle bin', icon: Trash2, ownerOnly: false, financialOnly: false },
   ];
 
-  // Filter nav items based on role
-  const navItems = allNavItems.filter(item => !item.ownerOnly || isOwner);
+  const navItems = allNavItems.filter(item => {
+    if (item.ownerOnly && !isOwner) return false;
+    if (item.financialOnly && !canAccessFinancialServices) return false;
+    return true;
+  });
 
   return (
     <div className="min-h-[100dvh] flex flex-col md:flex-row bg-background">
@@ -55,8 +66,8 @@ export function Layout({ children }: { children: React.ReactNode }) {
           {navItems.map((item) => {
             const isActive = location === item.href;
             return (
-              <Link 
-                key={item.href} 
+              <Link
+                key={item.href}
                 href={item.href}
                 onClick={() => setMobileMenuOpen(false)}
                 className={`
@@ -66,8 +77,8 @@ export function Layout({ children }: { children: React.ReactNode }) {
                   ${item.isPrimary ? 'bg-primary text-primary-foreground hover:bg-primary/90 mt-4 mb-4' : ''}
                 `}
               >
-                <item.icon className="h-5 w-5" />
-                <div className="flex flex-col">
+                <item.icon className="h-5 w-5 flex-shrink-0" />
+                <div className="flex flex-col min-w-0">
                   <span className="text-sm">{item.label}</span>
                   <span className={`text-xs ${item.isPrimary ? 'text-primary-foreground/80' : 'text-muted-foreground'}`}>{item.sub}</span>
                 </div>
@@ -99,8 +110,8 @@ export function Layout({ children }: { children: React.ReactNode }) {
               </Badge>
             </div>
           )}
-          <Button 
-            variant="ghost" 
+          <Button
+            variant="ghost"
             className="w-full justify-start text-muted-foreground hover:text-foreground"
             onClick={logout}
           >

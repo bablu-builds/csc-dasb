@@ -19,6 +19,9 @@ import PendingWorkPage from '@/pages/PendingWorkPage';
 import ReportsPage from '@/pages/ReportsPage';
 import SettingsPage from '@/pages/SettingsPage';
 import DeletedItemsPage from '@/pages/DeletedItemsPage';
+import AepsWithdrawalPage from '@/pages/AepsWithdrawalPage';
+import ElectricRechargePage from '@/pages/ElectricRechargePage';
+import MoneyTransferPage from '@/pages/MoneyTransferPage';
 
 const queryClient = new QueryClient();
 
@@ -36,6 +39,9 @@ function AuthenticatedApp() {
           <Route path="/reports" component={ReportsPage} />
           <Route path="/settings" component={SettingsPage} />
           <Route path="/deleted" component={DeletedItemsPage} />
+          <Route path="/aeps" component={AepsWithdrawalPage} />
+          <Route path="/electric-recharge" component={ElectricRechargePage} />
+          <Route path="/money-transfer" component={MoneyTransferPage} />
           <Route component={NotFound} />
         </Switch>
       </Layout>
