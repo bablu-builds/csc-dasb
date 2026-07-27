@@ -31,13 +31,25 @@ type SortField = 'date' | 'totalAmount' | 'dueAmount' | 'status' | 'customerName
 type SortDir = 'asc' | 'desc';
 
 function StatusBadge({ status }: { status: WorkEntry['status'] }) {
-  if (status === 'Completed') return <Badge variant="outline" className="text-green-700 bg-green-50 border-green-200">Completed</Badge>;
-  if (status === 'Rejected') return <Badge variant="outline" className="text-red-700 bg-red-50 border-red-200">Rejected</Badge>;
-  return <Badge className="bg-amber-100 text-amber-800 hover:bg-amber-100 border-transparent">Pending</Badge>;
+  if (status === 'Completed') return (
+    <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-xs font-semibold bg-emerald-100 text-emerald-700 border border-emerald-200">
+      <span className="h-1.5 w-1.5 rounded-full bg-emerald-500" />Completed
+    </span>
+  );
+  if (status === 'Rejected') return (
+    <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-xs font-semibold bg-red-100 text-red-700 border border-red-200">
+      <span className="h-1.5 w-1.5 rounded-full bg-red-500" />Rejected
+    </span>
+  );
+  return (
+    <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-xs font-semibold bg-amber-100 text-amber-700 border border-amber-200">
+      <span className="h-1.5 w-1.5 rounded-full bg-amber-500" />Pending
+    </span>
+  );
 }
 
 function SortIcon({ field, current, dir }: { field: SortField; current: SortField; dir: SortDir }) {
-  if (field !== current) return <ArrowUpDown className="h-3.5 w-3.5 ml-1 opacity-40" />;
+  if (field !== current) return <ArrowUpDown className="h-3.5 w-3.5 ml-1 opacity-30" />;
   return dir === 'asc'
     ? <ArrowUp className="h-3.5 w-3.5 ml-1 text-primary" />
     : <ArrowDown className="h-3.5 w-3.5 ml-1 text-primary" />;
@@ -71,51 +83,42 @@ export default function WorkListPage() {
   const [sortDir, setSortDir] = useState<SortDir>('desc');
   const { categories } = useSettings();
   const { toast } = useToast();
-
   const [entryToDelete, setEntryToDelete] = useState<string | null>(null);
   const [selectedMobile, setSelectedMobile] = useState<string | null>(null);
 
   useEffect(() => {
-    const unsubscribe = subscribeToWorkEntries((data) => {
+    const unsub = subscribeToWorkEntries((data) => {
       setEntries(data);
       setLoading(false);
     });
-    return () => unsubscribe();
+    return () => unsub();
   }, []);
 
   const handleDelete = async () => {
     if (!entryToDelete) return;
     try {
       await deleteWorkEntry(entryToDelete);
-      toast({ title: 'Entry deleted', description: 'Work entry removed successfully.' });
+      toast({ title: 'Entry moved to trash', description: 'Restore it from Deleted Items if needed.' });
     } catch (err: any) {
-      toast({ variant: 'destructive', title: 'Error deleting', description: err.message });
+      toast({ variant: 'destructive', title: 'Error', description: err.message });
     } finally {
       setEntryToDelete(null);
     }
   };
 
   const handleSort = (field: SortField) => {
-    if (sortField === field) {
-      setSortDir(d => d === 'asc' ? 'desc' : 'asc');
-    } else {
-      setSortField(field);
-      setSortDir('desc');
-    }
+    if (sortField === field) setSortDir(d => d === 'asc' ? 'desc' : 'asc');
+    else { setSortField(field); setSortDir('desc'); }
   };
 
   const filteredAndSorted = useMemo(() => {
     const filtered = entries.filter(e => {
       const q = searchTerm.toLowerCase();
-      const matchesSearch = !q ||
-        e.customerName.toLowerCase().includes(q) ||
-        e.mobile.includes(q) ||
-        e.category.toLowerCase().includes(q);
-      const matchesStatus = statusFilter === 'All' || e.status === statusFilter;
-      const matchesCategory = categoryFilter === 'All' || e.category === categoryFilter;
-      return matchesSearch && matchesStatus && matchesCategory;
+      const matchSearch = !q || e.customerName.toLowerCase().includes(q) || e.mobile.includes(q) || e.category.toLowerCase().includes(q);
+      const matchStatus = statusFilter === 'All' || e.status === statusFilter;
+      const matchCat = categoryFilter === 'All' || e.category === categoryFilter;
+      return matchSearch && matchStatus && matchCat;
     });
-
     return [...filtered].sort((a, b) => {
       let cmp = 0;
       if (sortField === 'date') cmp = a.date.toMillis() - b.date.toMillis();
@@ -130,10 +133,8 @@ export default function WorkListPage() {
   const mobileHistoryEntries = selectedMobile ? entries.filter(e => e.mobile === selectedMobile) : [];
 
   const ThHeader = ({ field, label, className = '' }: { field: SortField; label: string; className?: string }) => (
-    <th
-      className={`px-4 py-3 font-medium cursor-pointer select-none hover:text-foreground transition-colors ${className}`}
-      onClick={() => handleSort(field)}
-    >
+    <th className={`px-4 py-3 font-medium text-muted-foreground text-xs uppercase tracking-wide cursor-pointer select-none hover:text-foreground transition-colors ${className}`}
+      onClick={() => handleSort(field)}>
       <span className="inline-flex items-center">
         {label}
         <SortIcon field={field} current={sortField} dir={sortDir} />
@@ -142,44 +143,42 @@ export default function WorkListPage() {
   );
 
   return (
-    <div className="space-y-6">
+    <div className="space-y-6 animate-fade-in-up">
       <div className="flex flex-col md:flex-row justify-between md:items-center gap-4">
         <div>
-          <h1 className="text-2xl font-bold tracking-tight">All Work</h1>
+          <h1 className="text-2xl font-bold" style={{ fontFamily: 'var(--app-font-display)' }}>All Work</h1>
           <p className="text-muted-foreground text-sm mt-1">
             {loading ? 'Loading...' : `${filteredAndSorted.length} of ${entries.length} entries`}
           </p>
         </div>
         <Link href="/work/new">
-          <Button className="gap-2"><PlusCircle className="h-4 w-4" />Add New Entry</Button>
+          <Button className="gap-2 shadow-sm"><PlusCircle className="h-4 w-4" />Add New Entry</Button>
         </Link>
       </div>
 
-      <div className="bg-card border rounded-lg shadow-sm">
-        <div className="p-4 border-b flex flex-col md:flex-row gap-3">
+      <div className="bg-card border rounded-xl shadow-card">
+        {/* Filters */}
+        <div className="p-4 border-b flex flex-col md:flex-row gap-3 bg-muted/10">
           <div className="relative flex-1">
-            <Search className="absolute left-3 top-2.5 h-4 w-4 text-muted-foreground" />
-            <Input
-              placeholder="Search name, mobile, or category..."
-              value={searchTerm}
-              onChange={(e) => setSearchTerm(e.target.value)}
-              className="pl-9"
-            />
+            <Search className="absolute left-3.5 top-2.5 h-4 w-4 text-muted-foreground" />
+            <Input placeholder="Search name, mobile, or category..."
+              value={searchTerm} onChange={(e) => setSearchTerm(e.target.value)}
+              className="pl-10 h-10 bg-background" />
           </div>
           <div className="flex gap-3">
             <Select value={statusFilter} onValueChange={setStatusFilter}>
-              <SelectTrigger className="w-[140px]">
+              <SelectTrigger className="w-[140px] h-10 bg-background">
                 <SelectValue placeholder="Status" />
               </SelectTrigger>
               <SelectContent>
                 <SelectItem value="All">All Status</SelectItem>
-                <SelectItem value="Pending">Pending</SelectItem>
-                <SelectItem value="Completed">Completed</SelectItem>
-                <SelectItem value="Rejected">Rejected</SelectItem>
+                <SelectItem value="Pending">🟡 Pending</SelectItem>
+                <SelectItem value="Completed">🟢 Completed</SelectItem>
+                <SelectItem value="Rejected">🔴 Rejected</SelectItem>
               </SelectContent>
             </Select>
             <Select value={categoryFilter} onValueChange={setCategoryFilter}>
-              <SelectTrigger className="w-[180px]">
+              <SelectTrigger className="w-[180px] h-10 bg-background">
                 <SelectValue placeholder="Category" />
               </SelectTrigger>
               <SelectContent>
@@ -192,17 +191,18 @@ export default function WorkListPage() {
           </div>
         </div>
 
+        {/* Table */}
         <div className="overflow-x-auto">
           <table className="w-full text-sm text-left">
-            <thead className="text-xs text-muted-foreground bg-muted/50 uppercase border-b">
+            <thead className="bg-muted/30 border-b">
               <tr>
                 <ThHeader field="date" label="Date" />
                 <ThHeader field="customerName" label="Customer" />
-                <th className="px-4 py-3 font-medium">Category</th>
+                <th className="px-4 py-3 font-medium text-muted-foreground text-xs uppercase tracking-wide">Category</th>
                 <ThHeader field="totalAmount" label="Total" className="text-right" />
                 <ThHeader field="dueAmount" label="Due" className="text-right" />
                 <ThHeader field="status" label="Status" className="text-center" />
-                <th className="px-4 py-3 font-medium text-right">Actions</th>
+                <th className="px-4 py-3 font-medium text-muted-foreground text-xs uppercase tracking-wide text-right">Actions</th>
               </tr>
             </thead>
             <tbody>
@@ -212,51 +212,51 @@ export default function WorkListPage() {
                 <tr>
                   <td colSpan={7} className="px-4 py-16 text-center">
                     <div className="flex flex-col items-center text-muted-foreground">
-                      <Search className="h-10 w-10 mb-3 opacity-20" />
+                      <div className="h-12 w-12 rounded-full bg-muted flex items-center justify-center mb-3">
+                        <Search className="h-5 w-5 opacity-40" />
+                      </div>
                       <p className="font-medium">No entries found</p>
                       <p className="text-xs mt-1">
-                        {entries.length === 0
-                          ? 'Add your first work entry to get started'
-                          : 'Try adjusting your search or filters'}
+                        {entries.length === 0 ? 'Add your first work entry to get started' : 'Try adjusting your search or filters'}
                       </p>
                     </div>
                   </td>
                 </tr>
               ) : (
-                filteredAndSorted.map(entry => (
-                  <tr
-                    key={entry.id}
-                    className={`border-b last:border-0 hover:bg-muted/30 transition-colors ${entry.status === 'Rejected' ? 'opacity-70' : ''}`}
-                  >
-                    <td className="px-4 py-3 whitespace-nowrap text-muted-foreground">
+                filteredAndSorted.map((entry, idx) => (
+                  <tr key={entry.id}
+                    className={`border-b last:border-0 hover:bg-muted/20 transition-colors
+                      ${entry.status === 'Rejected' ? 'opacity-60' : ''}
+                      ${idx % 2 === 1 ? 'bg-muted/10' : ''}`}>
+                    <td className="px-4 py-3 whitespace-nowrap text-muted-foreground text-xs">
                       {format(entry.date.toDate(), 'dd MMM yyyy')}
                     </td>
                     <td className="px-4 py-3">
                       <div className="font-medium text-foreground">{entry.customerName}</div>
-                      <button
-                        onClick={() => setSelectedMobile(entry.mobile)}
-                        className="text-xs text-primary hover:underline flex items-center gap-1 mt-0.5"
-                      >
-                        <History className="h-3 w-3" />
-                        {entry.mobile}
+                      <button onClick={() => setSelectedMobile(entry.mobile)}
+                        className="text-xs text-primary hover:underline flex items-center gap-1 mt-0.5">
+                        <History className="h-3 w-3" />{entry.mobile}
                       </button>
                     </td>
                     <td className="px-4 py-3">
-                      <Badge variant="secondary" className="font-normal">{entry.category}</Badge>
+                      <Badge variant="secondary" className="font-normal text-xs">{entry.category}</Badge>
                     </td>
-                    <td className="px-4 py-3 text-right font-medium">
-                      {formatCurrency(entry.totalAmount)}
+                    <td className="px-4 py-3 text-right">
+                      <span className="font-semibold">{formatCurrency(entry.totalAmount)}</span>
+                      {entry.challanAmount ? (
+                        <span className="block text-xs text-amber-600 font-normal">Challan: {formatCurrency(entry.challanAmount)}</span>
+                      ) : null}
                       {entry.status === 'Rejected' && entry.refundAmount ? (
                         <span className="block text-xs text-red-500 font-normal">Refund: {formatCurrency(entry.refundAmount)}</span>
                       ) : null}
                     </td>
                     <td className="px-4 py-3 text-right">
                       {entry.dueAmount > 0 ? (
-                        <span className="font-semibold text-red-600 bg-red-50 px-2 py-0.5 rounded">
+                        <span className="font-bold text-red-600 bg-red-50 border border-red-200 px-2 py-0.5 rounded-full text-xs">
                           {formatCurrency(entry.dueAmount)}
                         </span>
                       ) : (
-                        <span className="text-muted-foreground">—</span>
+                        <span className="text-emerald-600 text-xs font-medium">Paid ✓</span>
                       )}
                     </td>
                     <td className="px-4 py-3 text-center">
@@ -265,21 +265,20 @@ export default function WorkListPage() {
                     <td className="px-4 py-3 text-right">
                       <DropdownMenu>
                         <DropdownMenuTrigger asChild>
-                          <Button variant="ghost" size="icon" className="h-8 w-8">
+                          <Button variant="ghost" size="icon" className="h-8 w-8 rounded-lg">
                             <MoreHorizontal className="h-4 w-4" />
                           </Button>
                         </DropdownMenuTrigger>
-                        <DropdownMenuContent align="end">
+                        <DropdownMenuContent align="end" className="rounded-xl shadow-card-hover">
                           <Link href={`/work/${entry.id}/edit`}>
-                            <DropdownMenuItem className="cursor-pointer">
-                              <Edit className="h-4 w-4 mr-2" /> Update
+                            <DropdownMenuItem className="cursor-pointer rounded-lg">
+                              <Edit className="h-4 w-4 mr-2" /> Update / Add Payment
                             </DropdownMenuItem>
                           </Link>
                           <DropdownMenuItem
-                            className="cursor-pointer text-destructive focus:text-destructive"
-                            onClick={() => setEntryToDelete(entry.id!)}
-                          >
-                            <Trash2 className="h-4 w-4 mr-2" /> Delete
+                            className="cursor-pointer text-destructive focus:text-destructive rounded-lg"
+                            onClick={() => setEntryToDelete(entry.id!)}>
+                            <Trash2 className="h-4 w-4 mr-2" /> Move to Trash
                           </DropdownMenuItem>
                         </DropdownMenuContent>
                       </DropdownMenu>
@@ -292,18 +291,19 @@ export default function WorkListPage() {
         </div>
       </div>
 
+      {/* Delete Dialog */}
       <AlertDialog open={!!entryToDelete} onOpenChange={(open) => !open && setEntryToDelete(null)}>
-        <AlertDialogContent>
+        <AlertDialogContent className="rounded-2xl">
           <AlertDialogHeader>
-            <AlertDialogTitle>Delete this entry?</AlertDialogTitle>
+            <AlertDialogTitle>Move to trash?</AlertDialogTitle>
             <AlertDialogDescription>
-              This will permanently delete this work entry and cannot be undone.
+              This entry will be soft-deleted and moved to Deleted Items. You can restore it anytime from there.
             </AlertDialogDescription>
           </AlertDialogHeader>
           <AlertDialogFooter>
-            <AlertDialogCancel>Cancel</AlertDialogCancel>
-            <AlertDialogAction onClick={handleDelete} className="bg-destructive text-destructive-foreground hover:bg-destructive/90">
-              Delete Entry
+            <AlertDialogCancel className="rounded-xl">Cancel</AlertDialogCancel>
+            <AlertDialogAction onClick={handleDelete} className="bg-destructive text-destructive-foreground hover:bg-destructive/90 rounded-xl">
+              Move to Trash
             </AlertDialogAction>
           </AlertDialogFooter>
         </AlertDialogContent>
@@ -311,35 +311,35 @@ export default function WorkListPage() {
 
       {/* Customer History Modal */}
       <Dialog open={!!selectedMobile} onOpenChange={(open) => !open && setSelectedMobile(null)}>
-        <DialogContent className="max-w-2xl max-h-[80vh] overflow-y-auto">
+        <DialogContent className="max-w-2xl max-h-[80vh] overflow-y-auto rounded-2xl">
           <DialogHeader>
             <DialogTitle className="flex items-center gap-2">
-              Customer History: <span className="font-mono text-primary">{selectedMobile}</span>
+              <History className="h-4 w-4 text-primary" />
+              Customer History — <span className="font-mono text-primary">{selectedMobile}</span>
             </DialogTitle>
           </DialogHeader>
-          <div className="mt-4 space-y-4">
+          <div className="mt-4 space-y-3">
             {mobileHistoryEntries.map(entry => {
               const resolvedAt = entry.status === 'Completed' ? entry.completedAt : entry.status === 'Rejected' ? entry.rejectedAt : null;
               const duration = resolvedAt && entry.createdAt
-                ? formatDistanceStrict(resolvedAt.toDate(), entry.createdAt.toDate())
-                : null;
+                ? formatDistanceStrict(resolvedAt.toDate(), entry.createdAt.toDate()) : null;
               return (
-                <div key={entry.id} className={`border rounded-lg p-4 space-y-3 ${entry.status === 'Rejected' ? 'border-red-200 bg-red-50/30' : ''}`}>
+                <div key={entry.id} className={`border rounded-xl p-4 space-y-3 ${entry.status === 'Rejected' ? 'border-red-200 bg-red-50/30' : ''}`}>
                   <div className="flex flex-col sm:flex-row justify-between gap-3">
                     <div>
                       <div className="font-semibold">{entry.customerName}</div>
                       <div className="text-sm text-muted-foreground mt-0.5">{format(entry.date.toDate(), 'dd MMM yyyy')}</div>
                       <div className="mt-2 flex flex-wrap gap-2">
-                        <Badge variant="secondary">{entry.category}</Badge>
+                        <Badge variant="secondary" className="text-xs">{entry.category}</Badge>
                         <StatusBadge status={entry.status} />
                       </div>
                     </div>
                     <div className="text-right shrink-0">
-                      <div className="text-sm font-medium">Total: {formatCurrency(entry.totalAmount)}</div>
+                      <div className="text-sm font-semibold">Total: {formatCurrency(entry.totalAmount)}</div>
                       {entry.dueAmount > 0 && <div className="text-sm text-red-600 mt-0.5">Due: {formatCurrency(entry.dueAmount)}</div>}
+                      {entry.challanAmount ? <div className="text-xs text-amber-600 mt-0.5">Challan: {formatCurrency(entry.challanAmount)}</div> : null}
                       {entry.status === 'Rejected' && entry.refundAmount
-                        ? <div className="text-sm text-red-600 mt-0.5">Refund: {formatCurrency(entry.refundAmount)}</div>
-                        : null}
+                        ? <div className="text-sm text-red-500 mt-0.5">Refund: {formatCurrency(entry.refundAmount)}</div> : null}
                     </div>
                   </div>
                   <div className="text-xs text-muted-foreground space-y-1 pt-2 border-t">
@@ -350,26 +350,22 @@ export default function WorkListPage() {
                       </div>
                     )}
                     {entry.status === 'Completed' && entry.completedAt ? (
-                      <div className="flex items-center gap-1.5 text-green-700">
+                      <div className="flex items-center gap-1.5 text-emerald-700">
                         <CheckCircle2 className="h-3 w-3" />
                         Completed: {format(entry.completedAt.toDate(), 'dd MMM yyyy, h:mm a')}
                         {duration && <span className="ml-1 text-muted-foreground">(in {duration})</span>}
                       </div>
                     ) : entry.status === 'Rejected' && entry.rejectedAt ? (
-                      <div className="flex flex-col gap-1">
-                        <div className="flex items-center gap-1.5 text-red-700">
-                          <XCircle className="h-3 w-3" />
-                          Rejected: {format(entry.rejectedAt.toDate(), 'dd MMM yyyy, h:mm a')}
-                          {duration && <span className="ml-1 text-muted-foreground">(after {duration})</span>}
-                        </div>
-                        {entry.rejectionReason && <div className="text-muted-foreground ml-4">Reason: {entry.rejectionReason}</div>}
+                      <div className="flex items-center gap-1.5 text-red-700">
+                        <XCircle className="h-3 w-3" />
+                        Rejected: {format(entry.rejectedAt.toDate(), 'dd MMM yyyy, h:mm a')}
+                        {duration && <span className="ml-1 text-muted-foreground">(after {duration})</span>}
                       </div>
-                    ) : entry.status === 'Pending' ? (
+                    ) : (
                       <div className="flex items-center gap-1.5 text-amber-600">
-                        <Clock className="h-3 w-3" />
-                        Still pending
+                        <Clock className="h-3 w-3" /> Still pending
                       </div>
-                    ) : null}
+                    )}
                   </div>
                 </div>
               );

@@ -1,13 +1,20 @@
 import { useState, useEffect, createContext, useContext, ReactNode } from 'react';
 import { User, onAuthStateChanged, signOut as firebaseSignOut } from 'firebase/auth';
-import { auth, isConfigured } from '@/lib/firebase';
+import { doc, getDoc } from 'firebase/firestore';
+import { auth, db, isConfigured } from '@/lib/firebase';
 import { useToast } from '@/hooks/use-toast';
+
+export type UserRole = 'owner' | 'staff';
 
 interface AuthContextType {
   user: User | null;
   loading: boolean;
   logout: () => Promise<void>;
   isConfigured: boolean;
+  role: UserRole | null;
+  isOwner: boolean;
+  canAccessFinancialServices: boolean;
+  displayName: string;
 }
 
 const AuthContext = createContext<AuthContextType>({
@@ -15,11 +22,17 @@ const AuthContext = createContext<AuthContextType>({
   loading: true,
   logout: async () => {},
   isConfigured,
+  role: null,
+  isOwner: false,
+  canAccessFinancialServices: false,
+  displayName: '',
 });
 
 export function AuthProvider({ children }: { children: ReactNode }) {
   const [user, setUser] = useState<User | null>(null);
   const [loading, setLoading] = useState(true);
+  const [role, setRole] = useState<UserRole | null>(null);
+  const [canAccessFinancialServices, setCanAccessFinancialServices] = useState(false);
   const { toast } = useToast();
 
   useEffect(() => {
@@ -28,8 +41,29 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       return;
     }
 
-    const unsubscribe = onAuthStateChanged(auth, (u) => {
+    const unsubscribe = onAuthStateChanged(auth, async (u) => {
       setUser(u);
+      if (u && db) {
+        try {
+          const userDoc = await getDoc(doc(db, 'users', u.uid));
+          if (userDoc.exists()) {
+            const data = userDoc.data();
+            setRole((data.role as UserRole) ?? 'staff');
+            setCanAccessFinancialServices(data.canAccessFinancialServices ?? false);
+          } else {
+            // Default: first user to log in is treated as owner if no doc exists
+            setRole('owner');
+            setCanAccessFinancialServices(true);
+          }
+        } catch {
+          // Firestore not available — grant full access in demo mode
+          setRole('owner');
+          setCanAccessFinancialServices(true);
+        }
+      } else {
+        setRole(null);
+        setCanAccessFinancialServices(false);
+      }
       setLoading(false);
     });
 
@@ -46,8 +80,13 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     }
   };
 
+  const displayName = user?.displayName || user?.email?.split('@')[0] || 'Staff';
+
   return (
-    <AuthContext.Provider value={{ user, loading, logout, isConfigured }}>
+    <AuthContext.Provider value={{
+      user, loading, logout, isConfigured,
+      role, isOwner: role === 'owner', canAccessFinancialServices, displayName,
+    }}>
       {children}
     </AuthContext.Provider>
   );

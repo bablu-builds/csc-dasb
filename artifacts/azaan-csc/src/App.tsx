@@ -19,6 +19,9 @@ import PendingWorkPage from '@/pages/PendingWorkPage';
 import ReportsPage from '@/pages/ReportsPage';
 import SettingsPage from '@/pages/SettingsPage';
 import DeletedItemsPage from '@/pages/DeletedItemsPage';
+import AepsPage from '@/pages/AepsPage';
+import RechargePage from '@/pages/RechargePage';
+import MoneyTransferPage from '@/pages/MoneyTransferPage';
 
 const queryClient = new QueryClient();
 
@@ -36,6 +39,9 @@ function AuthenticatedApp() {
           <Route path="/reports" component={ReportsPage} />
           <Route path="/settings" component={SettingsPage} />
           <Route path="/deleted" component={DeletedItemsPage} />
+          <Route path="/aeps" component={AepsPage} />
+          <Route path="/recharge" component={RechargePage} />
+          <Route path="/money-transfer" component={MoneyTransferPage} />
           <Route component={NotFound} />
         </Switch>
       </Layout>
@@ -48,7 +54,6 @@ function Router() {
     <Switch>
       <Route path="/login" component={LoginPage} />
       <Route path="/register" component={RegisterPage} />
-      {/* Catch-all for authenticated routes */}
       <Route path="*">
         <AuthenticatedApp />
       </Route>

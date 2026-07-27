@@ -1,5 +1,18 @@
-import { collection, doc, getDoc, getDocs, setDoc, query, orderBy, onSnapshot, addDoc, updateDoc, deleteDoc, writeBatch, Timestamp } from 'firebase/firestore';
+import {
+  collection, doc, getDoc, getDocs, setDoc, query, orderBy, onSnapshot,
+  addDoc, updateDoc, deleteDoc, writeBatch, Timestamp, where, arrayUnion,
+} from 'firebase/firestore';
 import { db } from '@/lib/firebase';
+
+// ══════════════════════════════════════════════════════════════════
+// WORK ENTRIES
+// ══════════════════════════════════════════════════════════════════
+
+export interface PaymentRecord {
+  amount: number;
+  paidAt: Timestamp;
+  addedBy: string;
+}
 
 export interface WorkEntry {
   id?: string;
@@ -9,17 +22,20 @@ export interface WorkEntry {
   workDetail?: string;
   date: Timestamp;
   totalAmount: number;
-  paidAmount: number;
-  dueAmount: number;
+  paidAmount: number;     // sum of all payments (kept in sync)
+  dueAmount: number;      // totalAmount - paidAmount
+  challanAmount?: number; // government fee/challan paid by shop
+  payments?: PaymentRecord[];
   status: 'Pending' | 'Completed' | 'Rejected';
   address?: string;
   createdAt: Timestamp;
-  completedAt?: Timestamp;   // set automatically when status → Completed
-  rejectedAt?: Timestamp;    // set automatically when status → Rejected
-  rejectionReason?: string;  // optional text reason for rejection
-  refundAmount?: number;     // amount refunded to customer on rejection
-  isDeleted?: boolean;       // soft-delete flag
-  deletedAt?: Timestamp;     // when it was soft-deleted
+  completedAt?: Timestamp;
+  rejectedAt?: Timestamp;
+  rejectionReason?: string;
+  refundAmount?: number;
+  addedBy?: string;
+  isDeleted?: boolean;
+  deletedAt?: Timestamp;
 }
 
 export interface Category {
@@ -40,8 +56,7 @@ export const defaultCategories = [
   "Railway/Bus Ticket Booking", "Photocopy / Print / Photo", "Other"
 ];
 
-// WORK ENTRIES
-/** Remove keys whose value is undefined — Firestore rejects undefined field values. */
+/** Remove keys whose value is undefined — Firestore rejects undefined values. */
 function stripUndefined<T extends Record<string, unknown>>(obj: T): Partial<T> {
   return Object.fromEntries(
     Object.entries(obj).filter(([, v]) => v !== undefined)
@@ -49,21 +64,34 @@ function stripUndefined<T extends Record<string, unknown>>(obj: T): Partial<T> {
 }
 
 export const createWorkEntry = async (
-  data: Omit<WorkEntry, 'id' | 'dueAmount' | 'createdAt' | 'completedAt' | 'rejectedAt'>
+  data: Omit<WorkEntry, 'id' | 'dueAmount' | 'createdAt' | 'completedAt' | 'rejectedAt'>,
+  addedByName?: string
 ) => {
   if (!db) throw new Error("Firebase not configured");
+  const now = Timestamp.now();
   const dueAmount = data.status === 'Rejected' ? 0 : data.totalAmount - data.paidAmount;
-  const timestamps: Partial<WorkEntry> = { createdAt: Timestamp.now() };
-  if (data.status === 'Completed') timestamps.completedAt = Timestamp.now();
-  if (data.status === 'Rejected') timestamps.rejectedAt = Timestamp.now();
+  const timestamps: Partial<WorkEntry> = { createdAt: now };
+  if (data.status === 'Completed') timestamps.completedAt = now;
+  if (data.status === 'Rejected') timestamps.rejectedAt = now;
 
-  // Only include rejectionReason / refundAmount when status is Rejected
-  const { rejectionReason, refundAmount, ...rest } = data;
+  // Initial payment record
+  const payments: PaymentRecord[] = data.paidAmount > 0 ? [{
+    amount: data.paidAmount,
+    paidAt: now,
+    addedBy: addedByName || 'Staff',
+  }] : [];
+
+  const { rejectionReason, refundAmount, challanAmount, ...rest } = data;
   const rejectionFields = data.status === 'Rejected'
     ? stripUndefined({ rejectionReason, refundAmount })
     : {};
+  const challanFields = challanAmount !== undefined && challanAmount > 0
+    ? { challanAmount }
+    : {};
 
-  return addDoc(collection(db, 'workEntries'), { ...rest, ...timestamps, dueAmount, ...rejectionFields });
+  return addDoc(collection(db, 'workEntries'), {
+    ...rest, ...timestamps, dueAmount, payments, ...rejectionFields, ...challanFields,
+  });
 };
 
 export const updateWorkEntry = async (
@@ -72,17 +100,19 @@ export const updateWorkEntry = async (
 ) => {
   if (!db) throw new Error("Firebase not configured");
 
-  // Strip rejectionReason / refundAmount when status is not Rejected,
-  // then remove any remaining undefined values Firestore would reject.
-  const { rejectionReason, refundAmount, ...rest } = data;
+  const { rejectionReason, refundAmount, challanAmount, ...rest } = data;
   const rejectionFields = data.status === 'Rejected'
     ? stripUndefined({ rejectionReason, refundAmount } as Record<string, unknown>)
     : {};
+  const challanFields = challanAmount !== undefined ? { challanAmount } : {};
 
-  const updates: Record<string, unknown> = { ...stripUndefined(rest as Record<string, unknown>), ...rejectionFields };
+  const updates: Record<string, unknown> = {
+    ...stripUndefined(rest as Record<string, unknown>),
+    ...rejectionFields,
+    ...challanFields,
+  };
 
   if (data.status === 'Rejected') {
-    // Rejected: work cancelled — nothing owed; track the refund separately
     updates.rejectedAt = Timestamp.now();
     updates.dueAmount = 0;
   } else if (data.status === 'Completed') {
@@ -91,7 +121,6 @@ export const updateWorkEntry = async (
       updates.dueAmount = data.totalAmount - data.paidAmount;
     }
   } else {
-    // Pending (or no status change)
     if (data.totalAmount !== undefined && data.paidAmount !== undefined) {
       updates.dueAmount = data.totalAmount - data.paidAmount;
     }
@@ -100,7 +129,28 @@ export const updateWorkEntry = async (
   return updateDoc(doc(db, 'workEntries', id), updates);
 };
 
-/** Soft-delete: marks the entry as deleted instead of removing it from Firestore. */
+/** Add a new partial payment to an existing work entry. */
+export const addPaymentToEntry = async (
+  entryId: string,
+  payment: { amount: number; addedBy: string },
+  currentTotal: number,
+  currentPaid: number
+) => {
+  if (!db) throw new Error("Firebase not configured");
+  const paymentRecord: PaymentRecord = {
+    amount: payment.amount,
+    paidAt: Timestamp.now(),
+    addedBy: payment.addedBy,
+  };
+  const newPaid = currentPaid + payment.amount;
+  const newDue = Math.max(0, currentTotal - newPaid);
+  return updateDoc(doc(db, 'workEntries', entryId), {
+    payments: arrayUnion(paymentRecord),
+    paidAmount: newPaid,
+    dueAmount: newDue,
+  });
+};
+
 export const deleteWorkEntry = async (id: string) => {
   if (!db) throw new Error("Firebase not configured");
   return updateDoc(doc(db, 'workEntries', id), {
@@ -109,7 +159,6 @@ export const deleteWorkEntry = async (id: string) => {
   });
 };
 
-/** Restore a soft-deleted entry back to the active list. */
 export const restoreWorkEntry = async (id: string) => {
   if (!db) throw new Error("Firebase not configured");
   return updateDoc(doc(db, 'workEntries', id), {
@@ -118,50 +167,142 @@ export const restoreWorkEntry = async (id: string) => {
   });
 };
 
-/** Active entries only — excludes any document with isDeleted === true. */
 export const subscribeToWorkEntries = (callback: (entries: WorkEntry[]) => void) => {
   if (!db) return () => {};
   const q = query(collection(db, 'workEntries'), orderBy('date', 'desc'));
   return onSnapshot(q, (snapshot) => {
     const entries: WorkEntry[] = [];
-    snapshot.forEach(doc => {
-      const data = { id: doc.id, ...doc.data() } as WorkEntry;
+    snapshot.forEach(d => {
+      const data = { id: d.id, ...d.data() } as WorkEntry;
       if (!data.isDeleted) entries.push(data);
     });
     callback(entries);
   });
 };
 
-/** Deleted entries only — for the Recycle Bin page, sorted newest-deleted first. */
 export const subscribeToDeletedEntries = (callback: (entries: WorkEntry[]) => void) => {
   if (!db) return () => {};
   const q = query(collection(db, 'workEntries'), orderBy('date', 'desc'));
   return onSnapshot(q, (snapshot) => {
     const entries: WorkEntry[] = [];
-    snapshot.forEach(doc => {
-      const data = { id: doc.id, ...doc.data() } as WorkEntry;
+    snapshot.forEach(d => {
+      const data = { id: d.id, ...d.data() } as WorkEntry;
       if (data.isDeleted) entries.push(data);
     });
-    // Sort by most-recently deleted first
     entries.sort((a, b) => (b.deletedAt?.toMillis() ?? 0) - (a.deletedAt?.toMillis() ?? 0));
     callback(entries);
   });
 };
 
+// ══════════════════════════════════════════════════════════════════
+// AEPS WITHDRAWALS
+// ══════════════════════════════════════════════════════════════════
+
+export interface AepsWithdrawal {
+  id?: string;
+  customerName: string;
+  bankName: string;
+  mobile?: string;
+  amount: number;
+  profitMargin: number;
+  createdAt: Timestamp;
+  addedBy?: string;
+}
+
+export const createAepsWithdrawal = async (data: Omit<AepsWithdrawal, 'id' | 'createdAt'>) => {
+  if (!db) throw new Error("Firebase not configured");
+  return addDoc(collection(db, 'aepsWithdrawals'), {
+    ...stripUndefined(data as Record<string, unknown>),
+    createdAt: Timestamp.now(),
+  });
+};
+
+export const subscribeToAepsWithdrawals = (callback: (entries: AepsWithdrawal[]) => void) => {
+  if (!db) return () => {};
+  const q = query(collection(db, 'aepsWithdrawals'), orderBy('createdAt', 'desc'));
+  return onSnapshot(q, (snapshot) => {
+    const entries: AepsWithdrawal[] = [];
+    snapshot.forEach(d => entries.push({ id: d.id, ...d.data() } as AepsWithdrawal));
+    callback(entries);
+  });
+};
+
+// ══════════════════════════════════════════════════════════════════
+// ELECTRIC RECHARGES
+// ══════════════════════════════════════════════════════════════════
+
+export interface ElectricRecharge {
+  id?: string;
+  customerName: string;
+  consumerNumber: string;
+  mobile?: string;
+  rechargeAmount: number;
+  profitMargin: number;
+  createdAt: Timestamp;
+  addedBy?: string;
+}
+
+export const createElectricRecharge = async (data: Omit<ElectricRecharge, 'id' | 'createdAt'>) => {
+  if (!db) throw new Error("Firebase not configured");
+  return addDoc(collection(db, 'electricRecharges'), {
+    ...stripUndefined(data as Record<string, unknown>),
+    createdAt: Timestamp.now(),
+  });
+};
+
+export const subscribeToElectricRecharges = (callback: (entries: ElectricRecharge[]) => void) => {
+  if (!db) return () => {};
+  const q = query(collection(db, 'electricRecharges'), orderBy('createdAt', 'desc'));
+  return onSnapshot(q, (snapshot) => {
+    const entries: ElectricRecharge[] = [];
+    snapshot.forEach(d => entries.push({ id: d.id, ...d.data() } as ElectricRecharge));
+    callback(entries);
+  });
+};
+
+// ══════════════════════════════════════════════════════════════════
+// MONEY TRANSFERS
+// ══════════════════════════════════════════════════════════════════
+
+export interface MoneyTransfer {
+  id?: string;
+  name: string;
+  mobileOrAccount: string;
+  amount: number;
+  profitMargin: number;
+  createdAt: Timestamp;
+  addedBy?: string;
+}
+
+export const createMoneyTransfer = async (data: Omit<MoneyTransfer, 'id' | 'createdAt'>) => {
+  if (!db) throw new Error("Firebase not configured");
+  return addDoc(collection(db, 'moneyTransfers'), {
+    ...stripUndefined(data as Record<string, unknown>),
+    createdAt: Timestamp.now(),
+  });
+};
+
+export const subscribeToMoneyTransfers = (callback: (entries: MoneyTransfer[]) => void) => {
+  if (!db) return () => {};
+  const q = query(collection(db, 'moneyTransfers'), orderBy('createdAt', 'desc'));
+  return onSnapshot(q, (snapshot) => {
+    const entries: MoneyTransfer[] = [];
+    snapshot.forEach(d => entries.push({ id: d.id, ...d.data() } as MoneyTransfer));
+    callback(entries);
+  });
+};
+
+// ══════════════════════════════════════════════════════════════════
 // CATEGORIES
+// ══════════════════════════════════════════════════════════════════
+
 export const initCategoriesIfEmpty = async () => {
   if (!db) return;
-  const firestoreDb = db; // narrowed to non-null for use inside callbacks
-
-  // Use a sentinel document so concurrent calls (race condition on auth state)
-  // don't each seed 15 categories, producing hundreds of duplicates.
+  const firestoreDb = db;
   const sentinelRef = doc(firestoreDb, 'settings', 'categoriesSeeded');
   const sentinel = await getDoc(sentinelRef);
   if (sentinel.exists()) return;
 
-  // Atomic batch: write all default categories + the sentinel in one commit.
-  // If two calls race, the second batch.commit() will still succeed but the
-  // sentinel check above will skip re-seeding on the next mount.
   const batch = writeBatch(firestoreDb);
   defaultCategories.forEach(name => {
     const ref = doc(collection(firestoreDb, 'categories'));
@@ -171,11 +312,10 @@ export const initCategoriesIfEmpty = async () => {
   try {
     await batch.commit();
   } catch {
-    // A concurrent init already committed — that's fine, categories exist.
+    // concurrent init already ran
   }
 };
 
-/** Deduplify by lower-cased name — guards against duplicate Firestore docs. */
 function deduplicateCategories(cats: Category[]): Category[] {
   const seen = new Set<string>();
   return cats.filter(cat => {
@@ -188,32 +328,23 @@ function deduplicateCategories(cats: Category[]): Category[] {
 
 export const getCategories = async (): Promise<Category[]> => {
   if (!db) return [];
-  const firestoreDb = db; // narrowed to non-null
-  const q = query(collection(firestoreDb, 'categories'), orderBy('name', 'asc'));
+  const q = query(collection(db, 'categories'), orderBy('name', 'asc'));
   const snap = await getDocs(q);
-  const categories: Category[] = [];
-  snap.forEach(docSnap => {
-    categories.push({ id: docSnap.id, ...docSnap.data() } as Category);
-  });
-  return deduplicateCategories(categories);
+  const cats: Category[] = [];
+  snap.forEach(d => cats.push({ id: d.id, ...d.data() } as Category));
+  return deduplicateCategories(cats);
 };
 
 export const subscribeToCategories = (callback: (categories: Category[]) => void) => {
   if (!db) return () => {};
   const q = query(collection(db, 'categories'), orderBy('name', 'asc'));
-  return onSnapshot(
-    q,
-    (snapshot) => {
-      const categories: Category[] = [];
-      snapshot.forEach(docSnap => {
-        categories.push({ id: docSnap.id, ...docSnap.data() } as Category);
-      });
-      callback(deduplicateCategories(categories));
-    },
-    (error) => {
-      console.error('[Firestore] Categories listener error:', error.code, error.message);
-    }
-  );
+  return onSnapshot(q, (snap) => {
+    const cats: Category[] = [];
+    snap.forEach(d => cats.push({ id: d.id, ...d.data() } as Category));
+    callback(deduplicateCategories(cats));
+  }, (err) => {
+    console.error('[Firestore] Categories listener error:', err.code, err.message);
+  });
 };
 
 export const addCategory = async (name: string) => {
@@ -226,17 +357,17 @@ export const deleteCategory = async (id: string) => {
   return deleteDoc(doc(db, 'categories', id));
 };
 
-// SETTINGS
+// ══════════════════════════════════════════════════════════════════
+// SHOP SETTINGS
+// ══════════════════════════════════════════════════════════════════
+
 export const getShopSettings = async (): Promise<ShopSettings> => {
   if (!db) return { shopName: "AZAAN COMMUNICATION TOUR AND TRAVEL", address: "", phone: "" };
   const d = await getDoc(doc(db, 'settings', 'shopSettings'));
-  if (d.exists()) {
-    return d.data() as ShopSettings;
-  }
-  // Default if not exists
-  const defaultSettings = { shopName: "AZAAN COMMUNICATION TOUR AND TRAVEL", address: "", phone: "" };
-  await setDoc(doc(db, 'settings', 'shopSettings'), defaultSettings);
-  return defaultSettings;
+  if (d.exists()) return d.data() as ShopSettings;
+  const def = { shopName: "AZAAN COMMUNICATION TOUR AND TRAVEL", address: "", phone: "" };
+  await setDoc(doc(db, 'settings', 'shopSettings'), def);
+  return def;
 };
 
 export const updateShopSettings = async (data: ShopSettings) => {
