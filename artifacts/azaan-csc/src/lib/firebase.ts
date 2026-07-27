@@ -34,3 +34,12 @@ export const app = isConfigured ? initializeApp(firebaseConfig) : null;
 export const auth = isConfigured ? getAuth(app!) : null;
 export const db = isConfigured ? getFirestore(app!) : null;
 export { isConfigured };
+
+/** Action code settings for Firebase email-link (passwordless) sign-in.
+ *  The URL points back to this app so the link handler runs on load. */
+export function getActionCodeSettings() {
+  return {
+    url: window.location.origin + '/',
+    handleCodeInApp: true,
+  };
+}

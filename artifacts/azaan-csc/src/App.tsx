@@ -6,7 +6,7 @@ import NotFound from '@/pages/not-found';
 
 import { AuthProvider } from '@/contexts/AuthContext';
 import { SettingsProvider } from '@/contexts/SettingsContext';
-import { ProtectedRoute } from '@/components/ProtectedRoute';
+import { ProtectedRoute, RoleRoute } from '@/components/ProtectedRoute';
 import { Layout } from '@/components/Layout';
 
 import LoginPage from '@/pages/LoginPage';
@@ -41,7 +41,9 @@ function AuthenticatedApp() {
           <Route path="/work/:id/edit" component={EditWorkPage} />
           <Route path="/work" component={WorkListPage} />
           <Route path="/pending" component={PendingWorkPage} />
-          <Route path="/reports" component={ReportsPage} />
+          <Route path="/reports">
+              <RoleRoute allow="owner"><ReportsPage /></RoleRoute>
+            </Route>
           <Route path="/settings" component={SettingsPage} />
           <Route path="/deleted" component={DeletedItemsPage} />
 <<<<<<< HEAD

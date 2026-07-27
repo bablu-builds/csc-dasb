@@ -6,13 +6,12 @@ import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
-<<<<<<< HEAD
-import { Loader2, Plus, Trash2, ShieldAlert, Store, Tag, Users } from 'lucide-react';
-=======
 import { Loader2, Plus, Trash2, Users, ShieldCheck, UserX, UserPlus, Eye, EyeOff } from 'lucide-react';
->>>>>>> df8f396511d08dcfa40563be85a66b3e2357f466
+import { Badge } from '@/components/ui/badge';
 import { useToast } from '@/hooks/use-toast';
-import { UserProfile, subscribeToStaff, createStaffAccount, revokeStaffAccess, updateStaffPermissions } from '@/lib/firestore';
+import {
+  UserProfile, subscribeToStaff, createStaffAccount, revokeStaffAccess, updateStaffPermissions,
+} from '@/lib/firestore';
 import { sendPasswordResetEmail } from 'firebase/auth';
 import { auth } from '@/lib/firebase';
 import { format } from 'date-fns';
@@ -32,8 +31,7 @@ export default function SettingsPage() {
   const [phone, setPhone] = useState(shopSettings.phone);
   const [newCat, setNewCat] = useState('');
   const [isAddingCat, setIsAddingCat] = useState(false);
-<<<<<<< HEAD
-=======
+  const { toast } = useToast();
 
   // Staff management state
   const [staffList, setStaffList] = useState<UserProfile[]>([]);
@@ -49,9 +47,6 @@ export default function SettingsPage() {
   const [resetLoadingUid, setResetLoadingUid] = useState<string | null>(null);
   const [newStaffFinancial, setNewStaffFinancial] = useState(false);
   const [financialToggleUid, setFinancialToggleUid] = useState<string | null>(null);
-  
->>>>>>> df8f396511d08dcfa40563be85a66b3e2357f466
-  const { toast } = useToast();
 
   useEffect(() => {
     if (!isOwner) { setStaffLoading(false); return; }
@@ -86,25 +81,24 @@ export default function SettingsPage() {
     }
   };
 
-<<<<<<< HEAD
-  const inp = "h-10 bg-background border-border";
-=======
   const handleCreateStaff = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!staffName.trim() || !staffEmail.trim() || !staffPassword.trim()) return;
-    if (staffPassword.length < 6) {
-      toast({ variant: 'destructive', title: 'Password too short', description: 'Password must be at least 6 characters.' });
-      return;
-    }
     setIsCreatingStaff(true);
     try {
-      await createStaffAccount(staffName.trim(), staffEmail.trim(), staffPassword, userProfile?.email ?? '', newStaffFinancial);
+      await createStaffAccount(
+        staffName.trim(),
+        staffEmail.trim(),
+        staffPassword,
+        userProfile?.email ?? '',
+        newStaffFinancial,
+      );
       setLastCreated({ email: staffEmail.trim(), name: staffName.trim() });
       setStaffName('');
       setStaffEmail('');
       setStaffPassword('');
       setNewStaffFinancial(false);
-      toast({ title: 'Staff account created', description: `${staffName.trim()} can now log in with the email and password you set.` });
+      toast({ title: 'Staff account created', description: `${staffName.trim()} can now log in.` });
     } catch (err: any) {
       const msg = err.code === 'auth/email-already-in-use'
         ? 'That email already has a Firebase account.'
@@ -136,7 +130,7 @@ export default function SettingsPage() {
       await updateStaffPermissions(staff.uid, newVal);
       toast({
         title: newVal ? 'Financial access granted' : 'Financial access revoked',
-        description: `${staff.displayName} ${newVal ? 'can now' : 'can no longer'} access AEPS, Recharge & Money Transfer.`,
+        description: `${staff.displayName || staff.email} ${newVal ? 'can now' : 'can no longer'} access AEPS, Recharge & Money Transfer.`,
       });
     } catch (err: any) {
       toast({ variant: 'destructive', title: 'Error updating permissions', description: err.message });
@@ -150,7 +144,7 @@ export default function SettingsPage() {
     setIsRevoking(true);
     try {
       await revokeStaffAccess(revokeTarget.uid);
-      toast({ title: 'Access revoked', description: `${revokeTarget.displayName} can no longer log in.` });
+      toast({ title: 'Access revoked', description: `${revokeTarget.displayName || revokeTarget.email} can no longer log in.` });
     } catch (err: any) {
       toast({ variant: 'destructive', title: 'Error revoking access', description: err.message });
     } finally {
@@ -158,27 +152,16 @@ export default function SettingsPage() {
       setRevokeTarget(null);
     }
   };
->>>>>>> df8f396511d08dcfa40563be85a66b3e2357f466
+
+  const inp = "h-10 bg-background border-border";
 
   return (
-    <div className="space-y-6 max-w-3xl animate-fade-in-up">
+    <div className="space-y-6 max-w-3xl">
       <div>
-        <h1 className="text-2xl font-bold" style={{ fontFamily: 'var(--app-font-display)' }}>Settings</h1>
-        <p className="text-muted-foreground text-sm mt-1">Manage shop information and categories</p>
+        <h1 className="text-2xl font-bold">Settings</h1>
+        <p className="text-muted-foreground text-sm mt-1">Manage shop information, categories and staff</p>
       </div>
 
-<<<<<<< HEAD
-      <Tabs defaultValue="shop">
-        <TabsList className="bg-muted p-1 rounded-xl">
-          <TabsTrigger value="shop" className="rounded-lg gap-1.5 data-[state=active]:shadow-sm">
-            <Store className="h-3.5 w-3.5" /> Shop Info
-          </TabsTrigger>
-          <TabsTrigger value="categories" className="rounded-lg gap-1.5 data-[state=active]:shadow-sm">
-            <Tag className="h-3.5 w-3.5" /> Categories
-          </TabsTrigger>
-          <TabsTrigger value="staff" className="rounded-lg gap-1.5 data-[state=active]:shadow-sm">
-            <Users className="h-3.5 w-3.5" /> Staff
-=======
       <Tabs defaultValue="shop" className="w-full">
         <TabsList className="w-full sm:w-auto grid grid-cols-3 sm:flex">
           <TabsTrigger value="shop">Shop Info</TabsTrigger>
@@ -186,13 +169,12 @@ export default function SettingsPage() {
           <TabsTrigger value="staff" className="flex items-center gap-1.5">
             <Users className="h-3.5 w-3.5" />
             Staff
->>>>>>> df8f396511d08dcfa40563be85a66b3e2357f466
           </TabsTrigger>
         </TabsList>
 
         {/* Shop Info */}
         <TabsContent value="shop" className="mt-5">
-          <Card className="border shadow-card rounded-xl">
+          <Card>
             <CardHeader className="pb-4">
               <CardTitle className="text-base">Shop Information</CardTitle>
               <CardDescription>This name appears on the portal and sidebar.</CardDescription>
@@ -222,7 +204,7 @@ export default function SettingsPage() {
 
         {/* Categories */}
         <TabsContent value="categories" className="mt-5">
-          <Card className="border shadow-card rounded-xl">
+          <Card>
             <CardHeader className="pb-4">
               <CardTitle className="text-base">Work Categories</CardTitle>
               <CardDescription>Manage the options in the "Work Category" dropdown.</CardDescription>
@@ -260,91 +242,56 @@ export default function SettingsPage() {
           </Card>
         </TabsContent>
 
-<<<<<<< HEAD
         {/* Staff */}
-        <TabsContent value="staff" className="mt-5">
-          <Card className="border shadow-card rounded-xl">
-            <CardHeader className="pb-4">
-              <CardTitle className="text-base">Staff Management</CardTitle>
-              <CardDescription>Manage access to this portal.</CardDescription>
-            </CardHeader>
-            <CardContent>
-              <div className="bg-amber-50 border border-amber-200 rounded-xl p-5 flex gap-4 text-amber-800">
-                <ShieldAlert className="h-5 w-5 flex-shrink-0 mt-0.5 text-amber-600" />
-                <div>
-                  <h4 className="font-semibold text-sm mb-2">Firebase Authentication</h4>
-                  <p className="text-sm text-amber-700 mb-4">
-                    Firebase doesn't allow client-side listing of all accounts for security reasons.
-                    Create new staff accounts from the Register page (after logging out). To view or delete existing accounts, use the Firebase Console.
-                  </p>
-                  <Button variant="outline" size="sm" className="bg-white border-amber-200 hover:bg-amber-50"
-                    onClick={() => window.open('https://console.firebase.google.com/', '_blank')}>
-                    Open Firebase Console ↗
-                  </Button>
-=======
-        <TabsContent value="staff" className="mt-6 space-y-6">
-          {/* Non-owners see a "no access" message */}
+        <TabsContent value="staff" className="mt-5 space-y-4">
           {!isOwner ? (
             <Card>
               <CardContent className="pt-6">
-                <div className="flex flex-col items-center justify-center py-8 text-center text-muted-foreground gap-3">
-                  <ShieldCheck className="h-10 w-10 opacity-30" />
-                  <p className="font-medium">Staff Management is only available to the Owner.</p>
-                  <p className="text-sm">Contact your owner to add or change staff accounts.</p>
->>>>>>> df8f396511d08dcfa40563be85a66b3e2357f466
+                <div className="flex items-center gap-3 text-muted-foreground">
+                  <ShieldCheck className="h-5 w-5 shrink-0" />
+                  <p className="text-sm">Staff management is only accessible to the Owner.</p>
                 </div>
               </CardContent>
             </Card>
           ) : (
             <>
-              {/* Add Staff form */}
+              {/* Create staff account */}
               <Card>
-                <CardHeader>
-                  <CardTitle className="flex items-center gap-2">
-                    <UserPlus className="h-5 w-5" />
-                    Add New Staff Member
+                <CardHeader className="pb-4">
+                  <CardTitle className="text-base flex items-center gap-2">
+                    <UserPlus className="h-4 w-4" />
+                    Add Staff Member
                   </CardTitle>
                   <CardDescription>
-                    You set the email and password directly. Share the credentials with the staff member however you prefer.
+                    Create a new staff account. Share the email and password with them directly.
                   </CardDescription>
                 </CardHeader>
                 <CardContent>
                   <form onSubmit={handleCreateStaff} className="space-y-4">
-                    <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                    <div className="grid sm:grid-cols-2 gap-4">
                       <div className="space-y-2">
-                        <Label htmlFor="staffName">Full Name *</Label>
-                        <Input
-                          id="staffName"
-                          placeholder="e.g. Rahul Kumar"
-                          value={staffName}
-                          onChange={e => setStaffName(e.target.value)}
-                          required
-                        />
+                        <Label>Full Name</Label>
+                        <Input className={inp} placeholder="Staff member's name"
+                          value={staffName} onChange={e => setStaffName(e.target.value)} required />
                       </div>
                       <div className="space-y-2">
-                        <Label htmlFor="staffEmail">Email Address *</Label>
-                        <Input
-                          id="staffEmail"
-                          type="email"
-                          placeholder="staff@example.com"
-                          value={staffEmail}
-                          onChange={e => setStaffEmail(e.target.value)}
-                          required
-                        />
+                        <Label>Email Address</Label>
+                        <Input className={inp} type="email" placeholder="staff@example.com"
+                          value={staffEmail} onChange={e => setStaffEmail(e.target.value)} required />
                       </div>
                     </div>
+
                     <div className="space-y-2">
-                      <Label htmlFor="staffPassword">Password *</Label>
-                      <div className="relative max-w-sm">
+                      <Label>Password</Label>
+                      <div className="relative">
                         <Input
-                          id="staffPassword"
+                          className={`${inp} pr-10`}
                           type={showPassword ? 'text' : 'password'}
-                          placeholder="Minimum 6 characters"
+                          placeholder="Create a password (min 6 chars)"
                           value={staffPassword}
                           onChange={e => setStaffPassword(e.target.value)}
                           required
                           minLength={6}
-                          className="pr-10"
                         />
                         <button
                           type="button"
@@ -357,7 +304,7 @@ export default function SettingsPage() {
                       </div>
                       <p className="text-xs text-muted-foreground">Share this password with the staff member verbally or on paper.</p>
                     </div>
-                    {/* Financial services permission toggle */}
+
                     <div className="flex items-start gap-3 p-3 rounded-lg border bg-muted/40">
                       <input
                         type="checkbox"
@@ -371,7 +318,7 @@ export default function SettingsPage() {
                           Allow access to AEPS, Recharge &amp; Money Transfer
                         </label>
                         <p className="text-xs text-muted-foreground mt-0.5">
-                          Enables this staff member to see and use the AEPS Withdrawal, Electric Recharge, and Money Transfer modules.
+                          Enables this staff member to see and use the financial service modules.
                         </p>
                       </div>
                     </div>
@@ -383,7 +330,6 @@ export default function SettingsPage() {
                     </Button>
                   </form>
 
-                  {/* Success confirmation */}
                   {lastCreated && (
                     <div className="mt-4 p-4 bg-green-50 border border-green-200 rounded-lg text-green-800 text-sm">
                       <p className="font-semibold mb-1">✓ Account created for {lastCreated.name}</p>
@@ -396,55 +342,51 @@ export default function SettingsPage() {
 
               {/* Staff list */}
               <Card>
-                <CardHeader>
-                  <CardTitle className="flex items-center gap-2">
-                    <Users className="h-5 w-5" />
-                    Current Staff Members
+                <CardHeader className="pb-4">
+                  <CardTitle className="text-base flex items-center gap-2">
+                    <Users className="h-4 w-4" />
+                    Staff Members
+                    {staffList.length > 0 && (
+                      <Badge variant="secondary" className="ml-auto">{staffList.length}</Badge>
+                    )}
                   </CardTitle>
-                  <CardDescription>
-                    Manage staff access. Use the toggle below each member to grant or revoke financial services access.
-                  </CardDescription>
                 </CardHeader>
                 <CardContent>
                   {staffLoading ? (
-                    <div className="flex justify-center py-6">
-                      <Loader2 className="h-6 w-6 animate-spin text-muted-foreground" />
+                    <div className="flex items-center gap-2 text-muted-foreground text-sm py-4">
+                      <Loader2 className="h-4 w-4 animate-spin" />
+                      Loading staff…
                     </div>
                   ) : staffList.length === 0 ? (
                     <div className="text-center py-8 text-muted-foreground">
-                      <Users className="h-10 w-10 mx-auto mb-3 opacity-20" />
-                      <p className="text-sm">No staff members added yet.</p>
-                      <p className="text-xs mt-1">Use the form above to create your first staff account.</p>
+                      <Users className="h-8 w-8 mx-auto mb-2 opacity-20" />
+                      <p className="text-sm">No staff members yet.</p>
                     </div>
                   ) : (
-                    <div className="border rounded-md divide-y">
+                    <div className="space-y-3">
                       {staffList.map(staff => (
-                        <div key={staff.uid} className="p-3 flex items-center justify-between gap-3">
-                          <div className="min-w-0">
-                            <p className="font-medium truncate">{staff.displayName}</p>
-                            <p className="text-xs text-muted-foreground truncate">{staff.email}</p>
+                        <div key={staff.uid} className="flex flex-col sm:flex-row sm:items-center gap-3 p-4 rounded-xl border bg-muted/20">
+                          <div className="flex-1 min-w-0">
+                            <div className="flex items-center gap-2 flex-wrap">
+                              <span className="font-semibold text-sm">{staff.displayName || '(no name)'}</span>
+                              {staff.canAccessFinancialServices && (
+                                <Badge variant="outline" className="text-xs border-emerald-300 text-emerald-700">Financial</Badge>
+                              )}
+                            </div>
+                            <p className="text-xs text-muted-foreground mt-0.5">{staff.email}</p>
                             {staff.createdAt && (
-                              <p className="text-xs text-muted-foreground mt-0.5">
+                              <p className="text-xs text-muted-foreground">
                                 Added {format(staff.createdAt.toDate(), 'dd MMM yyyy')}
-                                {staff.invitedBy ? ` by ${staff.invitedBy}` : ''}
                               </p>
                             )}
                           </div>
-                          <div className="flex flex-col sm:flex-row items-end sm:items-center gap-1.5 shrink-0">
-                            {/* Financial services toggle */}
+                          <div className="flex items-center gap-2 flex-wrap">
                             <Button
                               variant="outline"
                               size="sm"
+                              className="text-xs"
                               onClick={() => handleToggleFinancial(staff)}
                               disabled={financialToggleUid === staff.uid}
-                              className={
-                                staff.canAccessFinancialServices
-                                  ? 'border-green-500 text-green-700 hover:bg-green-50 text-xs'
-                                  : 'text-xs text-muted-foreground'
-                              }
-                              title={staff.canAccessFinancialServices
-                                ? 'Click to revoke AEPS/Recharge/Transfer access'
-                                : 'Click to grant AEPS/Recharge/Transfer access'}
                             >
                               {financialToggleUid === staff.uid
                                 ? <Loader2 className="h-3.5 w-3.5 animate-spin" />
@@ -488,9 +430,9 @@ export default function SettingsPage() {
       <AlertDialog open={!!revokeTarget} onOpenChange={open => !open && setRevokeTarget(null)}>
         <AlertDialogContent>
           <AlertDialogHeader>
-            <AlertDialogTitle>Revoke access for {revokeTarget?.displayName}?</AlertDialogTitle>
+            <AlertDialogTitle>Revoke access for {revokeTarget?.displayName || revokeTarget?.email}?</AlertDialogTitle>
             <AlertDialogDescription>
-              This will remove their staff account from the portal. They will be signed out immediately and won't be able to log in again. This cannot be undone — you would need to create a new account for them.
+              This will remove their staff account from the portal. They will be signed out immediately and won't be able to log in again. This cannot be undone.
             </AlertDialogDescription>
           </AlertDialogHeader>
           <AlertDialogFooter>

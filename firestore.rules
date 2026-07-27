@@ -35,31 +35,45 @@ service cloud.firestore {
       return isOwner() || (isStaff() && get(userDoc()).data.canAccessFinancialServices == true);
     }
 
-    // ── Work Entries — both owner and staff can read and write ───────────────
+    // ── workEntries — both roles can read and write ───────────────────────────
     match /workEntries/{entryId} {
       allow read, write: if isOwnerOrStaff();
     }
 
-    // ── Categories — both can read; only owner can write ─────────────────────
+    // ── categories — both roles can read; owner manages ──────────────────────
     match /categories/{catId} {
       allow read: if isOwnerOrStaff();
       allow write: if isOwner();
     }
 
-    // ── Settings (shopSettings, categoriesSeeded, etc.) ──────────────────────
-    match /settings/{settingId} {
+    // ── settings — both roles can read; owner can write ──────────────────────
+    match /settings/{docId} {
       allow read: if isOwnerOrStaff();
       allow write: if isOwner();
     }
 
-    // ── Users collection ─────────────────────────────────────────────────────
-    match /users/{userId} {
-      allow read: if isAuth();
-      allow create: if isOwner()
-                    || (isAuth()
-                        && request.auth.uid == userId
-                        && !exists(/databases/$(database)/documents/users/$(request.auth.uid)));
+    // ── users — role-based access ─────────────────────────────────────────────
+    match /users/{uid} {
+      // Anyone authenticated can read their own profile
+      allow read: if isAuth() && request.auth.uid == uid;
+      // Owner can read all profiles (for Staff Management)
+      allow read: if isOwner();
+      // A user can create their own profile (owner bootstrap or email-link first sign-in)
+      allow create: if isAuth() && request.auth.uid == uid
+                    && request.resource.data.role in ['owner', 'staff'];
+      // Only owner can update/delete other user profiles
       allow update, delete: if isOwner();
+      // A user can update their own profile (e.g. display name) but NOT change role
+      allow update: if isAuth() && request.auth.uid == uid
+                    && request.resource.data.role == resource.data.role;
+    }
+
+    // ── pendingInvites — for email-link staff invite flow ────────────────────
+    match /pendingInvites/{inviteId} {
+      // Allow anyone to read (including newly signed-in users before profile exists)
+      allow read: if true;
+      // Only owner can create/update/delete invites
+      allow write: if isOwner();
     }
 
     // ── AEPS Withdrawals ─────────────────────────────────────────────────────
