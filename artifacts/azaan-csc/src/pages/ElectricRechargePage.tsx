@@ -10,8 +10,8 @@ import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Skeleton } from '@/components/ui/skeleton';
 import {
-  Zap, IndianRupee, TrendingUp, CalendarRange, Search, ShieldCheck,
-  PlusCircle, ChevronDown, ChevronUp, Loader2, X,
+  Zap, IndianRupee, TrendingUp, CalendarRange, Search,
+  ShieldCheck, PlusCircle, ChevronUp, Loader2, X,
 } from 'lucide-react';
 
 function AccessDenied() {
@@ -37,11 +37,11 @@ export default function ElectricRechargePage() {
 
   // Form state
   const [showForm, setShowForm] = useState(false);
+  const [customerName, setCustomerName] = useState('');
+  const [consumerNumber, setConsumerNumber] = useState('');
+  const [mobile, setMobile] = useState('');
   const [rechargeAmount, setRechargeAmount] = useState('');
   const [profitMargin, setProfitMargin] = useState('');
-  const [transferredToName, setTransferredToName] = useState('');
-  const [transferredToNumber, setTransferredToNumber] = useState('');
-  const [transferredAmount, setTransferredAmount] = useState('');
   const [submitting, setSubmitting] = useState(false);
 
   // Filter state
@@ -58,41 +58,59 @@ export default function ElectricRechargePage() {
     return () => unsub();
   }, [canAccessFinancialServices]);
 
+  // Permission guard — after all hooks
   if (!canAccessFinancialServices) return <AccessDenied />;
 
-  // Summary stats
-  const todayRechargeTotal = entries.filter(e => isToday(e.createdAt.toDate())).reduce((s, e) => s + e.rechargeAmount, 0);
-  const todayProfitTotal = entries.filter(e => isToday(e.createdAt.toDate())).reduce((s, e) => s + e.profitMargin, 0);
-  const monthProfitTotal = entries.filter(e => isThisMonth(e.createdAt.toDate())).reduce((s, e) => s + e.profitMargin, 0);
+  // Summary stats (computed from all entries, not filtered)
+  const todayRechargeTotal = entries
+    .filter(e => isToday(e.createdAt.toDate()))
+    .reduce((s, e) => s + e.rechargeAmount, 0);
+  const todayProfitTotal = entries
+    .filter(e => isToday(e.createdAt.toDate()))
+    .reduce((s, e) => s + e.profitMargin, 0);
+  const monthProfitTotal = entries
+    .filter(e => isThisMonth(e.createdAt.toDate()))
+    .reduce((s, e) => s + e.profitMargin, 0);
 
   // Filtered list
   const filtered = useMemo(() => {
     const q = search.toLowerCase();
     return entries.filter(e => {
       const d = e.createdAt.toDate();
-      if (q && !e.transferredToName.toLowerCase().includes(q) &&
-          !e.transferredToNumber.toLowerCase().includes(q)) return false;
+      if (q &&
+        !e.customerName.toLowerCase().includes(q) &&
+        !e.consumerNumber.toLowerCase().includes(q) &&
+        !(e.mobile ?? '').includes(q)) return false;
       if (startDate && d < new Date(startDate + 'T00:00:00')) return false;
       if (endDate && d > new Date(endDate + 'T23:59:59')) return false;
       return true;
     });
   }, [entries, search, startDate, endDate]);
 
+  const resetForm = () => {
+    setCustomerName(''); setConsumerNumber(''); setMobile('');
+    setRechargeAmount(''); setProfitMargin('');
+  };
+
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
+    // Validate mobile only if entered
+    if (mobile && !/^\d{10}$/.test(mobile)) {
+      toast({ variant: 'destructive', title: 'Invalid mobile', description: 'Mobile number must be exactly 10 digits.' });
+      return;
+    }
     setSubmitting(true);
     try {
       await createElectricRecharge({
+        customerName: customerName.trim(),
+        consumerNumber: consumerNumber.trim(),
+        mobile: mobile.trim() || undefined,
         rechargeAmount: Number(rechargeAmount),
         profitMargin: Number(profitMargin),
-        transferredToName: transferredToName.trim(),
-        transferredToNumber: transferredToNumber.trim(),
-        transferredAmount: Number(transferredAmount),
         addedBy: userProfile?.displayName || userProfile?.email || 'Unknown',
       });
-      toast({ title: 'Recharge recorded', description: `${formatCurrency(Number(rechargeAmount))} recharge, profit ${formatCurrency(Number(profitMargin))}` });
-      setRechargeAmount(''); setProfitMargin(''); setTransferredToName('');
-      setTransferredToNumber(''); setTransferredAmount('');
+      toast({ title: 'Recharge recorded', description: `${customerName} — ${formatCurrency(Number(rechargeAmount))}` });
+      resetForm();
       setShowForm(false);
     } catch (err: any) {
       toast({ variant: 'destructive', title: 'Error', description: err.message });
@@ -113,17 +131,23 @@ export default function ElectricRechargePage() {
             <Zap className="h-6 w-6 text-primary" />
             Electric Recharge
           </h1>
-          <p className="text-muted-foreground text-sm mt-1">Record electricity bill recharges and profit</p>
+          <p className="text-muted-foreground text-sm mt-1">Record electricity bill recharges and profit earned</p>
         </div>
         <Button onClick={() => setShowForm(v => !v)} className="shrink-0">
-          {showForm ? <><ChevronUp className="h-4 w-4 mr-2" />Hide Form</> : <><PlusCircle className="h-4 w-4 mr-2" />Add New</>}
+          {showForm
+            ? <><ChevronUp className="h-4 w-4 mr-2" />Hide Form</>
+            : <><PlusCircle className="h-4 w-4 mr-2" />Add New</>}
         </Button>
       </div>
 
       {/* Summary Cards */}
       {loading ? (
         <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
-          {[0,1,2].map(i => <Card key={i}><CardContent className="pt-6"><Skeleton className="h-8 w-32 mb-2" /><Skeleton className="h-4 w-24" /></CardContent></Card>)}
+          {[0, 1, 2].map(i => (
+            <Card key={i}><CardContent className="pt-6">
+              <Skeleton className="h-8 w-32 mb-2" /><Skeleton className="h-4 w-24" />
+            </CardContent></Card>
+          ))}
         </div>
       ) : (
         <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
@@ -165,56 +189,62 @@ export default function ElectricRechargePage() {
         <Card>
           <CardHeader>
             <CardTitle className="text-base">Add New Recharge</CardTitle>
-            <CardDescription>All fields are required.</CardDescription>
+            <CardDescription>Fields marked * are required. Mobile number is optional.</CardDescription>
           </CardHeader>
           <CardContent>
             <form onSubmit={handleSubmit} className="grid grid-cols-1 sm:grid-cols-2 gap-4">
               <div className="space-y-2">
+                <Label htmlFor="customerName">Customer Name *</Label>
+                <Input id="customerName" placeholder="e.g. Suresh Gupta"
+                  value={customerName} onChange={e => setCustomerName(e.target.value)} required />
+              </div>
+              <div className="space-y-2">
+                <Label htmlFor="consumerNumber">Consumer Number *</Label>
+                <Input id="consumerNumber" placeholder="Electricity consumer/account number"
+                  value={consumerNumber} onChange={e => setConsumerNumber(e.target.value)} required />
+              </div>
+              <div className="space-y-2">
+                <Label htmlFor="mobile">Mobile Number</Label>
+                <Input id="mobile" placeholder="10-digit number (optional)"
+                  value={mobile}
+                  onChange={e => setMobile(e.target.value.replace(/\D/g, '').slice(0, 10))}
+                  maxLength={10} inputMode="numeric" />
+              </div>
+              <div className="space-y-2">
                 <Label htmlFor="rechargeAmount">Recharge Amount (₹) *</Label>
-                <Input id="rechargeAmount" type="number" min="1" step="1" placeholder="Amount customer paid"
+                <Input id="rechargeAmount" type="number" min="1" step="1" placeholder="Amount paid by customer"
                   value={rechargeAmount} onChange={e => setRechargeAmount(e.target.value)} required />
               </div>
               <div className="space-y-2">
                 <Label htmlFor="profitMargin">Profit Margin (₹) *</Label>
-                <Input id="profitMargin" type="number" min="0" step="1" placeholder="Commission earned"
+                <Input id="profitMargin" type="number" min="0" step="1" placeholder="Commission/profit earned"
                   value={profitMargin} onChange={e => setProfitMargin(e.target.value)} required />
-              </div>
-              <div className="space-y-2">
-                <Label htmlFor="transferredToName">Transferred To — Name *</Label>
-                <Input id="transferredToName" placeholder="Name of agent/provider"
-                  value={transferredToName} onChange={e => setTransferredToName(e.target.value)} required />
-              </div>
-              <div className="space-y-2">
-                <Label htmlFor="transferredToNumber">Transferred To — Mobile/Account No. *</Label>
-                <Input id="transferredToNumber" placeholder="Mobile or account number"
-                  value={transferredToNumber} onChange={e => setTransferredToNumber(e.target.value)} required />
-              </div>
-              <div className="space-y-2">
-                <Label htmlFor="transferredAmount">Transferred Amount (₹) *</Label>
-                <Input id="transferredAmount" type="number" min="0" step="1" placeholder="Actual amount transferred out"
-                  value={transferredAmount} onChange={e => setTransferredAmount(e.target.value)} required />
               </div>
               <div className="flex items-end gap-2">
                 <Button type="submit" disabled={submitting} className="w-full">
-                  {submitting ? <><Loader2 className="h-4 w-4 animate-spin mr-2" />Saving…</> : 'Save Recharge'}
+                  {submitting
+                    ? <><Loader2 className="h-4 w-4 animate-spin mr-2" />Saving…</>
+                    : 'Save Recharge'}
                 </Button>
-                <Button type="button" variant="ghost" onClick={() => setShowForm(false)} className="shrink-0">Cancel</Button>
+                <Button type="button" variant="ghost" onClick={() => { resetForm(); setShowForm(false); }} className="shrink-0">
+                  Cancel
+                </Button>
               </div>
             </form>
           </CardContent>
         </Card>
       )}
 
-      {/* Search & Filter + List */}
+      {/* Search + Filter + List */}
       <Card>
         <CardHeader className="pb-3">
           <div className="flex flex-col sm:flex-row gap-3">
             <div className="relative flex-1">
               <Search className="absolute left-3 top-2.5 h-4 w-4 text-muted-foreground" />
-              <Input className="pl-9" placeholder="Search by transferred-to name or number…"
+              <Input className="pl-9" placeholder="Search by name, consumer number, or mobile…"
                 value={search} onChange={e => setSearch(e.target.value)} />
             </div>
-            <div className="flex items-center gap-2">
+            <div className="flex items-center gap-2 flex-wrap">
               <CalendarRange className="h-4 w-4 text-muted-foreground shrink-0" />
               <Input type="date" className="w-36" value={startDate} onChange={e => setStartDate(e.target.value)} />
               <span className="text-muted-foreground text-sm">–</span>
@@ -229,7 +259,9 @@ export default function ElectricRechargePage() {
         </CardHeader>
         <CardContent className="pt-0">
           {loading ? (
-            <div className="space-y-3">{[0,1,2].map(i => <Skeleton key={i} className="h-12 w-full" />)}</div>
+            <div className="space-y-3">
+              {[0, 1, 2].map(i => <Skeleton key={i} className="h-12 w-full" />)}
+            </div>
           ) : filtered.length === 0 ? (
             <div className="text-center py-12 text-muted-foreground">
               <Zap className="h-10 w-10 mx-auto mb-3 opacity-20" />
@@ -240,12 +272,12 @@ export default function ElectricRechargePage() {
               <table className="w-full text-sm">
                 <thead>
                   <tr className="border-b text-muted-foreground">
-                    <th className="text-left py-2 pr-4 font-medium">Date & Time</th>
+                    <th className="text-left py-2 pr-4 font-medium whitespace-nowrap">Date & Time</th>
+                    <th className="text-left py-2 pr-4 font-medium">Customer</th>
+                    <th className="text-left py-2 pr-4 font-medium">Consumer No.</th>
+                    <th className="text-left py-2 pr-4 font-medium">Mobile</th>
                     <th className="text-right py-2 pr-4 font-medium">Recharge ₹</th>
                     <th className="text-right py-2 pr-4 font-medium">Profit ₹</th>
-                    <th className="text-left py-2 pr-4 font-medium">Transferred To</th>
-                    <th className="text-left py-2 pr-4 font-medium">Number</th>
-                    <th className="text-right py-2 pr-4 font-medium">Transferred ₹</th>
                     <th className="text-left py-2 font-medium">Added By</th>
                   </tr>
                 </thead>
@@ -255,11 +287,11 @@ export default function ElectricRechargePage() {
                       <td className="py-3 pr-4 text-muted-foreground whitespace-nowrap">
                         {format(entry.createdAt.toDate(), 'dd MMM yyyy HH:mm')}
                       </td>
+                      <td className="py-3 pr-4 font-medium">{entry.customerName}</td>
+                      <td className="py-3 pr-4 text-muted-foreground font-mono text-xs">{entry.consumerNumber}</td>
+                      <td className="py-3 pr-4 text-muted-foreground">{entry.mobile || '—'}</td>
                       <td className="py-3 pr-4 text-right font-semibold tabular-nums">{formatCurrency(entry.rechargeAmount)}</td>
                       <td className="py-3 pr-4 text-right font-medium text-green-700 tabular-nums">{formatCurrency(entry.profitMargin)}</td>
-                      <td className="py-3 pr-4">{entry.transferredToName}</td>
-                      <td className="py-3 pr-4 text-muted-foreground">{entry.transferredToNumber}</td>
-                      <td className="py-3 pr-4 text-right tabular-nums">{formatCurrency(entry.transferredAmount)}</td>
                       <td className="py-3 text-muted-foreground text-xs italic">{entry.addedBy}</td>
                     </tr>
                   ))}

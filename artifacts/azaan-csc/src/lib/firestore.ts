@@ -393,11 +393,11 @@ export const subscribeToAepsWithdrawals = (
 
 export interface ElectricRecharge {
   id?: string;
+  customerName: string;
+  consumerNumber: string;
+  mobile?: string;       // optional
   rechargeAmount: number;
   profitMargin: number;
-  transferredToName: string;
-  transferredToNumber: string;
-  transferredAmount: number;
   createdAt: Timestamp;
   addedBy: string;
 }
@@ -407,7 +407,7 @@ export const createElectricRecharge = async (
 ): Promise<void> => {
   if (!db) throw new Error('Firebase not configured');
   await addDoc(collection(db, 'electricRecharges'), {
-    ...data,
+    ...stripUndefined(data as Record<string, unknown>),
     createdAt: Timestamp.now(),
   });
 };
@@ -428,12 +428,10 @@ export const subscribeToElectricRecharges = (
 
 export interface MoneyTransfer {
   id?: string;
-  senderName: string;
-  senderMobile: string;
-  recipientName: string;
-  recipientNumber: string;
-  transferAmount: number;
-  commission: number;
+  name: string;
+  mobileOrAccount: string;
+  amount: number;
+  profitMargin: number;
   createdAt: Timestamp;
   addedBy: string;
 }
