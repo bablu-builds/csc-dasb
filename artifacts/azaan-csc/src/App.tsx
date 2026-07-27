@@ -19,13 +19,8 @@ import PendingWorkPage from '@/pages/PendingWorkPage';
 import ReportsPage from '@/pages/ReportsPage';
 import SettingsPage from '@/pages/SettingsPage';
 import DeletedItemsPage from '@/pages/DeletedItemsPage';
-<<<<<<< HEAD
-import AepsPage from '@/pages/AepsPage';
-import RechargePage from '@/pages/RechargePage';
-=======
 import AepsWithdrawalPage from '@/pages/AepsWithdrawalPage';
 import ElectricRechargePage from '@/pages/ElectricRechargePage';
->>>>>>> df8f396511d08dcfa40563be85a66b3e2357f466
 import MoneyTransferPage from '@/pages/MoneyTransferPage';
 
 const queryClient = new QueryClient();
@@ -46,13 +41,8 @@ function AuthenticatedApp() {
             </Route>
           <Route path="/settings" component={SettingsPage} />
           <Route path="/deleted" component={DeletedItemsPage} />
-<<<<<<< HEAD
-          <Route path="/aeps" component={AepsPage} />
-          <Route path="/recharge" component={RechargePage} />
-=======
           <Route path="/aeps" component={AepsWithdrawalPage} />
           <Route path="/electric-recharge" component={ElectricRechargePage} />
->>>>>>> df8f396511d08dcfa40563be85a66b3e2357f466
           <Route path="/money-transfer" component={MoneyTransferPage} />
           <Route component={NotFound} />
         </Switch>

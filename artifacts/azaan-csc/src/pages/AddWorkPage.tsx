@@ -11,23 +11,15 @@ import { Timestamp } from 'firebase/firestore';
 export default function AddWorkPage() {
   const [, setLocation] = useLocation();
   const { toast } = useToast();
-<<<<<<< HEAD
-  const { displayName } = useAuth();
-=======
   const { userProfile } = useAuth();
->>>>>>> df8f396511d08dcfa40563be85a66b3e2357f466
   const [isSubmitting, setIsSubmitting] = useState(false);
 
   const handleSubmit = async (data: Omit<WorkEntryFormData, 'date'> & { date: Timestamp }) => {
     setIsSubmitting(true);
     try {
-<<<<<<< HEAD
-      await createWorkEntry(data, displayName);
-=======
       // Record who added this entry — set at creation, never editable afterward
       const addedBy = userProfile?.displayName || userProfile?.email || 'Unknown';
       await createWorkEntry({ ...data, addedBy });
->>>>>>> df8f396511d08dcfa40563be85a66b3e2357f466
       toast({
         title: "Work Added Successfully",
         description: `${data.customerName} — ${data.category}`,

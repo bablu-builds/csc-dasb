@@ -1,6 +1,6 @@
 import {
   collection, doc, getDoc, getDocs, setDoc, query, orderBy, where, limit,
-  onSnapshot, addDoc, updateDoc, deleteDoc, writeBatch, Timestamp,
+  onSnapshot, addDoc, updateDoc, deleteDoc, writeBatch, Timestamp, arrayUnion,
 } from 'firebase/firestore';
 import { initializeApp, deleteApp } from 'firebase/app';
 import { getAuth, createUserWithEmailAndPassword, signOut as firebaseSignOut } from 'firebase/auth';
@@ -107,6 +107,12 @@ export const revokeStaffAccess = async (uid: string): Promise<void> => {
 
 // ─── WORK ENTRIES ────────────────────────────────────────────────────────────
 
+export interface PaymentRecord {
+  amount: number;
+  paidAt?: Timestamp;
+  addedBy?: string;
+}
+
 export interface WorkEntry {
   id?: string;
   customerName: string;
@@ -118,6 +124,7 @@ export interface WorkEntry {
   paidAmount: number;
   dueAmount: number;
   challanAmount?: number;
+  payments?: PaymentRecord[];
   status: 'Pending' | 'Completed' | 'Rejected';
   address?: string;
   createdAt: Timestamp;
@@ -212,6 +219,31 @@ export const deleteWorkEntry = async (id: string) => {
 export const restoreWorkEntry = async (id: string) => {
   if (!db) throw new Error("Firebase not configured");
   return updateDoc(doc(db, 'workEntries', id), { isDeleted: false, deletedAt: null });
+};
+
+/**
+ * Record an additional payment against a work entry.
+ * Appends to the `payments` array and keeps `paidAmount` in sync.
+ */
+export const addPaymentToEntry = async (
+  id: string,
+  payment: { amount: number; addedBy?: string },
+  totalAmount: number,
+  currentPaidAmount: number
+): Promise<void> => {
+  if (!db) throw new Error("Firebase not configured");
+  const newPaidAmount = currentPaidAmount + payment.amount;
+  const newDueAmount = Math.max(0, totalAmount - newPaidAmount);
+  const paymentRecord: PaymentRecord = {
+    amount: payment.amount,
+    paidAt: Timestamp.now(),
+    addedBy: payment.addedBy,
+  };
+  await updateDoc(doc(db, 'workEntries', id), {
+    payments: arrayUnion(paymentRecord),
+    paidAmount: newPaidAmount,
+    dueAmount: newDueAmount,
+  });
 };
 
 /** Active entries only — excludes any document with isDeleted === true. */

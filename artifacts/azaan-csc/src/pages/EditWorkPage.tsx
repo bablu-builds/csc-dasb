@@ -4,11 +4,7 @@ import { updateWorkEntry, subscribeToWorkEntries, WorkEntry, addPaymentToEntry }
 import { useAuth } from '@/contexts/AuthContext';
 import { useToast } from '@/hooks/use-toast';
 import { WorkEntryForm, WorkEntryFormData } from '@/components/WorkEntryForm';
-<<<<<<< HEAD
-import { ArrowLeft, Loader2, Clock, CheckCircle2, XCircle, Plus, IndianRupee, CreditCard } from 'lucide-react';
-=======
-import { ArrowLeft, Loader2, Clock, CheckCircle2, XCircle, UserCircle2 } from 'lucide-react';
->>>>>>> df8f396511d08dcfa40563be85a66b3e2357f466
+import { ArrowLeft, Loader2, Clock, CheckCircle2, XCircle, Plus, IndianRupee, CreditCard, UserCircle2 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Timestamp } from 'firebase/firestore';
@@ -93,16 +89,15 @@ export default function EditWorkPage() {
     date: entry.date.toDate(),
   };
 
-<<<<<<< HEAD
   // Payment history — merge legacy paidAmount with payments array
   const payments = entry.payments ?? [];
   const hasPaymentHistory = payments.length > 0;
-=======
+
+  // Duration calculation for completed/rejected entries
   const resolvedAt = entry.status === 'Completed' ? entry.completedAt : entry.status === 'Rejected' ? entry.rejectedAt : null;
   const duration = resolvedAt && entry.createdAt
     ? formatDistanceStrict(resolvedAt.toDate(), entry.createdAt.toDate())
     : null;
->>>>>>> df8f396511d08dcfa40563be85a66b3e2357f466
 
   return (
     <div className="max-w-3xl mx-auto space-y-6 animate-fade-in-up">
@@ -117,7 +112,36 @@ export default function EditWorkPage() {
         </div>
       </div>
 
-<<<<<<< HEAD
+      {/* Entry metadata — read-only info strip */}
+      <div className="bg-muted/40 border rounded-lg px-4 py-3 text-xs text-muted-foreground flex flex-wrap gap-x-6 gap-y-1.5">
+        {entry.addedBy && (
+          <span className="flex items-center gap-1.5">
+            <UserCircle2 className="h-3.5 w-3.5" />
+            Added by: <span className="font-medium text-foreground">{entry.addedBy}</span>
+          </span>
+        )}
+        {entry.createdAt && (
+          <span className="flex items-center gap-1.5">
+            <Clock className="h-3.5 w-3.5" />
+            Created: {format(entry.createdAt.toDate(), 'dd MMM yyyy, h:mm a')}
+          </span>
+        )}
+        {entry.status === 'Completed' && entry.completedAt && (
+          <span className="flex items-center gap-1.5 text-green-700">
+            <CheckCircle2 className="h-3.5 w-3.5" />
+            Completed: {format(entry.completedAt.toDate(), 'dd MMM yyyy, h:mm a')}
+            {duration && <span className="text-muted-foreground ml-1">(in {duration})</span>}
+          </span>
+        )}
+        {entry.status === 'Rejected' && entry.rejectedAt && (
+          <span className="flex items-center gap-1.5 text-red-700">
+            <XCircle className="h-3.5 w-3.5" />
+            Rejected: {format(entry.rejectedAt.toDate(), 'dd MMM yyyy, h:mm a')}
+            {duration && <span className="text-muted-foreground ml-1">(after {duration})</span>}
+          </span>
+        )}
+      </div>
+
       {/* Payment history card */}
       <div className="bg-card border rounded-xl shadow-card">
         <div className="px-6 py-4 border-b flex items-center justify-between">
@@ -170,44 +194,6 @@ export default function EditWorkPage() {
             <span className="font-bold text-emerald-700">{formatCurrency(entry.paidAmount)}</span>
           </div>
         )}
-=======
-      {/* Entry metadata — read-only info strip */}
-      <div className="bg-muted/40 border rounded-lg px-4 py-3 text-xs text-muted-foreground flex flex-wrap gap-x-6 gap-y-1.5">
-        {entry.addedBy && (
-          <span className="flex items-center gap-1.5">
-            <UserCircle2 className="h-3.5 w-3.5" />
-            Added by: <span className="font-medium text-foreground">{entry.addedBy}</span>
-          </span>
-        )}
-        {entry.createdAt && (
-          <span className="flex items-center gap-1.5">
-            <Clock className="h-3.5 w-3.5" />
-            Created: {format(entry.createdAt.toDate(), 'dd MMM yyyy, h:mm a')}
-          </span>
-        )}
-        {entry.status === 'Completed' && entry.completedAt && (
-          <span className="flex items-center gap-1.5 text-green-700">
-            <CheckCircle2 className="h-3.5 w-3.5" />
-            Completed: {format(entry.completedAt.toDate(), 'dd MMM yyyy, h:mm a')}
-            {duration && <span className="text-muted-foreground ml-1">(in {duration})</span>}
-          </span>
-        )}
-        {entry.status === 'Rejected' && entry.rejectedAt && (
-          <span className="flex items-center gap-1.5 text-red-700">
-            <XCircle className="h-3.5 w-3.5" />
-            Rejected: {format(entry.rejectedAt.toDate(), 'dd MMM yyyy, h:mm a')}
-            {duration && <span className="text-muted-foreground ml-1">(after {duration})</span>}
-          </span>
-        )}
-      </div>
-
-      <div className="bg-card border rounded-xl p-6 shadow-sm">
-        <WorkEntryForm 
-          initialData={initialData} 
-          onSubmit={handleSubmit} 
-          isSubmitting={isSubmitting} 
-        />
->>>>>>> df8f396511d08dcfa40563be85a66b3e2357f466
       </div>
 
       {/* Timeline */}

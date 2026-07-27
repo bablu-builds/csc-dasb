@@ -1,21 +1,14 @@
 import { useState, useEffect } from 'react';
-<<<<<<< HEAD
 import {
   subscribeToWorkEntries, WorkEntry,
   subscribeToAepsWithdrawals, AepsWithdrawal,
   subscribeToElectricRecharges, ElectricRecharge,
   subscribeToMoneyTransfers, MoneyTransfer,
 } from '@/lib/firestore';
-import { isToday, isThisWeek, isThisMonth, format, isWithinInterval, startOfDay, endOfDay, parseISO } from 'date-fns';
-import { Download, BarChart2, TrendingUp, IndianRupee, XCircle, Wallet, Zap, ArrowRightLeft, Receipt, Target } from 'lucide-react';
-import { Card } from '@/components/ui/card';
-=======
-import { subscribeToWorkEntries, WorkEntry } from '@/lib/firestore';
 import { useAuth } from '@/contexts/AuthContext';
-import { isToday, isThisWeek, isThisMonth, format } from 'date-fns';
-import { ShieldCheck, Download, BarChart2, TrendingUp, IndianRupee, XCircle } from 'lucide-react';
+import { isToday, isThisWeek, isThisMonth, format, isWithinInterval, startOfDay, endOfDay, parseISO } from 'date-fns';
+import { Download, BarChart2, TrendingUp, IndianRupee, XCircle, Wallet, Zap, ArrowRightLeft, Receipt, Target, ShieldCheck } from 'lucide-react';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
->>>>>>> df8f396511d08dcfa40563be85a66b3e2357f466
 import { Skeleton } from '@/components/ui/skeleton';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -70,22 +63,17 @@ function downloadCSV(filename: string, headers: string[], rows: (string | number
 }
 
 export default function ReportsPage() {
+  const { role } = useAuth();
   const [workEntries, setWorkEntries] = useState<WorkEntry[]>([]);
   const [aepsEntries, setAepsEntries] = useState<AepsWithdrawal[]>([]);
   const [rechargeEntries, setRechargeEntries] = useState<ElectricRecharge[]>([]);
   const [transferEntries, setTransferEntries] = useState<MoneyTransfer[]>([]);
   const [loading, setLoading] = useState(true);
-<<<<<<< HEAD
   const [period, setPeriod] = useState<Period>('month');
   const [customFrom, setCustomFrom] = useState('');
   const [customTo, setCustomTo] = useState('');
-=======
-  const { role } = useAuth();
->>>>>>> df8f396511d08dcfa40563be85a66b3e2357f466
 
-  // Only subscribe when user is the owner (role may be null while loading)
   useEffect(() => {
-<<<<<<< HEAD
     let done = 0;
     const finish = () => { done++; if (done === 4) setLoading(false); };
     const u1 = subscribeToWorkEntries(d => { setWorkEntries(d); finish(); });
@@ -94,14 +82,6 @@ export default function ReportsPage() {
     const u4 = subscribeToMoneyTransfers(d => { setTransferEntries(d); finish(); });
     return () => { u1(); u2(); u3(); u4(); };
   }, []);
-=======
-    if (role !== 'owner') { setLoading(false); return; }
-    const unsubscribe = subscribeToWorkEntries((data) => {
-      setEntries(data);
-      setLoading(false);
-    });
-    return () => unsubscribe();
-  }, [role]);
 
   // Staff cannot see the Reports page — must be after all hooks
   if (role === 'staff') {
@@ -117,7 +97,6 @@ export default function ReportsPage() {
       </div>
     );
   }
->>>>>>> df8f396511d08dcfa40563be85a66b3e2357f466
 
   // Filter by period
   const inPeriod = (date: Date): boolean => {
@@ -208,8 +187,6 @@ export default function ReportsPage() {
     ].join(','));
     downloadCSV('transfer_report', headers, rows);
   };
-
-  const tab = "text-xs font-medium";
 
   return (
     <div className="space-y-6 animate-fade-in-up">
