@@ -1,10 +1,14 @@
 import { useState, useEffect } from 'react';
+<<<<<<< HEAD
 import {
   WorkEntry, subscribeToWorkEntries, updateWorkEntry,
   subscribeToAepsWithdrawals, AepsWithdrawal,
   subscribeToElectricRecharges, ElectricRecharge,
   subscribeToMoneyTransfers, MoneyTransfer,
 } from '@/lib/firestore';
+=======
+import { WorkEntry, subscribeToWorkEntries, updateWorkEntry } from '@/lib/firestore';
+>>>>>>> df8f396511d08dcfa40563be85a66b3e2357f466
 import { useAuth } from '@/contexts/AuthContext';
 import { isToday, isThisMonth, differenceInDays, subDays, format } from 'date-fns';
 import { Card } from '@/components/ui/card';
@@ -105,6 +109,12 @@ export default function DashboardPage() {
   const [completingId, setCompletingId] = useState<string | null>(null);
   const { isOwner, canAccessFinancialServices } = useAuth();
   const { toast } = useToast();
+<<<<<<< HEAD
+=======
+  const [, setLocation] = useLocation();
+  const { role } = useAuth();
+  const isOwner = role === 'owner';
+>>>>>>> df8f396511d08dcfa40563be85a66b3e2357f466
 
   useEffect(() => {
     let resolved = 0;
@@ -119,6 +129,7 @@ export default function DashboardPage() {
 
   const today = new Date();
 
+<<<<<<< HEAD
   // Work entry stats
   const todayWork = workEntries.filter(e => isToday(e.date.toDate()) && e.status !== 'Rejected');
   const todaysEarning = todayWork.reduce((s, e) => s + e.paidAmount, 0);
@@ -127,6 +138,17 @@ export default function DashboardPage() {
   const totalDue = workEntries.reduce((s, e) => s + e.dueAmount, 0);
   const rejectedCount = workEntries.filter(e => e.status === 'Rejected').length;
   const uniqueCustomers = new Set(workEntries.map(e => e.mobile)).size;
+=======
+  // Stats (computed for all roles, but only rendered for owners)
+  const todaysEarnings = entries.filter(e => isToday(e.date.toDate()) && e.status !== 'Rejected').reduce((s, e) => s + e.paidAmount, 0);
+  const monthEarnings = entries.filter(e => isThisMonth(e.date.toDate()) && e.status !== 'Rejected').reduce((s, e) => s + e.paidAmount, 0);
+  const uniqueCustomers = new Set(entries.map(e => e.mobile)).size;
+  const pendingCount = entries.filter(e => e.status === 'Pending').length;
+  const totalDue = entries.reduce((s, e) => s + e.dueAmount, 0);
+  const rejectedEntries = entries.filter(e => e.status === 'Rejected');
+  const rejectedCount = rejectedEntries.length;
+  const totalRefunded = rejectedEntries.reduce((s, e) => s + (e.refundAmount || 0), 0);
+>>>>>>> df8f396511d08dcfa40563be85a66b3e2357f466
 
   // Combined profit (owner only)
   const todayAepsProfit = aepsEntries.filter(e => isToday(e.createdAt.toDate())).reduce((s, e) => s + e.profitMargin, 0);
@@ -150,7 +172,11 @@ export default function DashboardPage() {
     .filter(e => e.daysPending >= 3 || e.dueAmount > 0)
     .sort((a, b) => b.daysPending - a.daysPending);
 
+<<<<<<< HEAD
   // 7-day chart (earnings only)
+=======
+  // Last 7 days earnings chart (owner only)
+>>>>>>> df8f396511d08dcfa40563be85a66b3e2357f466
   const chartData = Array.from({ length: 7 }).map((_, i) => {
     const day = subDays(today, 6 - i);
     const dayStr = format(day, 'dd MMM');
@@ -235,6 +261,7 @@ export default function DashboardPage() {
         </div>
       </section>
 
+<<<<<<< HEAD
       {/* ── OWNER: PROFIT SUMMARY ───────────────────────────────── */}
       {isOwner && (
         <section className="animate-fade-in-up">
@@ -246,6 +273,135 @@ export default function DashboardPage() {
             <StatCard label="Month's Total Profit" value={formatCurrency(monthTotalProfit)}
               sub={`Work + AEPS + Recharge + Transfer combined`}
               icon={IndianRupee} gradient="stat-gradient-indigo" />
+=======
+      {/* ── SUMMARY CARDS — owner only ────────────────────────────────── */}
+      {isOwner && (
+        <div className="grid grid-cols-2 md:grid-cols-3 xl:grid-cols-6 gap-4">
+          <Card className="bg-primary/5 border-primary/20 shadow-sm hover:shadow-md transition-shadow">
+            <CardHeader className="flex flex-row items-center justify-between pb-2">
+              <CardTitle className="text-xs font-medium text-primary uppercase tracking-wide">Today's Earning</CardTitle>
+              <div className="h-8 w-8 rounded-full bg-primary/10 flex items-center justify-center">
+                <IndianRupee className="h-4 w-4 text-primary" />
+              </div>
+            </CardHeader>
+            <CardContent>
+              <div className="text-2xl font-bold text-primary">{formatCurrency(todaysEarnings)}</div>
+              <p className="text-xs text-muted-foreground mt-1">Today</p>
+            </CardContent>
+          </Card>
+
+          <Card className="shadow-sm hover:shadow-md transition-shadow">
+            <CardHeader className="flex flex-row items-center justify-between pb-2">
+              <CardTitle className="text-xs font-medium uppercase tracking-wide text-muted-foreground">This Month</CardTitle>
+              <div className="h-8 w-8 rounded-full bg-blue-50 flex items-center justify-center">
+                <TrendingUp className="h-4 w-4 text-blue-600" />
+              </div>
+            </CardHeader>
+            <CardContent>
+              <div className="text-2xl font-bold">{formatCurrency(monthEarnings)}</div>
+              <p className="text-xs text-muted-foreground mt-1">Monthly earned</p>
+            </CardContent>
+          </Card>
+
+          <Card className="shadow-sm hover:shadow-md transition-shadow">
+            <CardHeader className="flex flex-row items-center justify-between pb-2">
+              <CardTitle className="text-xs font-medium uppercase tracking-wide text-muted-foreground">Customers</CardTitle>
+              <div className="h-8 w-8 rounded-full bg-purple-50 flex items-center justify-center">
+                <Users className="h-4 w-4 text-purple-600" />
+              </div>
+            </CardHeader>
+            <CardContent>
+              <div className="text-2xl font-bold">{uniqueCustomers}</div>
+              <p className="text-xs text-muted-foreground mt-1">Unique customers</p>
+            </CardContent>
+          </Card>
+
+          <Card className="shadow-sm hover:shadow-md transition-shadow">
+            <CardHeader className="flex flex-row items-center justify-between pb-2">
+              <CardTitle className="text-xs font-medium uppercase tracking-wide text-muted-foreground">Pending</CardTitle>
+              <div className="h-8 w-8 rounded-full bg-amber-50 flex items-center justify-center">
+                <Clock className="h-4 w-4 text-amber-600" />
+              </div>
+            </CardHeader>
+            <CardContent>
+              <div className="text-2xl font-bold text-amber-700">{pendingCount}</div>
+              <p className="text-xs text-muted-foreground mt-1">Incomplete work</p>
+            </CardContent>
+          </Card>
+
+          <Card className={`shadow-sm hover:shadow-md transition-shadow ${totalDue > 0 ? 'bg-red-50 border-red-200' : ''}`}>
+            <CardHeader className="flex flex-row items-center justify-between pb-2">
+              <CardTitle className={`text-xs font-medium uppercase tracking-wide ${totalDue > 0 ? 'text-red-700' : 'text-muted-foreground'}`}>Total Due</CardTitle>
+              <div className={`h-8 w-8 rounded-full flex items-center justify-center ${totalDue > 0 ? 'bg-red-100' : 'bg-muted'}`}>
+                <AlertTriangle className={`h-4 w-4 ${totalDue > 0 ? 'text-red-600' : 'text-muted-foreground'}`} />
+              </div>
+            </CardHeader>
+            <CardContent>
+              <div className={`text-2xl font-bold ${totalDue > 0 ? 'text-red-700' : ''}`}>{formatCurrency(totalDue)}</div>
+              <p className={`text-xs mt-1 ${totalDue > 0 ? 'text-red-500' : 'text-muted-foreground'}`}>Outstanding dues</p>
+            </CardContent>
+          </Card>
+
+          <Card className="shadow-sm hover:shadow-md transition-shadow">
+            <CardHeader className="flex flex-row items-center justify-between pb-2">
+              <CardTitle className="text-xs font-medium uppercase tracking-wide text-muted-foreground">Rejected</CardTitle>
+              <div className="h-8 w-8 rounded-full bg-slate-100 flex items-center justify-center">
+                <XCircle className="h-4 w-4 text-slate-500" />
+              </div>
+            </CardHeader>
+            <CardContent>
+              <div className="text-2xl font-bold text-slate-700">{rejectedCount}</div>
+              <p className="text-xs mt-1 text-slate-500">
+                {totalRefunded > 0 ? `${formatCurrency(totalRefunded)} refunded` : 'No refunds'}
+              </p>
+            </CardContent>
+          </Card>
+        </div>
+      )}
+
+      {/* ── EARNINGS CHART — owner only ───────────────────────────────── */}
+      {isOwner && (
+        <Card className="shadow-sm">
+          <CardHeader>
+            <CardTitle className="text-base font-semibold flex items-center gap-2">
+              <TrendingUp className="h-4 w-4 text-primary" />
+              Earnings — Last 7 Days
+            </CardTitle>
+          </CardHeader>
+          <CardContent>
+            {chartData.every(d => d.earned === 0) ? (
+              <div className="h-48 flex flex-col items-center justify-center text-muted-foreground">
+                <FileText className="h-10 w-10 mb-2 opacity-20" />
+                <p className="text-sm">No earnings data yet — add work entries to see the chart</p>
+              </div>
+            ) : (
+              <ResponsiveContainer width="100%" height={200}>
+                <BarChart data={chartData} margin={{ top: 4, right: 8, left: 0, bottom: 0 }}>
+                  <CartesianGrid strokeDasharray="3 3" className="opacity-40" />
+                  <XAxis dataKey="day" tick={{ fontSize: 11 }} tickLine={false} />
+                  <YAxis tick={{ fontSize: 11 }} tickLine={false} axisLine={false}
+                    tickFormatter={v => v === 0 ? '0' : `₹${v >= 1000 ? `${(v / 1000).toFixed(1)}k` : v}`} />
+                  <Tooltip formatter={(v: number) => [formatCurrency(v), 'Earned']} contentStyle={{ borderRadius: '8px', fontSize: '12px' }} />
+                  <Bar dataKey="earned" fill="hsl(221 79% 48%)" radius={[4, 4, 0, 0]} />
+                </BarChart>
+              </ResponsiveContainer>
+            )}
+          </CardContent>
+        </Card>
+      )}
+
+      {/* ── BOTTOM ROW: Pending + Recent Activity ─────────────────────── */}
+      <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+        <div>
+          <div className="flex justify-between items-center mb-3">
+            <h2 className="text-base font-semibold flex items-center gap-2">
+              <AlertTriangle className="h-4 w-4 text-amber-500" />
+              All Pending Work
+            </h2>
+            <Link href="/pending">
+              <Button variant="outline" size="sm">View All</Button>
+            </Link>
+>>>>>>> df8f396511d08dcfa40563be85a66b3e2357f466
           </div>
           {/* Activity breakdown */}
           <div className="mt-4 grid grid-cols-2 md:grid-cols-4 gap-3">
@@ -341,10 +497,22 @@ export default function DashboardPage() {
                   <div key={entry.id} className="px-4 py-3 flex items-center justify-between gap-3 hover:bg-muted/20 transition-colors">
                     <div className="min-w-0">
                       <div className="font-medium text-sm truncate">{entry.customerName}</div>
+<<<<<<< HEAD
                       <div className="flex items-center gap-1.5 mt-0.5">
                         <span className="text-xs text-muted-foreground truncate max-w-[120px]">{entry.category}</span>
                         <span className="text-muted-foreground">·</span>
+=======
+                      <div className="flex items-center gap-2 mt-0.5 flex-wrap">
+                        <span className="text-xs text-muted-foreground">{entry.category}</span>
+                        <span className="text-xs text-muted-foreground">·</span>
+>>>>>>> df8f396511d08dcfa40563be85a66b3e2357f466
                         <span className="text-xs text-muted-foreground">{format(entry.date.toDate(), 'dd MMM')}</span>
+                        {entry.addedBy && (
+                          <>
+                            <span className="text-xs text-muted-foreground">·</span>
+                            <span className="text-xs text-muted-foreground italic">{entry.addedBy}</span>
+                          </>
+                        )}
                       </div>
                     </div>
                     <div className="flex items-center gap-2 shrink-0">

@@ -1,0 +1,80 @@
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+
+    // ── Helper functions ─────────────────────────────────────────────────────
+
+    function isAuth() {
+      return request.auth != null;
+    }
+
+    function userDoc() {
+      return /databases/$(database)/documents/users/$(request.auth.uid);
+    }
+
+    function getRole() {
+      return exists(userDoc())
+        ? get(userDoc()).data.role
+        : null;
+    }
+
+    function isOwner() {
+      return isAuth() && getRole() == 'owner';
+    }
+
+    function isStaff() {
+      return isAuth() && getRole() == 'staff';
+    }
+
+    function isOwnerOrStaff() {
+      return isOwner() || isStaff();
+    }
+
+    // Staff with explicit financial-services permission, or the owner
+    function canAccessFinancial() {
+      return isOwner() || (isStaff() && get(userDoc()).data.canAccessFinancialServices == true);
+    }
+
+    // ── Work Entries — both owner and staff can read and write ───────────────
+    match /workEntries/{entryId} {
+      allow read, write: if isOwnerOrStaff();
+    }
+
+    // ── Categories — both can read; only owner can write ─────────────────────
+    match /categories/{catId} {
+      allow read: if isOwnerOrStaff();
+      allow write: if isOwner();
+    }
+
+    // ── Settings (shopSettings, categoriesSeeded, etc.) ──────────────────────
+    match /settings/{settingId} {
+      allow read: if isOwnerOrStaff();
+      allow write: if isOwner();
+    }
+
+    // ── Users collection ─────────────────────────────────────────────────────
+    match /users/{userId} {
+      allow read: if isAuth();
+      allow create: if isOwner()
+                    || (isAuth()
+                        && request.auth.uid == userId
+                        && !exists(/databases/$(database)/documents/users/$(request.auth.uid)));
+      allow update, delete: if isOwner();
+    }
+
+    // ── AEPS Withdrawals ─────────────────────────────────────────────────────
+    match /aepsWithdrawals/{id} {
+      allow read, write: if canAccessFinancial();
+    }
+
+    // ── Electric Recharges ────────────────────────────────────────────────────
+    match /electricRecharges/{id} {
+      allow read, write: if canAccessFinancial();
+    }
+
+    // ── Money Transfers ───────────────────────────────────────────────────────
+    match /moneyTransfers/{id} {
+      allow read, write: if canAccessFinancial();
+    }
+  }
+}
