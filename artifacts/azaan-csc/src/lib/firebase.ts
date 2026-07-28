@@ -1,5 +1,5 @@
 import { initializeApp } from 'firebase/app';
-import { getAuth } from 'firebase/auth';
+import { getAuth, setPersistence, browserSessionPersistence } from 'firebase/auth';
 import { getFirestore } from 'firebase/firestore';
 
 // These values come from your Firebase project settings.
@@ -34,6 +34,21 @@ export const app = isConfigured ? initializeApp(firebaseConfig) : null;
 export const auth = isConfigured ? getAuth(app!) : null;
 export const db = isConfigured ? getFirestore(app!) : null;
 export { isConfigured };
+
+/**
+ * A promise that resolves once Firebase Auth persistence has been set to
+ * browserSessionPersistence — meaning the session lives for the lifetime of
+ * the browser tab (survives refresh/navigation) but is cleared when the
+ * browser is fully closed and reopened.
+ *
+ * Import and await this before any signIn call so the persistence type is
+ * guaranteed to be set before credentials are committed to storage.
+ */
+export const authReady: Promise<void> = auth
+  ? setPersistence(auth, browserSessionPersistence).catch(err => {
+      console.warn('[Firebase] Could not set session persistence:', err);
+    }).then(() => {})
+  : Promise.resolve();
 
 /** Action code settings for Firebase email-link (passwordless) sign-in.
  *  The URL points back to this app so the link handler runs on load. */

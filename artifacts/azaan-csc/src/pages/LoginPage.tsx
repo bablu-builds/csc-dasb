@@ -5,7 +5,7 @@ import {
   signInWithEmailAndPassword, isSignInWithEmailLink, signInWithEmailLink,
   sendPasswordResetEmail,
 } from 'firebase/auth';
-import { auth } from '@/lib/firebase';
+import { auth, authReady } from '@/lib/firebase';
 import { useToast } from '@/hooks/use-toast';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -24,7 +24,7 @@ export default function LoginPage() {
   const [loading, setLoading] = useState(false);
   const [resetSent, setResetSent] = useState(false);
   const [sendingReset, setSendingReset] = useState(false);
-  const { isConfigured, user } = useAuth();
+  const { isConfigured, user, loading: authLoading } = useAuth();
   const { shopSettings } = useSettings();
   const [, setLocation] = useLocation();
   const { toast } = useToast();
@@ -35,11 +35,14 @@ export default function LoginPage() {
   const [emailLinkLoading, setEmailLinkLoading] = useState(false);
   const [needsEmailConfirm, setNeedsEmailConfirm] = useState(false);
 
-  // Redirect if already logged in
-  if (user) {
-    setLocation('/dashboard');
-    return null;
-  }
+  // Redirect once auth has finished initializing and user is confirmed logged-in.
+  // Using useEffect prevents calling setLocation during render (a React anti-pattern
+  // that can cause infinite re-renders and unexpected flashes).
+  useEffect(() => {
+    if (!authLoading && user) {
+      setLocation('/dashboard');
+    }
+  }, [user, authLoading, setLocation]);
 
   // Detect email link on mount
   useEffect(() => {
@@ -61,6 +64,8 @@ export default function LoginPage() {
     if (!auth || !db) return;
     setEmailLinkLoading(true);
     try {
+      // Ensure session persistence is set before committing credentials
+      await authReady;
       const result = await signInWithEmailLink(auth, signinEmail, window.location.href);
       window.localStorage.removeItem(EMAIL_LINK_KEY);
 
@@ -105,6 +110,8 @@ export default function LoginPage() {
     if (!auth) return;
     setLoading(true);
     try {
+      // Ensure session persistence is set before committing credentials
+      await authReady;
       await signInWithEmailAndPassword(auth, email, password);
       setLocation('/dashboard');
     } catch (err: any) {
@@ -130,6 +137,23 @@ export default function LoginPage() {
       setSendingReset(false);
     }
   };
+
+  // ── Auth initializing — show spinner so the login form never flashes ────────
+  // Firebase restores an existing session asynchronously. While it's doing so,
+  // `user` is null even though the user IS logged in. Without this guard the
+  // login form renders for a brief moment before the redirect happens.
+
+  if (authLoading) {
+    return (
+      <div className="min-h-[100dvh] flex items-center justify-center bg-background">
+        <Loader2 className="h-8 w-8 animate-spin text-primary" />
+      </div>
+    );
+  }
+
+  // If auth is resolved and user is confirmed logged-in, the useEffect above
+  // will navigate to /dashboard. Return null to avoid rendering the form.
+  if (user) return null;
 
   // ── Email-link completion UI ──────────────────────────────────────────────
 
