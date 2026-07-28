@@ -166,17 +166,29 @@ export const createWorkEntry = async (
   data: Omit<WorkEntry, 'id' | 'dueAmount' | 'createdAt' | 'completedAt' | 'rejectedAt'>
 ) => {
   if (!db) throw new Error("Firebase not configured");
+  const now = Timestamp.now();
   const dueAmount = data.status === 'Rejected' ? 0 : data.totalAmount - data.paidAmount;
-  const timestamps: Partial<WorkEntry> = { createdAt: Timestamp.now() };
-  if (data.status === 'Completed') timestamps.completedAt = Timestamp.now();
-  if (data.status === 'Rejected') timestamps.rejectedAt = Timestamp.now();
+  const timestamps: Partial<WorkEntry> = { createdAt: now };
+  if (data.status === 'Completed') timestamps.completedAt = now;
+  if (data.status === 'Rejected') timestamps.rejectedAt = now;
 
   const { rejectionReason, refundAmount, ...rest } = data;
   const rejectionFields = data.status === 'Rejected'
     ? stripUndefined({ rejectionReason, refundAmount } as Record<string, unknown>)
     : {};
 
-  return addDoc(collection(db, 'workEntries'), { ...rest, ...timestamps, dueAmount, ...rejectionFields });
+  // Seed the payments array from the initial paidAmount so payment history works from day one
+  const initialPayments: PaymentRecord[] = data.paidAmount > 0
+    ? [{ amount: data.paidAmount, paidAt: now, addedBy: data.addedBy ?? 'Unknown' }]
+    : [];
+
+  return addDoc(collection(db, 'workEntries'), {
+    ...rest,
+    ...timestamps,
+    dueAmount,
+    ...rejectionFields,
+    payments: initialPayments,
+  });
 };
 
 export const updateWorkEntry = async (

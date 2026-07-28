@@ -10,8 +10,8 @@ import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Skeleton } from '@/components/ui/skeleton';
 import {
-  Fingerprint, IndianRupee, Hash, CalendarRange, Search, ShieldCheck,
-  PlusCircle, ChevronDown, ChevronUp, Loader2, X,
+  Fingerprint, IndianRupee, TrendingUp, Hash, CalendarRange, Search, ShieldCheck,
+  PlusCircle, ChevronUp, Loader2, X,
 } from 'lucide-react';
 
 const INDIAN_BANKS = [
@@ -41,7 +41,6 @@ export default function AepsWithdrawalPage() {
   const { userProfile, canAccessFinancialServices } = useAuth();
   const { toast } = useToast();
 
-  // Data
   const [entries, setEntries] = useState<AepsWithdrawal[]>([]);
   const [loading, setLoading] = useState(true);
 
@@ -51,6 +50,7 @@ export default function AepsWithdrawalPage() {
   const [bankName, setBankName] = useState('');
   const [mobile, setMobile] = useState('');
   const [amount, setAmount] = useState('');
+  const [profitMargin, setProfitMargin] = useState('');
   const [submitting, setSubmitting] = useState(false);
 
   // Filter state
@@ -58,7 +58,6 @@ export default function AepsWithdrawalPage() {
   const [startDate, setStartDate] = useState('');
   const [endDate, setEndDate] = useState('');
 
-  // Subscribe only when permitted
   useEffect(() => {
     if (!canAccessFinancialServices) { setLoading(false); return; }
     const unsub = subscribeToAepsWithdrawals((data) => {
@@ -68,13 +67,15 @@ export default function AepsWithdrawalPage() {
     return () => unsub();
   }, [canAccessFinancialServices]);
 
-  // Permission guard — must be after all hooks
+  // Permission guard — after all hooks
   if (!canAccessFinancialServices) return <AccessDenied />;
 
   // Summary stats (from all entries, not filtered)
   const todayTotal = entries.filter(e => isToday(e.createdAt.toDate())).reduce((s, e) => s + e.amount, 0);
   const todayCount = entries.filter(e => isToday(e.createdAt.toDate())).length;
+  const todayProfit = entries.filter(e => isToday(e.createdAt.toDate())).reduce((s, e) => s + (e.profitMargin ?? 0), 0);
   const monthTotal = entries.filter(e => isThisMonth(e.createdAt.toDate())).reduce((s, e) => s + e.amount, 0);
+  const monthProfit = entries.filter(e => isThisMonth(e.createdAt.toDate())).reduce((s, e) => s + (e.profitMargin ?? 0), 0);
 
   // Filtered list
   const filtered = useMemo(() => {
@@ -90,9 +91,12 @@ export default function AepsWithdrawalPage() {
     });
   }, [entries, search, startDate, endDate]);
 
+  const resetForm = () => {
+    setCustomerName(''); setBankName(''); setMobile(''); setAmount(''); setProfitMargin('');
+  };
+
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    // Validate mobile only if entered
     if (mobile && !/^\d{10}$/.test(mobile)) {
       toast({ variant: 'destructive', title: 'Invalid mobile', description: 'Mobile number must be exactly 10 digits.' });
       return;
@@ -104,10 +108,11 @@ export default function AepsWithdrawalPage() {
         bankName: bankName.trim(),
         mobile: mobile.trim() || undefined,
         amount: Number(amount),
+        profitMargin: Number(profitMargin),
         addedBy: userProfile?.displayName || userProfile?.email || 'Unknown',
       });
       toast({ title: 'Withdrawal recorded', description: `${customerName} — ${formatCurrency(Number(amount))}` });
-      setCustomerName(''); setBankName(''); setMobile(''); setAmount('');
+      resetForm();
       setShowForm(false);
     } catch (err: any) {
       toast({ variant: 'destructive', title: 'Error', description: err.message });
@@ -137,29 +142,29 @@ export default function AepsWithdrawalPage() {
 
       {/* Summary Cards */}
       {loading ? (
-        <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
-          {[0,1,2].map(i => <Card key={i}><CardContent className="pt-6"><Skeleton className="h-8 w-32 mb-2" /><Skeleton className="h-4 w-24" /></CardContent></Card>)}
+        <div className="grid grid-cols-1 sm:grid-cols-3 lg:grid-cols-5 gap-4">
+          {[0,1,2,3,4].map(i => <Card key={i}><CardContent className="pt-6"><Skeleton className="h-8 w-32 mb-2" /><Skeleton className="h-4 w-24" /></CardContent></Card>)}
         </div>
       ) : (
-        <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
+        <div className="grid grid-cols-1 sm:grid-cols-3 lg:grid-cols-5 gap-4">
           <Card>
             <CardHeader className="pb-2 flex flex-row items-center justify-between">
-              <CardTitle className="text-sm font-medium text-muted-foreground">Today's Total</CardTitle>
+              <CardTitle className="text-sm font-medium text-muted-foreground">Today's Withdrawal</CardTitle>
               <IndianRupee className="h-4 w-4 text-muted-foreground" />
             </CardHeader>
             <CardContent>
               <div className="text-2xl font-bold">{formatCurrency(todayTotal)}</div>
-              <p className="text-xs text-muted-foreground mt-1">Withdrawal amount today</p>
+              <p className="text-xs text-muted-foreground mt-1">Total processed today</p>
             </CardContent>
           </Card>
           <Card>
             <CardHeader className="pb-2 flex flex-row items-center justify-between">
-              <CardTitle className="text-sm font-medium text-muted-foreground">This Month</CardTitle>
-              <IndianRupee className="h-4 w-4 text-muted-foreground" />
+              <CardTitle className="text-sm font-medium text-muted-foreground">Today's Profit</CardTitle>
+              <TrendingUp className="h-4 w-4 text-muted-foreground" />
             </CardHeader>
             <CardContent>
-              <div className="text-2xl font-bold">{formatCurrency(monthTotal)}</div>
-              <p className="text-xs text-muted-foreground mt-1">Total withdrawal this month</p>
+              <div className="text-2xl font-bold text-emerald-700">{formatCurrency(todayProfit)}</div>
+              <p className="text-xs text-muted-foreground mt-1">Commission earned today</p>
             </CardContent>
           </Card>
           <Card>
@@ -172,6 +177,26 @@ export default function AepsWithdrawalPage() {
               <p className="text-xs text-muted-foreground mt-1">Withdrawals processed today</p>
             </CardContent>
           </Card>
+          <Card>
+            <CardHeader className="pb-2 flex flex-row items-center justify-between">
+              <CardTitle className="text-sm font-medium text-muted-foreground">Month's Withdrawal</CardTitle>
+              <IndianRupee className="h-4 w-4 text-muted-foreground" />
+            </CardHeader>
+            <CardContent>
+              <div className="text-2xl font-bold">{formatCurrency(monthTotal)}</div>
+              <p className="text-xs text-muted-foreground mt-1">Total processed this month</p>
+            </CardContent>
+          </Card>
+          <Card>
+            <CardHeader className="pb-2 flex flex-row items-center justify-between">
+              <CardTitle className="text-sm font-medium text-muted-foreground">Month's Profit</CardTitle>
+              <TrendingUp className="h-4 w-4 text-muted-foreground" />
+            </CardHeader>
+            <CardContent>
+              <div className="text-2xl font-bold text-emerald-700">{formatCurrency(monthProfit)}</div>
+              <p className="text-xs text-muted-foreground mt-1">Commission earned this month</p>
+            </CardContent>
+          </Card>
         </div>
       )}
 
@@ -180,7 +205,7 @@ export default function AepsWithdrawalPage() {
         <Card>
           <CardHeader>
             <CardTitle className="text-base">Add New Withdrawal</CardTitle>
-            <CardDescription>All fields marked * are required. Mobile number is optional.</CardDescription>
+            <CardDescription>Fields marked * are required. Mobile number is optional.</CardDescription>
           </CardHeader>
           <CardContent>
             <form onSubmit={handleSubmit} className="grid grid-cols-1 sm:grid-cols-2 gap-4">
@@ -208,18 +233,25 @@ export default function AepsWithdrawalPage() {
                 <Input id="amount" type="number" min="1" step="1" placeholder="e.g. 5000"
                   value={amount} onChange={e => setAmount(e.target.value)} required />
               </div>
-              <div className="sm:col-span-2 flex gap-2 pt-2">
-                <Button type="submit" disabled={submitting}>
+              <div className="space-y-2">
+                <Label htmlFor="profitMargin">Profit Margin (₹) *</Label>
+                <Input id="profitMargin" type="number" min="0" step="1" placeholder="Commission/profit earned"
+                  value={profitMargin} onChange={e => setProfitMargin(e.target.value)} required />
+              </div>
+              <div className="flex items-end gap-2">
+                <Button type="submit" disabled={submitting} className="w-full">
                   {submitting ? <><Loader2 className="h-4 w-4 animate-spin mr-2" />Saving…</> : 'Save Withdrawal'}
                 </Button>
-                <Button type="button" variant="ghost" onClick={() => setShowForm(false)}>Cancel</Button>
+                <Button type="button" variant="ghost" onClick={() => { resetForm(); setShowForm(false); }} className="shrink-0">
+                  Cancel
+                </Button>
               </div>
             </form>
           </CardContent>
         </Card>
       )}
 
-      {/* Search & Filter */}
+      {/* Search & Filter + List */}
       <Card>
         <CardHeader className="pb-3">
           <div className="flex flex-col sm:flex-row gap-3">
@@ -228,7 +260,7 @@ export default function AepsWithdrawalPage() {
               <Input className="pl-9" placeholder="Search by name, bank, or mobile…"
                 value={search} onChange={e => setSearch(e.target.value)} />
             </div>
-            <div className="flex items-center gap-2">
+            <div className="flex items-center gap-2 flex-wrap">
               <CalendarRange className="h-4 w-4 text-muted-foreground shrink-0" />
               <Input type="date" className="w-36" value={startDate} onChange={e => setStartDate(e.target.value)} />
               <span className="text-muted-foreground text-sm">–</span>
@@ -256,11 +288,12 @@ export default function AepsWithdrawalPage() {
               <table className="w-full text-sm">
                 <thead>
                   <tr className="border-b text-muted-foreground">
-                    <th className="text-left py-2 pr-4 font-medium">Date & Time</th>
+                    <th className="text-left py-2 pr-4 font-medium whitespace-nowrap">Date & Time</th>
                     <th className="text-left py-2 pr-4 font-medium">Customer</th>
                     <th className="text-left py-2 pr-4 font-medium">Bank</th>
                     <th className="text-left py-2 pr-4 font-medium">Mobile</th>
                     <th className="text-right py-2 pr-4 font-medium">Amount</th>
+                    <th className="text-right py-2 pr-4 font-medium">Profit</th>
                     <th className="text-left py-2 font-medium">Added By</th>
                   </tr>
                 </thead>
@@ -274,6 +307,9 @@ export default function AepsWithdrawalPage() {
                       <td className="py-3 pr-4 text-muted-foreground">{entry.bankName}</td>
                       <td className="py-3 pr-4 text-muted-foreground">{entry.mobile || '—'}</td>
                       <td className="py-3 pr-4 text-right font-semibold tabular-nums">{formatCurrency(entry.amount)}</td>
+                      <td className="py-3 pr-4 text-right font-medium text-emerald-700 tabular-nums">
+                        {formatCurrency(entry.profitMargin ?? 0)}
+                      </td>
                       <td className="py-3 text-muted-foreground text-xs italic">{entry.addedBy}</td>
                     </tr>
                   ))}
