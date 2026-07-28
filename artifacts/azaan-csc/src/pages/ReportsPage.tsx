@@ -7,7 +7,7 @@ import {
 } from '@/lib/firestore';
 import { useAuth } from '@/contexts/AuthContext';
 import { isToday, isThisWeek, isThisMonth, format, isWithinInterval, startOfDay, endOfDay, parseISO } from 'date-fns';
-import { Download, BarChart2, TrendingUp, IndianRupee, XCircle, Wallet, Zap, ArrowRightLeft, Receipt, Target, ShieldCheck } from 'lucide-react';
+import { Download, BarChart2, TrendingUp, IndianRupee, XCircle, Wallet, Zap, ArrowRightLeft, Receipt, Target, ShieldCheck, Banknote, Wifi } from 'lucide-react';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Skeleton } from '@/components/ui/skeleton';
 import { Button } from '@/components/ui/button';
@@ -127,6 +127,15 @@ export default function ReportsPage() {
   const totalProfit = workProfit + aepsProfit + rechargeProfit + transferProfit;
 
   const totalDues = activeWork.reduce((s, e) => s + e.dueAmount, 0);
+
+  // Payment mode breakdown — flatten all payment records across active work entries
+  const allPayments = activeWork.flatMap(e => e.payments ?? []);
+  const cashCollected = allPayments
+    .filter(p => (p.paymentMode ?? 'Cash') === 'Cash')
+    .reduce((s, p) => s + p.amount, 0);
+  const onlineCollected = allPayments
+    .filter(p => p.paymentMode === 'Online')
+    .reduce((s, p) => s + p.amount, 0);
 
   // Category breakdown
   const categoryStats = activeWork.reduce((acc, e) => {
@@ -337,6 +346,39 @@ export default function ReportsPage() {
               <SummaryCard label="Rejected" value={String(rejectedWork.length)} sub={`${formatCurrency(rejectedWork.reduce((s,e)=>s+(e.refundAmount??0),0))} refunded`}
                 icon={XCircle} color="bg-slate-100 text-slate-500" />
             </div>
+
+            {/* Cash vs Online breakdown */}
+            {(cashCollected > 0 || onlineCollected > 0) && (
+              <div className="bg-card border rounded-xl p-5 shadow-card">
+                <h3 className="font-semibold text-sm mb-4">Payment Mode Breakdown — {periodLabel}</h3>
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                  <div className="flex items-center gap-3 p-3 rounded-lg bg-emerald-50 border border-emerald-200">
+                    <div className="h-9 w-9 rounded-lg bg-emerald-600 flex items-center justify-center shrink-0">
+                      <Banknote className="h-4.5 w-4.5 text-white" />
+                    </div>
+                    <div>
+                      <p className="text-xs font-medium text-emerald-700 uppercase tracking-wide">Cash Collected</p>
+                      <p className="text-xl font-bold text-emerald-800">{formatCurrency(cashCollected)}</p>
+                      <p className="text-xs text-emerald-600 mt-0.5">
+                        {allPayments.filter(p => (p.paymentMode ?? 'Cash') === 'Cash').length} payments
+                      </p>
+                    </div>
+                  </div>
+                  <div className="flex items-center gap-3 p-3 rounded-lg bg-blue-50 border border-blue-200">
+                    <div className="h-9 w-9 rounded-lg bg-blue-600 flex items-center justify-center shrink-0">
+                      <Wifi className="h-4.5 w-4.5 text-white" />
+                    </div>
+                    <div>
+                      <p className="text-xs font-medium text-blue-700 uppercase tracking-wide">Online Collected</p>
+                      <p className="text-xl font-bold text-blue-800">{formatCurrency(onlineCollected)}</p>
+                      <p className="text-xs text-blue-600 mt-0.5">
+                        {allPayments.filter(p => p.paymentMode === 'Online').length} payments
+                      </p>
+                    </div>
+                  </div>
+                </div>
+              </div>
+            )}
 
             {sortedCategories.length > 0 && (
               <div className="bg-card border rounded-xl shadow-card">

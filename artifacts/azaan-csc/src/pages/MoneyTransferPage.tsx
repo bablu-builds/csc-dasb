@@ -11,8 +11,22 @@ import { Label } from '@/components/ui/label';
 import { Skeleton } from '@/components/ui/skeleton';
 import {
   ArrowLeftRight, IndianRupee, TrendingUp, CalendarRange, Search,
-  ShieldCheck, PlusCircle, ChevronUp, Loader2, X,
+  ShieldCheck, PlusCircle, ChevronUp, Loader2, X, Banknote, Wifi,
 } from 'lucide-react';
+import { cn } from '@/lib/utils';
+
+function PaymentModeBadge({ mode }: { mode?: 'Cash' | 'Online' }) {
+  const m = mode ?? 'Cash';
+  return (
+    <span className={cn(
+      "inline-flex items-center gap-1 text-xs font-medium px-1.5 py-0.5 rounded",
+      m === 'Online' ? "bg-blue-100 text-blue-700" : "bg-emerald-100 text-emerald-700"
+    )}>
+      {m === 'Online' ? <Wifi className="h-3 w-3" /> : <Banknote className="h-3 w-3" />}
+      {m}
+    </span>
+  );
+}
 
 function AccessDenied() {
   return (
@@ -41,6 +55,7 @@ export default function MoneyTransferPage() {
   const [mobileOrAccount, setMobileOrAccount] = useState('');
   const [amount, setAmount] = useState('');
   const [profitMargin, setProfitMargin] = useState('');
+  const [paymentMode, setPaymentMode] = useState<'Cash' | 'Online'>('Cash');
   const [submitting, setSubmitting] = useState(false);
 
   // Filter state
@@ -85,7 +100,7 @@ export default function MoneyTransferPage() {
     });
   }, [entries, search, startDate, endDate]);
 
-  const resetForm = () => { setName(''); setMobileOrAccount(''); setAmount(''); setProfitMargin(''); };
+  const resetForm = () => { setName(''); setMobileOrAccount(''); setAmount(''); setProfitMargin(''); setPaymentMode('Cash'); };
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -96,6 +111,7 @@ export default function MoneyTransferPage() {
         mobileOrAccount: mobileOrAccount.trim(),
         amount: Number(amount),
         profitMargin: Number(profitMargin),
+        paymentMode,
         addedBy: userProfile?.displayName || userProfile?.email || 'Unknown',
       });
       toast({ title: 'Transfer recorded', description: `${name} — ${formatCurrency(Number(amount))}` });
@@ -195,12 +211,33 @@ export default function MoneyTransferPage() {
               <div className="space-y-2">
                 <Label htmlFor="amount">Amount (₹) *</Label>
                 <Input id="amount" type="number" min="1" step="1" placeholder="Amount transferred"
-                  value={amount} onChange={e => setAmount(e.target.value)} required />
+                  value={amount} onChange={e => setAmount(e.target.value)}
+                  onFocus={e => e.target.select()} required />
               </div>
               <div className="space-y-2">
                 <Label htmlFor="profitMargin">Profit Margin (₹) *</Label>
                 <Input id="profitMargin" type="number" min="0" step="1" placeholder="Commission/profit earned"
-                  value={profitMargin} onChange={e => setProfitMargin(e.target.value)} required />
+                  value={profitMargin} onChange={e => setProfitMargin(e.target.value)}
+                  onFocus={e => e.target.select()} required />
+              </div>
+              <div className="space-y-2">
+                <Label>Payment Mode</Label>
+                <div className="flex h-10 rounded-md border border-border overflow-hidden">
+                  <button type="button" onClick={() => setPaymentMode('Cash')}
+                    className={cn(
+                      "flex-1 flex items-center justify-center gap-1.5 text-sm font-medium transition-colors",
+                      paymentMode === 'Cash' ? "bg-emerald-600 text-white" : "bg-background text-muted-foreground hover:bg-muted/50"
+                    )}>
+                    <Banknote className="h-3.5 w-3.5" /> Cash
+                  </button>
+                  <button type="button" onClick={() => setPaymentMode('Online')}
+                    className={cn(
+                      "flex-1 flex items-center justify-center gap-1.5 text-sm font-medium transition-colors border-l border-border",
+                      paymentMode === 'Online' ? "bg-blue-600 text-white" : "bg-background text-muted-foreground hover:bg-muted/50"
+                    )}>
+                    <Wifi className="h-3.5 w-3.5" /> Online
+                  </button>
+                </div>
               </div>
               <div className="sm:col-span-2 flex gap-2 pt-2">
                 <Button type="submit" disabled={submitting}>
@@ -259,6 +296,7 @@ export default function MoneyTransferPage() {
                     <th className="text-left py-2 pr-4 font-medium">Mobile / Account</th>
                     <th className="text-right py-2 pr-4 font-medium">Amount</th>
                     <th className="text-right py-2 pr-4 font-medium">Profit</th>
+                    <th className="text-left py-2 pr-4 font-medium">Mode</th>
                     <th className="text-left py-2 font-medium">Added By</th>
                   </tr>
                 </thead>
@@ -272,6 +310,7 @@ export default function MoneyTransferPage() {
                       <td className="py-3 pr-4 text-muted-foreground font-mono text-xs">{entry.mobileOrAccount}</td>
                       <td className="py-3 pr-4 text-right font-semibold tabular-nums">{formatCurrency(entry.amount)}</td>
                       <td className="py-3 pr-4 text-right font-medium text-green-700 tabular-nums">{formatCurrency(entry.profitMargin)}</td>
+                      <td className="py-3 pr-4"><PaymentModeBadge mode={entry.paymentMode} /></td>
                       <td className="py-3 text-muted-foreground text-xs italic">{entry.addedBy}</td>
                     </tr>
                   ))}

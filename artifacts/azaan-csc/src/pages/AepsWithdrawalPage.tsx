@@ -11,8 +11,9 @@ import { Label } from '@/components/ui/label';
 import { Skeleton } from '@/components/ui/skeleton';
 import {
   Fingerprint, IndianRupee, TrendingUp, Hash, CalendarRange, Search, ShieldCheck,
-  PlusCircle, ChevronUp, Loader2, X,
+  PlusCircle, ChevronUp, Loader2, X, Banknote, Wifi,
 } from 'lucide-react';
+import { cn } from '@/lib/utils';
 
 const INDIAN_BANKS = [
   'State Bank of India (SBI)', 'Punjab National Bank (PNB)', 'Bank of Baroda (BOB)',
@@ -22,6 +23,19 @@ const INDIAN_BANKS = [
   'Indian Overseas Bank', 'Bank of Maharashtra', 'Punjab & Sind Bank',
   'Bandhan Bank', 'South Indian Bank', 'Federal Bank', 'RBL Bank',
 ];
+
+function PaymentModeBadge({ mode }: { mode?: 'Cash' | 'Online' }) {
+  const m = mode ?? 'Cash';
+  return (
+    <span className={cn(
+      "inline-flex items-center gap-1 text-xs font-medium px-1.5 py-0.5 rounded",
+      m === 'Online' ? "bg-blue-100 text-blue-700" : "bg-emerald-100 text-emerald-700"
+    )}>
+      {m === 'Online' ? <Wifi className="h-3 w-3" /> : <Banknote className="h-3 w-3" />}
+      {m}
+    </span>
+  );
+}
 
 function AccessDenied() {
   return (
@@ -51,6 +65,7 @@ export default function AepsWithdrawalPage() {
   const [mobile, setMobile] = useState('');
   const [amount, setAmount] = useState('');
   const [profitMargin, setProfitMargin] = useState('');
+  const [paymentMode, setPaymentMode] = useState<'Cash' | 'Online'>('Cash');
   const [submitting, setSubmitting] = useState(false);
 
   // Filter state
@@ -92,7 +107,7 @@ export default function AepsWithdrawalPage() {
   }, [entries, search, startDate, endDate]);
 
   const resetForm = () => {
-    setCustomerName(''); setBankName(''); setMobile(''); setAmount(''); setProfitMargin('');
+    setCustomerName(''); setBankName(''); setMobile(''); setAmount(''); setProfitMargin(''); setPaymentMode('Cash');
   };
 
   const handleSubmit = async (e: React.FormEvent) => {
@@ -109,6 +124,7 @@ export default function AepsWithdrawalPage() {
         mobile: mobile.trim() || undefined,
         amount: Number(amount),
         profitMargin: Number(profitMargin),
+        paymentMode,
         addedBy: userProfile?.displayName || userProfile?.email || 'Unknown',
       });
       toast({ title: 'Withdrawal recorded', description: `${customerName} — ${formatCurrency(Number(amount))}` });
@@ -231,15 +247,36 @@ export default function AepsWithdrawalPage() {
               <div className="space-y-2">
                 <Label htmlFor="amount">Withdrawal Amount (₹) *</Label>
                 <Input id="amount" type="number" min="1" step="1" placeholder="e.g. 5000"
-                  value={amount} onChange={e => setAmount(e.target.value)} required />
+                  value={amount} onChange={e => setAmount(e.target.value)}
+                  onFocus={e => e.target.select()} required />
               </div>
               <div className="space-y-2">
                 <Label htmlFor="profitMargin">Profit Margin (₹) *</Label>
                 <Input id="profitMargin" type="number" min="0" step="1" placeholder="Commission/profit earned"
-                  value={profitMargin} onChange={e => setProfitMargin(e.target.value)} required />
+                  value={profitMargin} onChange={e => setProfitMargin(e.target.value)}
+                  onFocus={e => e.target.select()} required />
               </div>
-              <div className="flex items-end gap-2">
-                <Button type="submit" disabled={submitting} className="w-full">
+              <div className="space-y-2">
+                <Label>Payment Mode</Label>
+                <div className="flex h-10 rounded-md border border-border overflow-hidden">
+                  <button type="button" onClick={() => setPaymentMode('Cash')}
+                    className={cn(
+                      "flex-1 flex items-center justify-center gap-1.5 text-sm font-medium transition-colors",
+                      paymentMode === 'Cash' ? "bg-emerald-600 text-white" : "bg-background text-muted-foreground hover:bg-muted/50"
+                    )}>
+                    <Banknote className="h-3.5 w-3.5" /> Cash
+                  </button>
+                  <button type="button" onClick={() => setPaymentMode('Online')}
+                    className={cn(
+                      "flex-1 flex items-center justify-center gap-1.5 text-sm font-medium transition-colors border-l border-border",
+                      paymentMode === 'Online' ? "bg-blue-600 text-white" : "bg-background text-muted-foreground hover:bg-muted/50"
+                    )}>
+                    <Wifi className="h-3.5 w-3.5" /> Online
+                  </button>
+                </div>
+              </div>
+              <div className="sm:col-span-2 flex items-center gap-2">
+                <Button type="submit" disabled={submitting} className="w-full sm:w-auto">
                   {submitting ? <><Loader2 className="h-4 w-4 animate-spin mr-2" />Saving…</> : 'Save Withdrawal'}
                 </Button>
                 <Button type="button" variant="ghost" onClick={() => { resetForm(); setShowForm(false); }} className="shrink-0">
@@ -294,6 +331,7 @@ export default function AepsWithdrawalPage() {
                     <th className="text-left py-2 pr-4 font-medium">Mobile</th>
                     <th className="text-right py-2 pr-4 font-medium">Amount</th>
                     <th className="text-right py-2 pr-4 font-medium">Profit</th>
+                    <th className="text-left py-2 pr-4 font-medium">Mode</th>
                     <th className="text-left py-2 font-medium">Added By</th>
                   </tr>
                 </thead>
@@ -310,6 +348,7 @@ export default function AepsWithdrawalPage() {
                       <td className="py-3 pr-4 text-right font-medium text-emerald-700 tabular-nums">
                         {formatCurrency(entry.profitMargin ?? 0)}
                       </td>
+                      <td className="py-3 pr-4"><PaymentModeBadge mode={entry.paymentMode} /></td>
                       <td className="py-3 text-muted-foreground text-xs italic">{entry.addedBy}</td>
                     </tr>
                   ))}

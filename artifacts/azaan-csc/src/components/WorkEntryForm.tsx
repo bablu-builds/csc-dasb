@@ -15,7 +15,7 @@ import { Textarea } from '@/components/ui/textarea';
 import {
   Select, SelectContent, SelectItem, SelectTrigger, SelectValue,
 } from '@/components/ui/select';
-import { CalendarIcon, Loader2, IndianRupee, XCircle, Receipt } from 'lucide-react';
+import { CalendarIcon, Loader2, IndianRupee, XCircle, Receipt, Banknote, Wifi } from 'lucide-react';
 import { Calendar } from '@/components/ui/calendar';
 import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover';
 import { cn } from '@/lib/utils';
@@ -33,6 +33,7 @@ const formSchema = z.object({
   address: z.string().optional(),
   rejectionReason: z.string().optional(),
   refundAmount: z.coerce.number().min(0, 'Amount cannot be negative').optional(),
+  paymentMode: z.enum(['Cash', 'Online']).default('Cash'),
 });
 
 export type WorkEntryFormData = z.infer<typeof formSchema>;
@@ -45,6 +46,18 @@ interface WorkEntryFormProps {
   isEditing?: boolean;
   /** Current paidAmount from Firestore — used in edit mode to calculate live due amount as totalAmount changes */
   currentPaidAmount?: number;
+}
+
+/** Shared helper: value → '' when 0 so the field shows blank (avoids leading-zero bug).
+ *  Empty string → 0 on change so zod coerce gets a valid number. */
+function numericFieldProps(field: { value: number | undefined; onChange: (v: string | number) => void }) {
+  return {
+    value: field.value !== undefined && field.value !== 0 ? field.value : '',
+    placeholder: '0',
+    onChange: (e: React.ChangeEvent<HTMLInputElement>) =>
+      field.onChange(e.target.value === '' ? 0 : e.target.value),
+    onFocus: (e: React.FocusEvent<HTMLInputElement>) => e.target.select(),
+  };
 }
 
 export function WorkEntryForm({ initialData, onSubmit, isSubmitting = false, isEditing = false, currentPaidAmount = 0 }: WorkEntryFormProps) {
@@ -65,6 +78,7 @@ export function WorkEntryForm({ initialData, onSubmit, isSubmitting = false, isE
       address: initialData?.address || '',
       rejectionReason: initialData?.rejectionReason || '',
       refundAmount: initialData?.refundAmount ?? undefined,
+      paymentMode: initialData?.paymentMode || 'Cash',
     },
   });
 
@@ -84,6 +98,7 @@ export function WorkEntryForm({ initialData, onSubmit, isSubmitting = false, isE
       address: initialData.address ?? '',
       rejectionReason: initialData.rejectionReason ?? '',
       refundAmount: initialData.refundAmount ?? undefined,
+      paymentMode: initialData.paymentMode ?? 'Cash',
     });
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [initialData?.totalAmount, initialData?.challanAmount, initialData?.status, initialData?.customerName, initialData?.mobile]);
@@ -91,6 +106,7 @@ export function WorkEntryForm({ initialData, onSubmit, isSubmitting = false, isE
   const total = form.watch('totalAmount');
   const paid = form.watch('paidAmount');
   const status = form.watch('status');
+  const paymentMode = form.watch('paymentMode');
 
   // In edit mode: due = new totalAmount − current Firestore paidAmount (live preview as user edits total)
   // In add mode:  due = totalAmount − paidAmount from form state
@@ -185,34 +201,69 @@ export function WorkEntryForm({ initialData, onSubmit, isSubmitting = false, isE
         {/* Amount section */}
         <div className="p-5 bg-muted/30 rounded-xl border space-y-4">
           <p className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">Payment Details</p>
-          <div className={cn("grid gap-4", isEditing ? "grid-cols-1 md:grid-cols-3" : "grid-cols-1 md:grid-cols-4")}>
+          <div className={cn("grid gap-4", isEditing ? "grid-cols-1 md:grid-cols-3" : "grid-cols-1 md:grid-cols-2 lg:grid-cols-4")}>
             <FormField control={form.control} name="totalAmount" render={({ field }) => (
               <FormItem>
                 <FormLabel className="text-sm font-medium">Total Amount (₹)</FormLabel>
                 <FormControl>
                   <div className="relative">
                     <IndianRupee className="absolute left-3 top-2.5 h-4 w-4 text-muted-foreground" />
-                    <Input type="number" className={cn(inputClass, "pl-9")} {...field} />
+                    <Input type="number" min={0} className={cn(inputClass, "pl-9")}
+                      {...numericFieldProps(field)} />
                   </div>
                 </FormControl>
                 <FormMessage />
               </FormItem>
             )} />
 
-            {/* Paid Amount — only shown when creating a new entry; editing uses Payment History section */}
+            {/* Paid Amount + Payment Mode — only shown when creating a new entry */}
             {!isEditing && (
-              <FormField control={form.control} name="paidAmount" render={({ field }) => (
-                <FormItem>
-                  <FormLabel className="text-sm font-medium">Paid Amount (₹)</FormLabel>
-                  <FormControl>
-                    <div className="relative">
-                      <IndianRupee className="absolute left-3 top-2.5 h-4 w-4 text-muted-foreground" />
-                      <Input type="number" className={cn(inputClass, "pl-9")} {...field} />
-                    </div>
-                  </FormControl>
-                  <FormMessage />
-                </FormItem>
-              )} />
+              <>
+                <FormField control={form.control} name="paidAmount" render={({ field }) => (
+                  <FormItem>
+                    <FormLabel className="text-sm font-medium">Paid Amount (₹)</FormLabel>
+                    <FormControl>
+                      <div className="relative">
+                        <IndianRupee className="absolute left-3 top-2.5 h-4 w-4 text-muted-foreground" />
+                        <Input type="number" min={0} className={cn(inputClass, "pl-9")}
+                          {...numericFieldProps(field)} />
+                      </div>
+                    </FormControl>
+                    <FormMessage />
+                  </FormItem>
+                )} />
+
+                <FormField control={form.control} name="paymentMode" render={({ field }) => (
+                  <FormItem>
+                    <FormLabel className="text-sm font-medium">Payment Mode</FormLabel>
+                    <FormControl>
+                      <div className="flex h-10 rounded-md border border-border overflow-hidden">
+                        <button type="button"
+                          onClick={() => field.onChange('Cash')}
+                          className={cn(
+                            "flex-1 flex items-center justify-center gap-1.5 text-sm font-medium transition-colors",
+                            paymentMode === 'Cash'
+                              ? "bg-emerald-600 text-white"
+                              : "bg-background text-muted-foreground hover:text-foreground hover:bg-muted/50"
+                          )}>
+                          <Banknote className="h-3.5 w-3.5" /> Cash
+                        </button>
+                        <button type="button"
+                          onClick={() => field.onChange('Online')}
+                          className={cn(
+                            "flex-1 flex items-center justify-center gap-1.5 text-sm font-medium transition-colors border-l border-border",
+                            paymentMode === 'Online'
+                              ? "bg-blue-600 text-white"
+                              : "bg-background text-muted-foreground hover:text-foreground hover:bg-muted/50"
+                          )}>
+                          <Wifi className="h-3.5 w-3.5" /> Online
+                        </button>
+                      </div>
+                    </FormControl>
+                    <FormMessage />
+                  </FormItem>
+                )} />
+              </>
             )}
 
             <FormField control={form.control} name="challanAmount" render={({ field }) => (
@@ -224,8 +275,8 @@ export function WorkEntryForm({ initialData, onSubmit, isSubmitting = false, isE
                 <FormControl>
                   <div className="relative">
                     <IndianRupee className="absolute left-3 top-2.5 h-4 w-4 text-muted-foreground" />
-                    <Input type="number" placeholder="0" className={cn(inputClass, "pl-9")}
-                      {...field} value={field.value ?? ''} onChange={e => field.onChange(e.target.value === '' ? 0 : e.target.value)} />
+                    <Input type="number" min={0} className={cn(inputClass, "pl-9")}
+                      {...numericFieldProps(field as { value: number | undefined; onChange: (v: string | number) => void })} />
                   </div>
                 </FormControl>
                 <FormMessage />
@@ -309,9 +360,10 @@ export function WorkEntryForm({ initialData, onSubmit, isSubmitting = false, isE
                 <FormControl>
                   <div className="relative">
                     <IndianRupee className="absolute left-3 top-2.5 h-4 w-4 text-muted-foreground" />
-                    <Input type="number" className={cn(inputClass, "pl-9")} placeholder="0"
-                      {...field} value={field.value ?? ''}
-                      onChange={e => field.onChange(e.target.value === '' ? undefined : e.target.value)} />
+                    <Input type="number" min={0} className={cn(inputClass, "pl-9")} placeholder="0"
+                      value={field.value ?? ''}
+                      onChange={e => field.onChange(e.target.value === '' ? undefined : e.target.value)}
+                      onFocus={e => e.target.select()} />
                   </div>
                 </FormControl>
                 <FormMessage />

@@ -4,7 +4,7 @@ import { updateWorkEntry, subscribeToWorkEntries, WorkEntry, addPaymentToEntry }
 import { useAuth } from '@/contexts/AuthContext';
 import { useToast } from '@/hooks/use-toast';
 import { WorkEntryForm, WorkEntryFormData } from '@/components/WorkEntryForm';
-import { ArrowLeft, Loader2, Clock, CheckCircle2, XCircle, Plus, IndianRupee, CreditCard, UserCircle2 } from 'lucide-react';
+import { ArrowLeft, Loader2, Clock, CheckCircle2, XCircle, Plus, IndianRupee, CreditCard, UserCircle2, Banknote, Wifi } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Timestamp } from 'firebase/firestore';
@@ -13,6 +13,21 @@ import { formatCurrency } from '@/lib/format';
 import {
   Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter,
 } from '@/components/ui/dialog';
+import { cn } from '@/lib/utils';
+
+/** Small badge showing Cash (green) or Online (blue) payment mode. */
+function PaymentModeBadge({ mode }: { mode?: 'Cash' | 'Online' }) {
+  const m = mode ?? 'Cash';
+  return (
+    <span className={cn(
+      "inline-flex items-center gap-1 text-xs font-medium px-1.5 py-0.5 rounded",
+      m === 'Online' ? "bg-blue-100 text-blue-700" : "bg-emerald-100 text-emerald-700"
+    )}>
+      {m === 'Online' ? <Wifi className="h-3 w-3" /> : <Banknote className="h-3 w-3" />}
+      {m}
+    </span>
+  );
+}
 
 export default function EditWorkPage() {
   const { id } = useParams();
@@ -26,6 +41,7 @@ export default function EditWorkPage() {
   // Payment dialog
   const [paymentOpen, setPaymentOpen] = useState(false);
   const [paymentAmount, setPaymentAmount] = useState('');
+  const [paymentMode, setPaymentMode] = useState<'Cash' | 'Online'>('Cash');
   const [addingPayment, setAddingPayment] = useState(false);
 
   useEffect(() => {
@@ -42,10 +58,8 @@ export default function EditWorkPage() {
     if (!id || !entry) return;
     setIsSubmitting(true);
     try {
-      // Strip paidAmount — payments are managed exclusively via the Payment History section.
-      // Pass entry.paidAmount as currentPaidAmount so dueAmount recalculates correctly
-      // if the user edits totalAmount, without ever touching the payments array.
-      const { paidAmount: _ignored, ...updateData } = data;
+      // Strip paidAmount and paymentMode — payments are managed exclusively via the Payment History section.
+      const { paidAmount: _ignored, paymentMode: _pm, ...updateData } = data;
       await updateWorkEntry(id, updateData, entry.paidAmount);
       toast({ title: "Work Updated Successfully" });
       setLocation('/work');
@@ -62,10 +76,11 @@ export default function EditWorkPage() {
     if (isNaN(amt) || amt <= 0) return;
     setAddingPayment(true);
     try {
-      await addPaymentToEntry(id, { amount: amt, addedBy: displayName }, entry.totalAmount, entry.paidAmount);
-      toast({ title: 'Payment Recorded', description: `${formatCurrency(amt)} added successfully.` });
+      await addPaymentToEntry(id, { amount: amt, addedBy: displayName, paymentMode }, entry.totalAmount, entry.paidAmount);
+      toast({ title: 'Payment Recorded', description: `${formatCurrency(amt)} (${paymentMode}) added successfully.` });
       setPaymentOpen(false);
       setPaymentAmount('');
+      setPaymentMode('Cash');
     } catch (err: any) {
       toast({ variant: 'destructive', title: 'Error', description: err.message });
     } finally {
@@ -185,9 +200,10 @@ export default function EditWorkPage() {
           ) : (
             payments.map((p, i) => (
               <div key={i} className="px-6 py-3 flex items-center justify-between">
-                <div>
+                <div className="flex items-center gap-2.5">
                   <span className="text-sm font-medium">{formatCurrency(p.amount)}</span>
-                  <span className="text-xs text-muted-foreground ml-3">
+                  <PaymentModeBadge mode={p.paymentMode} />
+                  <span className="text-xs text-muted-foreground">
                     {p.paidAt ? format(p.paidAt.toDate(), 'dd MMM yyyy, h:mm a') : 'Legacy entry'}
                   </span>
                 </div>
@@ -256,7 +272,10 @@ export default function EditWorkPage() {
       </div>
 
       {/* Add Payment Dialog */}
-      <Dialog open={paymentOpen} onOpenChange={setPaymentOpen}>
+      <Dialog open={paymentOpen} onOpenChange={(open) => {
+        setPaymentOpen(open);
+        if (!open) { setPaymentAmount(''); setPaymentMode('Cash'); }
+      }}>
         <DialogContent className="sm:max-w-sm">
           <DialogHeader>
             <DialogTitle>Record New Payment</DialogTitle>
@@ -275,6 +294,8 @@ export default function EditWorkPage() {
                 This entry is fully paid. Recording a payment will create an overpayment/credit.
               </p>
             )}
+
+            {/* Amount */}
             <div className="relative">
               <IndianRupee className="absolute left-3 top-2.5 h-4 w-4 text-muted-foreground" />
               <Input
@@ -283,9 +304,38 @@ export default function EditWorkPage() {
                 className="pl-9"
                 value={paymentAmount}
                 onChange={e => setPaymentAmount(e.target.value)}
+                onFocus={e => e.target.select()}
                 min={0}
               />
             </div>
+
+            {/* Payment Mode toggle */}
+            <div className="space-y-1.5">
+              <p className="text-xs font-medium text-muted-foreground">Payment Mode</p>
+              <div className="flex h-9 rounded-md border border-border overflow-hidden">
+                <button type="button"
+                  onClick={() => setPaymentMode('Cash')}
+                  className={cn(
+                    "flex-1 flex items-center justify-center gap-1.5 text-sm font-medium transition-colors",
+                    paymentMode === 'Cash'
+                      ? "bg-emerald-600 text-white"
+                      : "bg-background text-muted-foreground hover:text-foreground hover:bg-muted/50"
+                  )}>
+                  <Banknote className="h-3.5 w-3.5" /> Cash
+                </button>
+                <button type="button"
+                  onClick={() => setPaymentMode('Online')}
+                  className={cn(
+                    "flex-1 flex items-center justify-center gap-1.5 text-sm font-medium transition-colors border-l border-border",
+                    paymentMode === 'Online'
+                      ? "bg-blue-600 text-white"
+                      : "bg-background text-muted-foreground hover:text-foreground hover:bg-muted/50"
+                  )}>
+                  <Wifi className="h-3.5 w-3.5" /> Online
+                </button>
+              </div>
+            </div>
+
             {/* Soft warning when payment exceeds outstanding due */}
             {paymentAmount && entry.dueAmount > 0 && parseFloat(paymentAmount) > entry.dueAmount && (
               <p className="text-xs text-amber-700 bg-amber-50 border border-amber-200 rounded px-2 py-1.5">

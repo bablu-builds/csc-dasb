@@ -11,8 +11,22 @@ import { Label } from '@/components/ui/label';
 import { Skeleton } from '@/components/ui/skeleton';
 import {
   Zap, IndianRupee, TrendingUp, CalendarRange, Search,
-  ShieldCheck, PlusCircle, ChevronUp, Loader2, X,
+  ShieldCheck, PlusCircle, ChevronUp, Loader2, X, Banknote, Wifi,
 } from 'lucide-react';
+import { cn } from '@/lib/utils';
+
+function PaymentModeBadge({ mode }: { mode?: 'Cash' | 'Online' }) {
+  const m = mode ?? 'Cash';
+  return (
+    <span className={cn(
+      "inline-flex items-center gap-1 text-xs font-medium px-1.5 py-0.5 rounded",
+      m === 'Online' ? "bg-blue-100 text-blue-700" : "bg-emerald-100 text-emerald-700"
+    )}>
+      {m === 'Online' ? <Wifi className="h-3 w-3" /> : <Banknote className="h-3 w-3" />}
+      {m}
+    </span>
+  );
+}
 
 function AccessDenied() {
   return (
@@ -42,6 +56,7 @@ export default function ElectricRechargePage() {
   const [mobile, setMobile] = useState('');
   const [rechargeAmount, setRechargeAmount] = useState('');
   const [profitMargin, setProfitMargin] = useState('');
+  const [paymentMode, setPaymentMode] = useState<'Cash' | 'Online'>('Cash');
   const [submitting, setSubmitting] = useState(false);
 
   // Filter state
@@ -89,12 +104,11 @@ export default function ElectricRechargePage() {
 
   const resetForm = () => {
     setCustomerName(''); setConsumerNumber(''); setMobile('');
-    setRechargeAmount(''); setProfitMargin('');
+    setRechargeAmount(''); setProfitMargin(''); setPaymentMode('Cash');
   };
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    // Validate mobile only if entered
     if (mobile && !/^\d{10}$/.test(mobile)) {
       toast({ variant: 'destructive', title: 'Invalid mobile', description: 'Mobile number must be exactly 10 digits.' });
       return;
@@ -107,6 +121,7 @@ export default function ElectricRechargePage() {
         mobile: mobile.trim() || undefined,
         rechargeAmount: Number(rechargeAmount),
         profitMargin: Number(profitMargin),
+        paymentMode,
         addedBy: userProfile?.displayName || userProfile?.email || 'Unknown',
       });
       toast({ title: 'Recharge recorded', description: `${customerName} — ${formatCurrency(Number(rechargeAmount))}` });
@@ -213,15 +228,36 @@ export default function ElectricRechargePage() {
               <div className="space-y-2">
                 <Label htmlFor="rechargeAmount">Recharge Amount (₹) *</Label>
                 <Input id="rechargeAmount" type="number" min="1" step="1" placeholder="Amount paid by customer"
-                  value={rechargeAmount} onChange={e => setRechargeAmount(e.target.value)} required />
+                  value={rechargeAmount} onChange={e => setRechargeAmount(e.target.value)}
+                  onFocus={e => e.target.select()} required />
               </div>
               <div className="space-y-2">
                 <Label htmlFor="profitMargin">Profit Margin (₹) *</Label>
                 <Input id="profitMargin" type="number" min="0" step="1" placeholder="Commission/profit earned"
-                  value={profitMargin} onChange={e => setProfitMargin(e.target.value)} required />
+                  value={profitMargin} onChange={e => setProfitMargin(e.target.value)}
+                  onFocus={e => e.target.select()} required />
               </div>
-              <div className="flex items-end gap-2">
-                <Button type="submit" disabled={submitting} className="w-full">
+              <div className="space-y-2">
+                <Label>Payment Mode</Label>
+                <div className="flex h-10 rounded-md border border-border overflow-hidden">
+                  <button type="button" onClick={() => setPaymentMode('Cash')}
+                    className={cn(
+                      "flex-1 flex items-center justify-center gap-1.5 text-sm font-medium transition-colors",
+                      paymentMode === 'Cash' ? "bg-emerald-600 text-white" : "bg-background text-muted-foreground hover:bg-muted/50"
+                    )}>
+                    <Banknote className="h-3.5 w-3.5" /> Cash
+                  </button>
+                  <button type="button" onClick={() => setPaymentMode('Online')}
+                    className={cn(
+                      "flex-1 flex items-center justify-center gap-1.5 text-sm font-medium transition-colors border-l border-border",
+                      paymentMode === 'Online' ? "bg-blue-600 text-white" : "bg-background text-muted-foreground hover:bg-muted/50"
+                    )}>
+                    <Wifi className="h-3.5 w-3.5" /> Online
+                  </button>
+                </div>
+              </div>
+              <div className="sm:col-span-2 flex gap-2 pt-2">
+                <Button type="submit" disabled={submitting}>
                   {submitting
                     ? <><Loader2 className="h-4 w-4 animate-spin mr-2" />Saving…</>
                     : 'Save Recharge'}
@@ -278,6 +314,7 @@ export default function ElectricRechargePage() {
                     <th className="text-left py-2 pr-4 font-medium">Mobile</th>
                     <th className="text-right py-2 pr-4 font-medium">Recharge ₹</th>
                     <th className="text-right py-2 pr-4 font-medium">Profit ₹</th>
+                    <th className="text-left py-2 pr-4 font-medium">Mode</th>
                     <th className="text-left py-2 font-medium">Added By</th>
                   </tr>
                 </thead>
@@ -292,6 +329,7 @@ export default function ElectricRechargePage() {
                       <td className="py-3 pr-4 text-muted-foreground">{entry.mobile || '—'}</td>
                       <td className="py-3 pr-4 text-right font-semibold tabular-nums">{formatCurrency(entry.rechargeAmount)}</td>
                       <td className="py-3 pr-4 text-right font-medium text-green-700 tabular-nums">{formatCurrency(entry.profitMargin)}</td>
+                      <td className="py-3 pr-4"><PaymentModeBadge mode={entry.paymentMode} /></td>
                       <td className="py-3 text-muted-foreground text-xs italic">{entry.addedBy}</td>
                     </tr>
                   ))}

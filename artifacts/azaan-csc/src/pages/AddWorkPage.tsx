@@ -19,7 +19,9 @@ export default function AddWorkPage() {
     try {
       // Record who added this entry — set at creation, never editable afterward
       const addedBy = userProfile?.displayName || userProfile?.email || 'Unknown';
-      await createWorkEntry({ ...data, addedBy });
+      // Extract paymentMode (not a WorkEntry field) before spreading into createWorkEntry
+      const { paymentMode, ...workData } = data;
+      await createWorkEntry({ ...workData, addedBy }, paymentMode);
       toast({
         title: "Work Added Successfully",
         description: `${data.customerName} — ${data.category}`,

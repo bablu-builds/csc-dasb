@@ -111,6 +111,8 @@ export interface PaymentRecord {
   amount: number;
   paidAt?: Timestamp;
   addedBy?: string;
+  /** How the payment was received. Defaults to 'Cash' for backward compatibility. */
+  paymentMode?: 'Cash' | 'Online';
 }
 
 export interface WorkEntry {
@@ -163,7 +165,9 @@ function stripUndefined<T extends Record<string, unknown>>(obj: T): Partial<T> {
 }
 
 export const createWorkEntry = async (
-  data: Omit<WorkEntry, 'id' | 'dueAmount' | 'createdAt' | 'completedAt' | 'rejectedAt'>
+  data: Omit<WorkEntry, 'id' | 'dueAmount' | 'createdAt' | 'completedAt' | 'rejectedAt'>,
+  /** Payment mode for the initial payment (if any). Defaults to 'Cash'. */
+  initialPaymentMode: 'Cash' | 'Online' = 'Cash',
 ) => {
   if (!db) throw new Error("Firebase not configured");
   const now = Timestamp.now();
@@ -179,7 +183,7 @@ export const createWorkEntry = async (
 
   // Seed the payments array from the initial paidAmount so payment history works from day one
   const initialPayments: PaymentRecord[] = data.paidAmount > 0
-    ? [{ amount: data.paidAmount, paidAt: now, addedBy: data.addedBy ?? 'Unknown' }]
+    ? [{ amount: data.paidAmount, paidAt: now, addedBy: data.addedBy ?? 'Unknown', paymentMode: initialPaymentMode }]
     : [];
 
   return addDoc(collection(db, 'workEntries'), {
@@ -245,7 +249,7 @@ export const restoreWorkEntry = async (id: string) => {
  */
 export const addPaymentToEntry = async (
   id: string,
-  payment: { amount: number; addedBy?: string },
+  payment: { amount: number; addedBy?: string; paymentMode?: 'Cash' | 'Online' },
   totalAmount: number,
   currentPaidAmount: number
 ): Promise<void> => {
@@ -257,6 +261,7 @@ export const addPaymentToEntry = async (
     amount: payment.amount,
     paidAt: Timestamp.now(),
     addedBy: payment.addedBy,
+    paymentMode: payment.paymentMode ?? 'Cash',
   };
   await updateDoc(doc(db, 'workEntries', id), {
     payments: arrayUnion(paymentRecord),
@@ -382,6 +387,8 @@ export interface AepsWithdrawal {
   mobile?: string;
   amount: number;
   profitMargin: number;
+  /** How the customer paid. Defaults to 'Cash' for backward compatibility. */
+  paymentMode?: 'Cash' | 'Online';
   createdAt: Timestamp;
   addedBy: string;
 }
@@ -413,6 +420,8 @@ export interface ElectricRecharge {
   mobile?: string;
   rechargeAmount: number;
   profitMargin: number;
+  /** How the customer paid. Defaults to 'Cash' for backward compatibility. */
+  paymentMode?: 'Cash' | 'Online';
   createdAt: Timestamp;
   addedBy: string;
 }
@@ -443,6 +452,8 @@ export interface MoneyTransfer {
   mobileOrAccount: string;
   amount: number;
   profitMargin: number;
+  /** How the customer paid. Defaults to 'Cash' for backward compatibility. */
+  paymentMode?: 'Cash' | 'Online';
   createdAt: Timestamp;
   addedBy: string;
 }
