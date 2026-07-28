@@ -2,9 +2,12 @@ import { initializeApp } from 'firebase/app';
 import { getAuth, setPersistence, browserSessionPersistence } from 'firebase/auth';
 import { getFirestore } from 'firebase/firestore';
 
-// These values come from your Firebase project settings.
-// In Replit: go to "Secrets" (lock icon) and add each key below.
-// In GitHub Pages: add them as Repository secrets and expose via GitHub Actions.
+// Demo-mode toggle. When VITE_DEMO_MODE === 'true' the Vite build aliases
+// the `firebase/app`, `firebase/auth` and `firebase/firestore` imports above
+// to our in-memory mocks under `src/lib/mock/`.
+export const isDemoMode = import.meta.env.VITE_DEMO_MODE === 'true';
+
+// Firebase project config (used only when demo mode is off).
 export const firebaseConfig = {
   apiKey: import.meta.env.VITE_FIREBASE_API_KEY,
   authDomain: import.meta.env.VITE_FIREBASE_AUTH_DOMAIN,
@@ -14,19 +17,19 @@ export const firebaseConfig = {
   appId: import.meta.env.VITE_FIREBASE_APP_ID,
 };
 
-// Check if Firebase config is provided
-const isConfigured = Object.values(firebaseConfig).every(Boolean);
+// In demo mode we consider the app configured; otherwise require every key.
+const isConfigured = isDemoMode || Object.values(firebaseConfig).every(Boolean);
 
 if (!isConfigured) {
   console.warn(
-    '[Firebase] Missing configuration. Add these secrets to Replit:\n' +
+    '[Firebase] Missing configuration. Add these secrets:\n' +
     '  VITE_FIREBASE_API_KEY\n' +
     '  VITE_FIREBASE_AUTH_DOMAIN\n' +
     '  VITE_FIREBASE_PROJECT_ID\n' +
     '  VITE_FIREBASE_STORAGE_BUCKET\n' +
     '  VITE_FIREBASE_MESSAGING_SENDER_ID\n' +
     '  VITE_FIREBASE_APP_ID\n' +
-    'See SETUP.md for instructions.'
+    'Or set VITE_DEMO_MODE=true to run with in-memory demo data.'
   );
 }
 

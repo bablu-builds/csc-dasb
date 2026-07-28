@@ -472,3 +472,41 @@ export const subscribeToMoneyTransfers = (callback: (entries: MoneyTransfer[]) =
     callback(entries);
   }, (err) => console.error('[Firestore] moneyTransfers error:', err.message));
 };
+
+// ─── QUICK ACTION WORK ───────────────────────────────────────────────────────
+
+export type QuickActionCategory =
+  | 'Printout' | 'Lamination' | 'Xerox' | 'PVC' | 'Print' | 'Photo Print' | 'Other';
+
+export const QUICK_ACTION_CATEGORIES: QuickActionCategory[] = [
+  'Printout', 'Lamination', 'Xerox', 'PVC', 'Print', 'Photo Print', 'Other',
+];
+
+export interface QuickActionEntry {
+  id?: string;
+  category: QuickActionCategory;
+  customerName?: string;
+  amount: number;
+  createdAt: Timestamp;
+  addedBy: string;
+}
+
+export const createQuickAction = async (
+  data: Omit<QuickActionEntry, 'id' | 'createdAt'>,
+): Promise<void> => {
+  if (!db) throw new Error('Firebase not configured');
+  await addDoc(collection(db, 'quickActionWork'), {
+    ...stripUndefined(data as Record<string, unknown>),
+    createdAt: Timestamp.now(),
+  });
+};
+
+export const subscribeToQuickActions = (callback: (entries: QuickActionEntry[]) => void) => {
+  if (!db) return () => {};
+  const q = query(collection(db, 'quickActionWork'), orderBy('createdAt', 'desc'));
+  return onSnapshot(q, (snap) => {
+    const entries: QuickActionEntry[] = [];
+    snap.forEach(d => entries.push({ id: d.id, ...d.data() } as QuickActionEntry));
+    callback(entries);
+  }, (err) => console.error('[Firestore] quickActionWork error:', err.message));
+};

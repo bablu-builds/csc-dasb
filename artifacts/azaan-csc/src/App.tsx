@@ -22,6 +22,7 @@ import DeletedItemsPage from '@/pages/DeletedItemsPage';
 import AepsWithdrawalPage from '@/pages/AepsWithdrawalPage';
 import ElectricRechargePage from '@/pages/ElectricRechargePage';
 import MoneyTransferPage from '@/pages/MoneyTransferPage';
+import QuickWorkPage from '@/pages/QuickWorkPage';
 
 const queryClient = new QueryClient();
 
@@ -36,6 +37,7 @@ function AuthenticatedApp() {
           <Route path="/work/:id/edit" component={EditWorkPage} />
           <Route path="/work" component={WorkListPage} />
           <Route path="/pending" component={PendingWorkPage} />
+          <Route path="/quick-work" component={QuickWorkPage} />
           <Route path="/reports">
               <RoleRoute allow="owner"><ReportsPage /></RoleRoute>
             </Route>

@@ -4,10 +4,11 @@ import {
   subscribeToAepsWithdrawals, AepsWithdrawal,
   subscribeToElectricRecharges, ElectricRecharge,
   subscribeToMoneyTransfers, MoneyTransfer,
+  subscribeToQuickActions, QuickActionEntry,
 } from '@/lib/firestore';
 import { useAuth } from '@/contexts/AuthContext';
 import { isToday, isThisWeek, isThisMonth, format, isWithinInterval, startOfDay, endOfDay, parseISO } from 'date-fns';
-import { Download, BarChart2, TrendingUp, IndianRupee, XCircle, Wallet, Zap, ArrowRightLeft, Receipt, Target, ShieldCheck, Banknote, Wifi } from 'lucide-react';
+import { Download, BarChart2, TrendingUp, IndianRupee, XCircle, Wallet, Zap, ArrowRightLeft, Receipt, Target, ShieldCheck, Banknote, Wifi, Printer } from 'lucide-react';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Skeleton } from '@/components/ui/skeleton';
 import { Button } from '@/components/ui/button';
@@ -68,6 +69,7 @@ export default function ReportsPage() {
   const [aepsEntries, setAepsEntries] = useState<AepsWithdrawal[]>([]);
   const [rechargeEntries, setRechargeEntries] = useState<ElectricRecharge[]>([]);
   const [transferEntries, setTransferEntries] = useState<MoneyTransfer[]>([]);
+  const [quickEntries, setQuickEntries] = useState<QuickActionEntry[]>([]);
   const [loading, setLoading] = useState(true);
   const [period, setPeriod] = useState<Period>('month');
   const [customFrom, setCustomFrom] = useState('');
@@ -75,12 +77,13 @@ export default function ReportsPage() {
 
   useEffect(() => {
     let done = 0;
-    const finish = () => { done++; if (done === 4) setLoading(false); };
+    const finish = () => { done++; if (done === 5) setLoading(false); };
     const u1 = subscribeToWorkEntries(d => { setWorkEntries(d); finish(); });
     const u2 = subscribeToAepsWithdrawals(d => { setAepsEntries(d); finish(); });
     const u3 = subscribeToElectricRecharges(d => { setRechargeEntries(d); finish(); });
     const u4 = subscribeToMoneyTransfers(d => { setTransferEntries(d); finish(); });
-    return () => { u1(); u2(); u3(); u4(); };
+    const u5 = subscribeToQuickActions(d => { setQuickEntries(d); finish(); });
+    return () => { u1(); u2(); u3(); u4(); u5(); };
   }, []);
 
   // Staff cannot see the Reports page — must be after all hooks
@@ -113,6 +116,7 @@ export default function ReportsPage() {
   const filteredAeps = aepsEntries.filter(e => inPeriod(e.createdAt.toDate()));
   const filteredRecharge = rechargeEntries.filter(e => inPeriod(e.createdAt.toDate()));
   const filteredTransfer = transferEntries.filter(e => inPeriod(e.createdAt.toDate()));
+  const filteredQuick = quickEntries.filter(e => inPeriod(e.createdAt.toDate()));
 
   const activeWork = filteredWork.filter(e => e.status !== 'Rejected');
   const rejectedWork = filteredWork.filter(e => e.status === 'Rejected');
@@ -124,7 +128,10 @@ export default function ReportsPage() {
   const aepsProfit = filteredAeps.reduce((s, e) => s + e.profitMargin, 0);
   const rechargeProfit = filteredRecharge.reduce((s, e) => s + e.profitMargin, 0);
   const transferProfit = filteredTransfer.reduce((s, e) => s + e.profitMargin, 0);
-  const totalProfit = workProfit + aepsProfit + rechargeProfit + transferProfit;
+  // Quick work has no cost — the full amount is profit
+  const quickEarned = filteredQuick.reduce((s, e) => s + e.amount, 0);
+  const quickProfit = quickEarned;
+  const totalProfit = workProfit + aepsProfit + rechargeProfit + transferProfit + quickProfit;
 
   const totalDues = activeWork.reduce((s, e) => s + e.dueAmount, 0);
 
@@ -156,6 +163,7 @@ export default function ReportsPage() {
 
   const profitBreakdown = [
     { name: 'Work/Certs', value: Math.max(0, workProfit), color: '#4f46e5' },
+    { name: 'Quick Work', value: quickProfit, color: '#f97316' },
     { name: 'AEPS', value: aepsProfit, color: '#0284c7' },
     { name: 'Recharge', value: rechargeProfit, color: '#d97706' },
     { name: 'Transfers', value: transferProfit, color: '#059669' },
@@ -196,6 +204,30 @@ export default function ReportsPage() {
     ].join(','));
     downloadCSV('transfer_report', headers, rows);
   };
+  const exportQuick = () => {
+    const headers = ['Date','Time','Category','Customer','Amount','AddedBy'];
+    const rows = filteredQuick.map(e => [
+      format(e.createdAt.toDate(), 'yyyy-MM-dd'),
+      format(e.createdAt.toDate(), 'HH:mm'),
+      `"${e.category}"`,
+      `"${e.customerName ?? ''}"`,
+      e.amount,
+      `"${e.addedBy}"`,
+    ].join(','));
+    downloadCSV('quick_work_report', headers, rows);
+  };
+
+  // Quick Action Work — category breakdown
+  const quickCategoryStats = filteredQuick.reduce((acc, e) => {
+    if (!acc[e.category]) acc[e.category] = { count: 0, earned: 0 };
+    acc[e.category].count++;
+    acc[e.category].earned += e.amount;
+    return acc;
+  }, {} as Record<string, { count: number; earned: number }>);
+  const sortedQuickCategories = Object.entries(quickCategoryStats).sort((a, b) => b[1].earned - a[1].earned);
+  const quickChartData = sortedQuickCategories.map(([name, stats]) => ({
+    name, fullName: name, earned: stats.earned, count: stats.count,
+  }));
 
   return (
     <div className="space-y-6 animate-fade-in-up">
@@ -238,12 +270,13 @@ export default function ReportsPage() {
             {[
               { value: 'profit', label: '📊 Overall Profit' },
               { value: 'work', label: '📋 Work / CSC' },
+              { value: 'quick', label: '🖨️ Quick Work' },
               { value: 'challan', label: '🧾 Challan' },
               { value: 'aeps', label: '💳 AEPS' },
               { value: 'recharge', label: '⚡ Recharge' },
               { value: 'transfer', label: '↔️ Transfer' },
             ].map(t => (
-              <TabsTrigger key={t.value} value={t.value} className="text-xs font-medium rounded-lg data-[state=active]:shadow-sm">
+              <TabsTrigger key={t.value} value={t.value} className="text-xs font-medium rounded-lg data-[state=active]:shadow-sm" data-testid={`reports-tab-${t.value}`}>
                 {t.label}
               </TabsTrigger>
             ))}
@@ -302,6 +335,11 @@ export default function ReportsPage() {
                       <td className="py-2.5 text-right font-semibold text-emerald-700">{formatCurrency(Math.max(0, workProfit))}</td>
                     </tr>
                     <tr className="hover:bg-muted/20">
+                      <td className="py-2.5 flex items-center gap-2"><Printer className="h-3.5 w-3.5 text-orange-600" /> Quick Work</td>
+                      <td className="py-2.5 text-right text-muted-foreground">{filteredQuick.length} entries</td>
+                      <td className="py-2.5 text-right font-semibold text-emerald-700">{formatCurrency(quickProfit)}</td>
+                    </tr>
+                    <tr className="hover:bg-muted/20">
                       <td className="py-2.5 flex items-center gap-2"><Wallet className="h-3.5 w-3.5 text-sky-600" /> AEPS</td>
                       <td className="py-2.5 text-right text-muted-foreground">{filteredAeps.length} txns</td>
                       <td className="py-2.5 text-right font-semibold text-emerald-700">{formatCurrency(aepsProfit)}</td>
@@ -321,7 +359,7 @@ export default function ReportsPage() {
                     <tr>
                       <td className="pt-2.5 font-bold">Total Profit</td>
                       <td className="pt-2.5 text-right text-muted-foreground">
-                        {activeWork.length + filteredAeps.length + filteredRecharge.length + filteredTransfer.length}
+                        {activeWork.length + filteredQuick.length + filteredAeps.length + filteredRecharge.length + filteredTransfer.length}
                       </td>
                       <td className="pt-2.5 text-right font-bold text-emerald-700">{formatCurrency(totalProfit)}</td>
                     </tr>
@@ -435,6 +473,87 @@ export default function ReportsPage() {
                 </div>
               </div>
             )}
+          </TabsContent>
+
+          {/* ── QUICK ACTION WORK ──────────────────────────────── */}
+          <TabsContent value="quick" className="space-y-4 mt-4" data-testid="reports-quick-tab-content">
+            <div className="flex justify-end">
+              <Button variant="outline" size="sm" onClick={exportQuick} className="gap-2" data-testid="reports-quick-export-btn">
+                <Download className="h-3.5 w-3.5" /> Export CSV
+              </Button>
+            </div>
+            <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+              <SummaryCard label="Quick Work Earned" value={formatCurrency(quickEarned)}
+                sub={`${filteredQuick.length} ${filteredQuick.length === 1 ? 'entry' : 'entries'}`}
+                icon={Printer} color="bg-orange-50 text-orange-600" />
+              <SummaryCard label="Quick Work Profit" value={formatCurrency(quickProfit)}
+                sub="Full amount (no cost)"
+                icon={TrendingUp} color="bg-emerald-50 text-emerald-600" />
+              <SummaryCard label="Avg / Entry"
+                value={filteredQuick.length ? formatCurrency(Math.round(quickEarned / filteredQuick.length)) : '₹0'}
+                sub="Per quick entry"
+                icon={IndianRupee} color="bg-indigo-50 text-primary" />
+            </div>
+
+            <div className="bg-card border rounded-xl shadow-card">
+              <div className="px-5 py-4 border-b flex justify-between items-center">
+                <h3 className="font-semibold text-sm">Category Breakdown — {periodLabel}</h3>
+              </div>
+              {sortedQuickCategories.length === 0 ? (
+                <div className="px-5 py-12 text-center text-muted-foreground text-sm">
+                  <Printer className="h-8 w-8 mx-auto mb-2 opacity-20" />
+                  No quick work entries for this period.
+                </div>
+              ) : (
+                <>
+                  <div className="p-5">
+                    <ResponsiveContainer width="100%" height={220}>
+                      <BarChart data={quickChartData} margin={{ top: 4, right: 8, left: 0, bottom: 40 }}>
+                        <CartesianGrid strokeDasharray="3 3" className="opacity-30" />
+                        <XAxis dataKey="name" tick={{ fontSize: 10 }} tickLine={false} angle={-35} textAnchor="end" interval={0} />
+                        <YAxis tick={{ fontSize: 11 }} tickLine={false} axisLine={false}
+                          tickFormatter={v => v === 0 ? '₹0' : `₹${(v/1000).toFixed(1)}k`} />
+                        <Tooltip formatter={(v: number, _, p: any) => [formatCurrency(v), p.payload.fullName]}
+                          contentStyle={{ borderRadius: '8px', fontSize: '12px' }} />
+                        <Bar dataKey="earned" radius={[4, 4, 0, 0]}>
+                          {quickChartData.map((_, i) => <Cell key={i} fill={CHART_COLORS[i % CHART_COLORS.length]} />)}
+                        </Bar>
+                      </BarChart>
+                    </ResponsiveContainer>
+                  </div>
+                  <div className="overflow-x-auto px-5 pb-5">
+                    <table className="w-full text-sm" data-testid="reports-quick-breakdown-table">
+                      <thead>
+                        <tr className="border-b text-muted-foreground text-xs uppercase">
+                          <th className="text-left pb-2 font-medium">Category</th>
+                          <th className="text-right pb-2 font-medium">Entries</th>
+                          <th className="text-right pb-2 font-medium">Earned</th>
+                          <th className="text-right pb-2 font-medium">Avg / Entry</th>
+                        </tr>
+                      </thead>
+                      <tbody className="divide-y">
+                        {sortedQuickCategories.map(([cat, stats]) => (
+                          <tr key={cat} className="hover:bg-muted/20 transition-colors">
+                            <td className="py-2.5 font-medium">{cat}</td>
+                            <td className="py-2.5 text-right text-muted-foreground">{stats.count}</td>
+                            <td className="py-2.5 text-right font-semibold text-emerald-700">{formatCurrency(stats.earned)}</td>
+                            <td className="py-2.5 text-right text-muted-foreground">{formatCurrency(Math.round(stats.earned / stats.count))}</td>
+                          </tr>
+                        ))}
+                      </tbody>
+                      <tfoot className="border-t-2">
+                        <tr>
+                          <td className="pt-2.5 font-bold">Total</td>
+                          <td className="pt-2.5 text-right font-bold">{sortedQuickCategories.reduce((s,[,v])=>s+v.count,0)}</td>
+                          <td className="pt-2.5 text-right font-bold text-emerald-700">{formatCurrency(quickEarned)}</td>
+                          <td className="pt-2.5 text-right text-muted-foreground">—</td>
+                        </tr>
+                      </tfoot>
+                    </table>
+                  </div>
+                </>
+              )}
+            </div>
           </TabsContent>
 
           {/* ── CHALLAN ────────────────────────────────────────── */}

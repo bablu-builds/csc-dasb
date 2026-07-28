@@ -4,7 +4,7 @@ import { useSettings } from '@/contexts/SettingsContext';
 import {
   LayoutDashboard, PlusCircle, List, Clock, BarChart3, Settings,
   LogOut, Menu, Store, X, Trash2, Zap, Wallet, ArrowRightLeft, ChevronRight,
-  User2, Fingerprint,
+  User2, Fingerprint, Printer,
 } from 'lucide-react';
 import { useState } from 'react';
 
@@ -22,6 +22,7 @@ const mainNavItems: NavItem[] = [
   { href: '/work/new', label: 'Add Work Entry', icon: PlusCircle, isPrimary: true },
   { href: '/work', label: 'All Work', icon: List },
   { href: '/pending', label: 'Pending Work', icon: Clock },
+  { href: '/quick-work', label: 'Quick Action Work', icon: Printer },
 ];
 
 const financialNavItems: NavItem[] = [

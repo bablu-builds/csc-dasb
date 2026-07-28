@@ -4,6 +4,7 @@ import {
   subscribeToAepsWithdrawals, AepsWithdrawal,
   subscribeToElectricRecharges, ElectricRecharge,
   subscribeToMoneyTransfers, MoneyTransfer,
+  subscribeToQuickActions, QuickActionEntry,
 } from '@/lib/firestore';
 import { useAuth } from '@/contexts/AuthContext';
 import { isToday, isThisMonth, differenceInDays, subDays, format } from 'date-fns';
@@ -94,6 +95,7 @@ export default function DashboardPage() {
   const [aepsEntries, setAepsEntries] = useState<AepsWithdrawal[]>([]);
   const [rechargeEntries, setRechargeEntries] = useState<ElectricRecharge[]>([]);
   const [transferEntries, setTransferEntries] = useState<MoneyTransfer[]>([]);
+  const [quickEntries, setQuickEntries] = useState<QuickActionEntry[]>([]);
   const [loading, setLoading] = useState(true);
   const [completingId, setCompletingId] = useState<string | null>(null);
   const { isOwner, canAccessFinancialServices } = useAuth();
@@ -101,21 +103,30 @@ export default function DashboardPage() {
 
   useEffect(() => {
     let resolved = 0;
-    const done = () => { resolved++; if (resolved === 4) setLoading(false); };
+    const done = () => { resolved++; if (resolved === 5) setLoading(false); };
 
     const u1 = subscribeToWorkEntries((d) => { setWorkEntries(d); done(); });
     const u2 = subscribeToAepsWithdrawals((d) => { setAepsEntries(d); done(); });
     const u3 = subscribeToElectricRecharges((d) => { setRechargeEntries(d); done(); });
     const u4 = subscribeToMoneyTransfers((d) => { setTransferEntries(d); done(); });
-    return () => { u1(); u2(); u3(); u4(); };
+    const u5 = subscribeToQuickActions((d) => { setQuickEntries(d); done(); });
+    return () => { u1(); u2(); u3(); u4(); u5(); };
   }, []);
 
   const today = new Date();
 
   // Work entry stats
   const todayWork = workEntries.filter(e => isToday(e.date.toDate()) && e.status !== 'Rejected');
-  const todaysEarning = todayWork.reduce((s, e) => s + e.paidAmount, 0);
-  const monthEarning = workEntries.filter(e => isThisMonth(e.date.toDate()) && e.status !== 'Rejected').reduce((s, e) => s + e.paidAmount, 0);
+  const workTodayEarning = todayWork.reduce((s, e) => s + e.paidAmount, 0);
+  const workMonthEarning = workEntries.filter(e => isThisMonth(e.date.toDate()) && e.status !== 'Rejected').reduce((s, e) => s + e.paidAmount, 0);
+
+  // Quick Action Work (included in Today's/This Month earnings)
+  const todayQuickEarning = quickEntries.filter(e => isToday(e.createdAt.toDate())).reduce((s, e) => s + e.amount, 0);
+  const monthQuickEarning = quickEntries.filter(e => isThisMonth(e.createdAt.toDate())).reduce((s, e) => s + e.amount, 0);
+
+  const todaysEarning = workTodayEarning + todayQuickEarning;
+  const monthEarning = workMonthEarning + monthQuickEarning;
+
   const pendingCount = workEntries.filter(e => e.status === 'Pending').length;
   const totalDue = workEntries.reduce((s, e) => s + e.dueAmount, 0);
   const rejectedEntries = workEntries.filter(e => e.status === 'Rejected');
@@ -123,20 +134,23 @@ export default function DashboardPage() {
   const totalRefunded = rejectedEntries.reduce((s, e) => s + (e.refundAmount || 0), 0);
   const uniqueCustomers = new Set(workEntries.map(e => e.mobile)).size;
 
-  // Combined profit for owner (AEPS + Recharge + MoneyTransfer)
+  // Combined profit for owner (AEPS + Recharge + MoneyTransfer + Quick)
   const todayAepsProfit = aepsEntries.filter(e => isToday(e.createdAt.toDate())).reduce((s, e) => s + e.profitMargin, 0);
   const todayRechargeProfit = rechargeEntries.filter(e => isToday(e.createdAt.toDate())).reduce((s, e) => s + e.profitMargin, 0);
   const todayTransferProfit = transferEntries.filter(e => isToday(e.createdAt.toDate())).reduce((s, e) => s + e.profitMargin, 0);
   const todayChallanCost = todayWork.reduce((s, e) => s + (e.challanAmount ?? 0), 0);
-  const todayWorkProfit = todaysEarning - todayChallanCost;
-  const todayTotalProfit = todayWorkProfit + todayAepsProfit + todayRechargeProfit + todayTransferProfit;
+  const todayWorkProfit = workTodayEarning - todayChallanCost;
+  // Quick work has no challan/cost, so amount === profit
+  const todayQuickProfit = todayQuickEarning;
+  const todayTotalProfit = todayWorkProfit + todayAepsProfit + todayRechargeProfit + todayTransferProfit + todayQuickProfit;
 
   const monthAepsProfit = aepsEntries.filter(e => isThisMonth(e.createdAt.toDate())).reduce((s, e) => s + e.profitMargin, 0);
   const monthRechargeProfit = rechargeEntries.filter(e => isThisMonth(e.createdAt.toDate())).reduce((s, e) => s + e.profitMargin, 0);
   const monthTransferProfit = transferEntries.filter(e => isThisMonth(e.createdAt.toDate())).reduce((s, e) => s + e.profitMargin, 0);
   const monthChallanCost = workEntries.filter(e => isThisMonth(e.date.toDate()) && e.status !== 'Rejected').reduce((s, e) => s + (e.challanAmount ?? 0), 0);
-  const monthWorkProfit = monthEarning - monthChallanCost;
-  const monthTotalProfit = monthWorkProfit + monthAepsProfit + monthRechargeProfit + monthTransferProfit;
+  const monthWorkProfit = workMonthEarning - monthChallanCost;
+  const monthQuickProfit = monthQuickEarning;
+  const monthTotalProfit = monthWorkProfit + monthAepsProfit + monthRechargeProfit + monthTransferProfit + monthQuickProfit;
 
   // Pending reminders (3+ days old, or has due amount)
   const reminderEntries = workEntries
@@ -145,14 +159,17 @@ export default function DashboardPage() {
     .filter(e => e.daysPending >= 3 || e.dueAmount > 0)
     .sort((a, b) => b.daysPending - a.daysPending);
 
-  // Last 7 days chart
+  // Last 7 days chart (includes Quick Action Work income)
   const chartData = Array.from({ length: 7 }).map((_, i) => {
     const day = subDays(today, 6 - i);
     const dayKey = format(day, 'yyyy-MM-dd');
-    const earned = workEntries
+    const workEarned = workEntries
       .filter(e => format(e.date.toDate(), 'yyyy-MM-dd') === dayKey && e.status !== 'Rejected')
       .reduce((s, e) => s + e.paidAmount, 0);
-    return { day: format(day, 'dd MMM'), earned };
+    const quickEarned = quickEntries
+      .filter(e => format(e.createdAt.toDate(), 'yyyy-MM-dd') === dayKey)
+      .reduce((s, e) => s + e.amount, 0);
+    return { day: format(day, 'dd MMM'), earned: workEarned + quickEarned };
   });
 
   // Recent entries
@@ -322,14 +339,14 @@ export default function DashboardPage() {
             <StatCard
               label="Today's Total Profit"
               value={formatCurrency(todayTotalProfit)}
-              sub={`Work ₹${Math.round(todayWorkProfit)} · AEPS ₹${Math.round(todayAepsProfit)} · Recharge ₹${Math.round(todayRechargeProfit)} · Transfer ₹${Math.round(todayTransferProfit)}`}
+              sub={`Work ₹${Math.round(todayWorkProfit)} · Quick ₹${Math.round(todayQuickProfit)} · AEPS ₹${Math.round(todayAepsProfit)} · Recharge ₹${Math.round(todayRechargeProfit)} · Transfer ₹${Math.round(todayTransferProfit)}`}
               icon={TrendingUp}
               gradient="bg-gradient-to-br from-emerald-500 to-emerald-700"
             />
             <StatCard
               label="Month's Total Profit"
               value={formatCurrency(monthTotalProfit)}
-              sub="Work + AEPS + Recharge + Transfer combined"
+              sub="Work + Quick + AEPS + Recharge + Transfer combined"
               icon={IndianRupee}
               gradient="bg-gradient-to-br from-indigo-500 to-indigo-700"
             />
