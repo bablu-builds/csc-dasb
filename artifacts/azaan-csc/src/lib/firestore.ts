@@ -193,7 +193,10 @@ export const createWorkEntry = async (
 
 export const updateWorkEntry = async (
   id: string,
-  data: Partial<Omit<WorkEntry, 'id' | 'dueAmount' | 'createdAt' | 'completedAt' | 'rejectedAt'>>
+  data: Partial<Omit<WorkEntry, 'id' | 'dueAmount' | 'createdAt' | 'completedAt' | 'rejectedAt'>>,
+  /** Pass the current Firestore paidAmount when NOT sending paidAmount in data,
+   *  so dueAmount can still be recalculated correctly when totalAmount changes. */
+  currentPaidAmount?: number
 ) => {
   if (!db) throw new Error("Firebase not configured");
 
@@ -204,17 +207,20 @@ export const updateWorkEntry = async (
 
   const updates: Record<string, unknown> = { ...stripUndefined(rest as Record<string, unknown>), ...rejectionFields };
 
+  // Use the explicitly-passed paidAmount (new entries) or the currentPaidAmount from Firestore (edit form)
+  const effectivePaidAmount = data.paidAmount ?? currentPaidAmount;
+
   if (data.status === 'Rejected') {
     updates.rejectedAt = Timestamp.now();
     updates.dueAmount = 0;
   } else if (data.status === 'Completed') {
     updates.completedAt = Timestamp.now();
-    if (data.totalAmount !== undefined && data.paidAmount !== undefined) {
-      updates.dueAmount = data.totalAmount - data.paidAmount;
+    if (data.totalAmount !== undefined && effectivePaidAmount !== undefined) {
+      updates.dueAmount = data.totalAmount - effectivePaidAmount;
     }
   } else {
-    if (data.totalAmount !== undefined && data.paidAmount !== undefined) {
-      updates.dueAmount = data.totalAmount - data.paidAmount;
+    if (data.totalAmount !== undefined && effectivePaidAmount !== undefined) {
+      updates.dueAmount = data.totalAmount - effectivePaidAmount;
     }
   }
 
@@ -245,7 +251,8 @@ export const addPaymentToEntry = async (
 ): Promise<void> => {
   if (!db) throw new Error("Firebase not configured");
   const newPaidAmount = currentPaidAmount + payment.amount;
-  const newDueAmount = Math.max(0, totalAmount - newPaidAmount);
+  // Allow negative dueAmount to represent overpayment — do NOT clamp at 0
+  const newDueAmount = totalAmount - newPaidAmount;
   const paymentRecord: PaymentRecord = {
     amount: payment.amount,
     paidAt: Timestamp.now(),

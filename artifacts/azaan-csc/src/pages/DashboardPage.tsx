@@ -164,7 +164,9 @@ export default function DashboardPage() {
     if (!entry.id) return;
     setCompletingId(entry.id);
     try {
-      await updateWorkEntry(entry.id, { status: 'Completed', paidAmount: entry.totalAmount });
+      // Only update status — pass currentPaidAmount so dueAmount recalculates correctly
+      // without touching the payments array or overwriting paidAmount
+      await updateWorkEntry(entry.id, { status: 'Completed', totalAmount: entry.totalAmount }, entry.paidAmount);
       toast({ title: 'Marked as Completed', description: `${entry.customerName} — ${entry.category}` });
     } catch (err: any) {
       toast({ variant: 'destructive', title: 'Error', description: err.message });

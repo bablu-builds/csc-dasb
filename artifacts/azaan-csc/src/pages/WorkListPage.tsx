@@ -256,6 +256,10 @@ export default function WorkListPage() {
                         <span className="font-bold text-red-600 bg-red-50 border border-red-200 px-2 py-0.5 rounded-full text-xs">
                           {formatCurrency(entry.dueAmount)}
                         </span>
+                      ) : entry.dueAmount < 0 ? (
+                        <span className="font-bold text-blue-600 bg-blue-50 border border-blue-200 px-2 py-0.5 rounded-full text-xs">
+                          +{formatCurrency(Math.abs(entry.dueAmount))} credit
+                        </span>
                       ) : (
                         <span className="text-emerald-600 text-xs font-medium">Paid ✓</span>
                       )}
@@ -344,6 +348,7 @@ export default function WorkListPage() {
                     <div className="text-right shrink-0">
                       <div className="text-sm font-semibold">Total: {formatCurrency(entry.totalAmount)}</div>
                       {entry.dueAmount > 0 && <div className="text-sm text-red-600 mt-0.5">Due: {formatCurrency(entry.dueAmount)}</div>}
+                      {entry.dueAmount < 0 && <div className="text-sm text-blue-600 mt-0.5">Credit: {formatCurrency(Math.abs(entry.dueAmount))}</div>}
                       {entry.challanAmount ? <div className="text-xs text-amber-600 mt-0.5">Challan: {formatCurrency(entry.challanAmount)}</div> : null}
                       {entry.status === 'Rejected' && entry.refundAmount
                         ? <div className="text-sm text-red-500 mt-0.5">Refund: {formatCurrency(entry.refundAmount)}</div> : null}

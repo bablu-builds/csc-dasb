@@ -39,11 +39,14 @@ export default function EditWorkPage() {
   }, [id]);
 
   const handleSubmit = async (data: Omit<WorkEntryFormData, 'date'> & { date: Timestamp }) => {
-    if (!id) return;
+    if (!id || !entry) return;
     setIsSubmitting(true);
     try {
-      // Note: addedBy is intentionally excluded from updates — it's set at creation only
-      await updateWorkEntry(id, data);
+      // Strip paidAmount — payments are managed exclusively via the Payment History section.
+      // Pass entry.paidAmount as currentPaidAmount so dueAmount recalculates correctly
+      // if the user edits totalAmount, without ever touching the payments array.
+      const { paidAmount: _ignored, ...updateData } = data;
+      await updateWorkEntry(id, updateData, entry.paidAmount);
       toast({ title: "Work Updated Successfully" });
       setLocation('/work');
     } catch (error: any) {
@@ -156,8 +159,14 @@ export default function EditWorkPage() {
               {entry.dueAmount > 0 && (
                 <span className="ml-3 text-red-600 font-semibold text-sm">Due: {formatCurrency(entry.dueAmount)}</span>
               )}
+              {entry.dueAmount < 0 && (
+                <span className="ml-3 text-blue-600 font-semibold text-sm">
+                  Overpaid by {formatCurrency(Math.abs(entry.dueAmount))}
+                </span>
+              )}
             </div>
-            {entry.status !== 'Rejected' && entry.dueAmount > 0 && (
+            {/* Show "Add Payment" for all non-Rejected entries — overpayment is allowed */}
+            {entry.status !== 'Rejected' && (
               <Button size="sm" className="gap-1.5 h-8 text-xs" onClick={() => setPaymentOpen(true)}>
                 <Plus className="h-3.5 w-3.5" /> Add Payment
               </Button>
@@ -237,7 +246,13 @@ export default function EditWorkPage() {
       {/* Edit form */}
       <div className="bg-card border rounded-xl p-6 shadow-card">
         <p className="text-sm font-semibold mb-5 text-muted-foreground uppercase tracking-wide text-xs">Update Entry Details</p>
-        <WorkEntryForm initialData={initialData} onSubmit={handleSubmit} isSubmitting={isSubmitting} />
+        <WorkEntryForm
+          initialData={initialData}
+          onSubmit={handleSubmit}
+          isSubmitting={isSubmitting}
+          isEditing={true}
+          currentPaidAmount={entry.paidAmount}
+        />
       </div>
 
       {/* Add Payment Dialog */}
@@ -247,9 +262,19 @@ export default function EditWorkPage() {
             <DialogTitle>Record New Payment</DialogTitle>
           </DialogHeader>
           <div className="py-2 space-y-3">
-            <p className="text-sm text-muted-foreground">
-              Outstanding due: <span className="font-bold text-red-600">{formatCurrency(entry.dueAmount)}</span>
-            </p>
+            {entry.dueAmount > 0 ? (
+              <p className="text-sm text-muted-foreground">
+                Outstanding due: <span className="font-bold text-red-600">{formatCurrency(entry.dueAmount)}</span>
+              </p>
+            ) : entry.dueAmount < 0 ? (
+              <p className="text-sm text-blue-700 bg-blue-50 rounded-lg px-3 py-2 border border-blue-200">
+                This entry is already overpaid by <strong>{formatCurrency(Math.abs(entry.dueAmount))}</strong>. Recording another payment will increase the credit.
+              </p>
+            ) : (
+              <p className="text-sm text-emerald-700 bg-emerald-50 rounded-lg px-3 py-2 border border-emerald-200">
+                This entry is fully paid. Recording a payment will create an overpayment/credit.
+              </p>
+            )}
             <div className="relative">
               <IndianRupee className="absolute left-3 top-2.5 h-4 w-4 text-muted-foreground" />
               <Input
@@ -258,9 +283,16 @@ export default function EditWorkPage() {
                 className="pl-9"
                 value={paymentAmount}
                 onChange={e => setPaymentAmount(e.target.value)}
-                max={entry.dueAmount}
+                min={0}
               />
             </div>
+            {/* Soft warning when payment exceeds outstanding due */}
+            {paymentAmount && entry.dueAmount > 0 && parseFloat(paymentAmount) > entry.dueAmount && (
+              <p className="text-xs text-amber-700 bg-amber-50 border border-amber-200 rounded px-2 py-1.5">
+                ⚠ This payment exceeds the outstanding due by{' '}
+                <strong>{formatCurrency(parseFloat(paymentAmount) - entry.dueAmount)}</strong> — the entry will be marked as overpaid.
+              </p>
+            )}
             <p className="text-xs text-muted-foreground">
               Recorded by: <strong>{displayName}</strong> · Date/time auto-set
             </p>

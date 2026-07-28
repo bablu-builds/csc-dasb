@@ -41,9 +41,13 @@ interface WorkEntryFormProps {
   initialData?: Partial<WorkEntryFormData>;
   onSubmit: (data: Omit<WorkEntryFormData, 'date'> & { date: Timestamp }) => Promise<void>;
   isSubmitting?: boolean;
+  /** When true: hides the Paid Amount input (edit mode — payments managed via Payment History section) */
+  isEditing?: boolean;
+  /** Current paidAmount from Firestore — used in edit mode to calculate live due amount as totalAmount changes */
+  currentPaidAmount?: number;
 }
 
-export function WorkEntryForm({ initialData, onSubmit, isSubmitting = false }: WorkEntryFormProps) {
+export function WorkEntryForm({ initialData, onSubmit, isSubmitting = false, isEditing = false, currentPaidAmount = 0 }: WorkEntryFormProps) {
   const { categories } = useSettings();
 
   const form = useForm<WorkEntryFormData>({
@@ -64,10 +68,35 @@ export function WorkEntryForm({ initialData, onSubmit, isSubmitting = false }: W
     },
   });
 
+  // Re-sync form when Firestore entry updates (prevents stale data on submit)
+  useEffect(() => {
+    if (!initialData) return;
+    form.reset({
+      customerName: initialData.customerName ?? '',
+      mobile: initialData.mobile ?? '',
+      category: initialData.category ?? '',
+      workDetail: initialData.workDetail ?? '',
+      date: initialData.date ?? new Date(),
+      totalAmount: initialData.totalAmount ?? 0,
+      paidAmount: initialData.paidAmount ?? 0,
+      challanAmount: initialData.challanAmount ?? 0,
+      status: initialData.status ?? 'Pending',
+      address: initialData.address ?? '',
+      rejectionReason: initialData.rejectionReason ?? '',
+      refundAmount: initialData.refundAmount ?? undefined,
+    });
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [initialData?.totalAmount, initialData?.challanAmount, initialData?.status, initialData?.customerName, initialData?.mobile]);
+
   const total = form.watch('totalAmount');
   const paid = form.watch('paidAmount');
   const status = form.watch('status');
-  const due = Math.max(0, (total || 0) - (paid || 0));
+
+  // In edit mode: due = new totalAmount − current Firestore paidAmount (live preview as user edits total)
+  // In add mode:  due = totalAmount − paidAmount from form state
+  const effectiveDue = isEditing
+    ? (total || 0) - currentPaidAmount
+    : (total || 0) - (paid || 0);
 
   const handleSubmit = async (values: WorkEntryFormData) => {
     await onSubmit({ ...values, date: Timestamp.fromDate(values.date) });
@@ -156,7 +185,7 @@ export function WorkEntryForm({ initialData, onSubmit, isSubmitting = false }: W
         {/* Amount section */}
         <div className="p-5 bg-muted/30 rounded-xl border space-y-4">
           <p className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">Payment Details</p>
-          <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
+          <div className={cn("grid gap-4", isEditing ? "grid-cols-1 md:grid-cols-3" : "grid-cols-1 md:grid-cols-4")}>
             <FormField control={form.control} name="totalAmount" render={({ field }) => (
               <FormItem>
                 <FormLabel className="text-sm font-medium">Total Amount (₹)</FormLabel>
@@ -170,18 +199,21 @@ export function WorkEntryForm({ initialData, onSubmit, isSubmitting = false }: W
               </FormItem>
             )} />
 
-            <FormField control={form.control} name="paidAmount" render={({ field }) => (
-              <FormItem>
-                <FormLabel className="text-sm font-medium">Paid Amount (₹)</FormLabel>
-                <FormControl>
-                  <div className="relative">
-                    <IndianRupee className="absolute left-3 top-2.5 h-4 w-4 text-muted-foreground" />
-                    <Input type="number" className={cn(inputClass, "pl-9")} {...field} />
-                  </div>
-                </FormControl>
-                <FormMessage />
-              </FormItem>
-            )} />
+            {/* Paid Amount — only shown when creating a new entry; editing uses Payment History section */}
+            {!isEditing && (
+              <FormField control={form.control} name="paidAmount" render={({ field }) => (
+                <FormItem>
+                  <FormLabel className="text-sm font-medium">Paid Amount (₹)</FormLabel>
+                  <FormControl>
+                    <div className="relative">
+                      <IndianRupee className="absolute left-3 top-2.5 h-4 w-4 text-muted-foreground" />
+                      <Input type="number" className={cn(inputClass, "pl-9")} {...field} />
+                    </div>
+                  </FormControl>
+                  <FormMessage />
+                </FormItem>
+              )} />
+            )}
 
             <FormField control={form.control} name="challanAmount" render={({ field }) => (
               <FormItem>
@@ -200,15 +232,26 @@ export function WorkEntryForm({ initialData, onSubmit, isSubmitting = false }: W
               </FormItem>
             )} />
 
+            {/* Due Amount — read-only calculated display */}
             <div className="space-y-2">
-              <label className="block text-sm font-medium leading-none">Due Amount (₹)</label>
+              <label className="block text-sm font-medium leading-none">
+                {effectiveDue < 0 ? 'Overpaid' : 'Due Amount'} (₹)
+              </label>
               <div className={cn(
                 "h-10 px-3 rounded-md border font-semibold flex items-center gap-2 text-sm",
-                due > 0 ? "bg-red-50 border-red-200 text-red-700" : "bg-emerald-50 border-emerald-200 text-emerald-700"
+                effectiveDue > 0
+                  ? "bg-red-50 border-red-200 text-red-700"
+                  : effectiveDue < 0
+                  ? "bg-blue-50 border-blue-200 text-blue-700"
+                  : "bg-emerald-50 border-emerald-200 text-emerald-700"
               )}>
                 <IndianRupee className="h-4 w-4" />
-                {due.toLocaleString('en-IN')}
+                {Math.abs(effectiveDue).toLocaleString('en-IN')}
+                {effectiveDue < 0 && <span className="text-xs font-normal ml-1">(credit)</span>}
               </div>
+              {isEditing && (
+                <p className="text-xs text-muted-foreground">Paid via Payment History</p>
+              )}
             </div>
           </div>
         </div>
