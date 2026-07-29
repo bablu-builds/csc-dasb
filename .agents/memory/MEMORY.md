@@ -1,5 +1,5 @@
 - [Design System](design-system.md) — Indigo primary (#4f46e5), near-black navy sidebar (#080f1f), Plus Jakarta Sans headings + Inter body; all gradient stat cards use named CSS classes (stat-gradient-*)
-- [Role System](role-system.md) — AuthContext fetches role from Firestore users/{uid}; missing doc defaults to owner; exposes isOwner + canAccessFinancialServices; secondary Firebase app trick for staff creation without interrupting owner's session
+- [Role System](role-system.md) — 3-tier: owner/manager/staff; AuthContext exposes isOwner+isManager; managers auto-get financial access; subscribeToStaff uses 'in' query (no orderBy, sorts client-side) to avoid composite index
 - [Soft Delete Pattern](soft-delete.md) — deleteWorkEntry sets isDeleted:true + deletedAt; subscribeToWorkEntries filters client-side (no Firestore index needed)
 - [Payment History](payment-history.md) — WorkEntry.payments[] array; addPaymentToEntry uses arrayUnion; paidAmount kept in sync as running total
 - [Financial Services](financial-services.md) — Three Firestore collections: aepsWithdrawals, electricRecharges, moneyTransfers; all have profitMargin field; pages gated by canAccessFinancialServices || isOwner
