@@ -4,4 +4,5 @@
 - [Payment History](payment-history.md) — WorkEntry.payments[] array; addPaymentToEntry uses arrayUnion; paidAmount kept in sync as running total
 - [Financial Services](financial-services.md) — Three Firestore collections: aepsWithdrawals, electricRecharges, moneyTransfers; all have profitMargin field; pages gated by canAccessFinancialServices || isOwner
 - [Challan Field](challan-field.md) — WorkEntry.challanAmount (optional, govt fee); shown in forms and used in profit calculations in Reports and Dashboard
+- [Payment Mode Upgrade](payment-mode-upgrade.md) — 4-mode system (Cash/Online/Due/None) across all 5 entry types; resolveStatus() for legacy-safe defaults; settlePendingEntry for atomic due settlement
 - [Firestore rules deployment](firestore-rules.md) — Rules live in firestore.rules; must be deployed via Firebase CLI or pasted into Firebase Console manually
