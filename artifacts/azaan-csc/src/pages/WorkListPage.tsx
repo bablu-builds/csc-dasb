@@ -243,9 +243,24 @@ export default function WorkListPage() {
                       <Badge variant="secondary" className="font-normal text-xs">{entry.category}</Badge>
                     </td>
                     <td className="px-4 py-3 text-right">
-                      <span className="font-semibold">{formatCurrency(entry.totalAmount)}</span>
+                      {(() => {
+                        const net = entry.netAdjustmentAmount ?? 0;
+                        const final = entry.totalAmount + net;
+                        return (
+                          <>
+                            <span className="font-semibold">{formatCurrency(final)}</span>
+                            {net !== 0 && (
+                              <span className="block text-xs text-indigo-600 font-normal">
+                                adj {net > 0 ? '+' : '−'}₹{Math.abs(net).toLocaleString('en-IN')}
+                              </span>
+                            )}
+                          </>
+                        );
+                      })()}
                       {entry.challanAmount ? (
-                        <span className="block text-xs text-amber-600 font-normal">Challan: {formatCurrency(entry.challanAmount)}</span>
+                        <span className="block text-xs text-amber-600 font-normal">
+                          Challan: {formatCurrency((entry.challanAmount ?? 0) + (entry.netAdjustmentChallan ?? 0))}
+                        </span>
                       ) : null}
                       {entry.status === 'Rejected' && entry.refundAmount ? (
                         <span className="block text-xs text-red-500 font-normal">Refund: {formatCurrency(entry.refundAmount)}</span>
@@ -346,10 +361,17 @@ export default function WorkListPage() {
                       )}
                     </div>
                     <div className="text-right shrink-0">
-                      <div className="text-sm font-semibold">Total: {formatCurrency(entry.totalAmount)}</div>
+                      <div className="text-sm font-semibold">
+                        Total: {formatCurrency(entry.totalAmount + (entry.netAdjustmentAmount ?? 0))}
+                        {(entry.netAdjustmentAmount ?? 0) !== 0 && (
+                          <span className="text-xs font-normal text-indigo-600 ml-1">
+                            ({(entry.netAdjustmentAmount ?? 0) > 0 ? '+' : '−'}₹{Math.abs(entry.netAdjustmentAmount ?? 0).toLocaleString('en-IN')})
+                          </span>
+                        )}
+                      </div>
                       {entry.dueAmount > 0 && <div className="text-sm text-red-600 mt-0.5">Due: {formatCurrency(entry.dueAmount)}</div>}
                       {entry.dueAmount < 0 && <div className="text-sm text-blue-600 mt-0.5">Credit: {formatCurrency(Math.abs(entry.dueAmount))}</div>}
-                      {entry.challanAmount ? <div className="text-xs text-amber-600 mt-0.5">Challan: {formatCurrency(entry.challanAmount)}</div> : null}
+                      {entry.challanAmount ? <div className="text-xs text-amber-600 mt-0.5">Challan: {formatCurrency((entry.challanAmount ?? 0) + (entry.netAdjustmentChallan ?? 0))}</div> : null}
                       {entry.status === 'Rejected' && entry.refundAmount
                         ? <div className="text-sm text-red-500 mt-0.5">Refund: {formatCurrency(entry.refundAmount)}</div> : null}
                     </div>

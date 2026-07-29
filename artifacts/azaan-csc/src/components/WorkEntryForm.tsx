@@ -48,10 +48,14 @@ interface WorkEntryFormProps {
   isEditing?: boolean;
   /** Current paidAmount from Firestore — used in edit mode to calculate live due amount as totalAmount changes */
   currentPaidAmount?: number;
+  /**
+   * Sum of all Deal Adjustments amountChange for this entry.
+   * When provided, the due-amount preview in edit mode adds this to the original totalAmount.
+   */
+  netAdjustmentAmount?: number;
 }
 
-/** Shared helper: value → '' when 0 so the field shows blank (avoids leading-zero bug).
- *  Empty string → 0 on change so zod coerce gets a valid number. */
+/** Shared helper: value → '' when 0 so the field shows blank (avoids leading-zero bug). */
 function numericFieldProps(field: { value: number | undefined; onChange: (v: string | number) => void }) {
   return {
     value: field.value !== undefined && field.value !== 0 ? field.value : '',
@@ -62,7 +66,14 @@ function numericFieldProps(field: { value: number | undefined; onChange: (v: str
   };
 }
 
-export function WorkEntryForm({ initialData, onSubmit, isSubmitting = false, isEditing = false, currentPaidAmount = 0 }: WorkEntryFormProps) {
+export function WorkEntryForm({
+  initialData,
+  onSubmit,
+  isSubmitting = false,
+  isEditing = false,
+  currentPaidAmount = 0,
+  netAdjustmentAmount = 0,
+}: WorkEntryFormProps) {
   const { categories } = useSettings();
 
   const form = useForm<WorkEntryFormData>({
@@ -84,7 +95,7 @@ export function WorkEntryForm({ initialData, onSubmit, isSubmitting = false, isE
     },
   });
 
-  // Re-sync form when Firestore entry updates (prevents stale data on submit)
+  // Re-sync form when Firestore entry updates
   useEffect(() => {
     if (!initialData) return;
     form.reset({
@@ -112,12 +123,10 @@ export function WorkEntryForm({ initialData, onSubmit, isSubmitting = false, isE
 
   // ── Payment mode side-effects ────────────────────────────────────────────
   useEffect(() => {
-    if (isEditing) return; // edit mode: no auto-mutations
+    if (isEditing) return;
     if (paymentMode === 'Due') {
-      // Due: paidAmount must be 0
       form.setValue('paidAmount', 0);
     } else if (paymentMode === 'None') {
-      // None (Free): force ₹0 total, ₹0 paid, Completed status
       form.setValue('totalAmount', 0);
       form.setValue('paidAmount', 0);
       form.setValue('challanAmount', 0);
@@ -126,17 +135,14 @@ export function WorkEntryForm({ initialData, onSubmit, isSubmitting = false, isE
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [paymentMode, isEditing]);
 
-  // In edit mode: due = new totalAmount − current Firestore paidAmount (live preview as user edits total)
-  // In add mode:  due = totalAmount − paidAmount from form state
+  // In edit mode: due = (original totalAmount + netAdjustmentAmount) − current Firestore paidAmount
+  // In add mode:  due = totalAmount − paidAmount from form
   const effectiveDue = isEditing
-    ? (total || 0) - currentPaidAmount
+    ? (total || 0) + netAdjustmentAmount - currentPaidAmount
     : (total || 0) - (paid || 0);
 
-  // Hide paid amount input for Due (always 0) and None (always 0)
   const showPaidAmount = !isEditing && paymentMode !== 'Due' && paymentMode !== 'None';
-  // Hide all payment fields for None (free service)
   const showPaymentFields = paymentMode !== 'None' || isEditing;
-  // For None mode, totalAmount is locked at 0
   const isTotalLocked = !isEditing && paymentMode === 'None';
 
   const handleSubmit = async (values: WorkEntryFormData) => {
@@ -227,7 +233,6 @@ export function WorkEntryForm({ initialData, onSubmit, isSubmitting = false, isE
         <div className="p-5 bg-muted/30 rounded-xl border space-y-4">
           <p className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">Payment Details</p>
 
-          {/* Payment Mode Selector — always visible except in edit mode */}
           {!isEditing && (
             <FormField control={form.control} name="paymentMode" render={({ field }) => (
               <FormItem>
@@ -248,7 +253,9 @@ export function WorkEntryForm({ initialData, onSubmit, isSubmitting = false, isE
             {/* Total Amount */}
             <FormField control={form.control} name="totalAmount" render={({ field }) => (
               <FormItem>
-                <FormLabel className="text-sm font-medium">Total Amount (₹)</FormLabel>
+                <FormLabel className="text-sm font-medium">
+                  {isEditing ? 'Original Total Amount (₹)' : 'Total Amount (₹)'}
+                </FormLabel>
                 <FormControl>
                   <div className="relative">
                     <IndianRupee className="absolute left-3 top-2.5 h-4 w-4 text-muted-foreground" />
@@ -257,6 +264,11 @@ export function WorkEntryForm({ initialData, onSubmit, isSubmitting = false, isE
                       {...numericFieldProps(field)} />
                   </div>
                 </FormControl>
+                {isEditing && netAdjustmentAmount !== 0 && (
+                  <p className="text-xs text-muted-foreground mt-1">
+                    Original value — use Deal Adjustments to change the effective total
+                  </p>
+                )}
                 <FormMessage />
               </FormItem>
             )} />
@@ -278,13 +290,13 @@ export function WorkEntryForm({ initialData, onSubmit, isSubmitting = false, isE
               )} />
             )}
 
-            {/* Challan — hidden for None mode */}
+            {/* Challan */}
             {showPaymentFields && (
               <FormField control={form.control} name="challanAmount" render={({ field }) => (
                 <FormItem>
                   <FormLabel className="text-sm font-medium flex items-center gap-1.5">
                     <Receipt className="h-3.5 w-3.5 text-muted-foreground" />
-                    Challan (₹)
+                    {isEditing ? 'Original Challan (₹)' : 'Challan (₹)'}
                   </FormLabel>
                   <FormControl>
                     <div className="relative">
@@ -298,11 +310,14 @@ export function WorkEntryForm({ initialData, onSubmit, isSubmitting = false, isE
               )} />
             )}
 
-            {/* Due Amount — read-only calculated display (hidden for None) */}
+            {/* Due Amount — read-only calculated display */}
             {showPaymentFields && (
               <div className="space-y-2">
                 <label className="block text-sm font-medium leading-none">
                   {effectiveDue < 0 ? 'Overpaid' : 'Due Amount'} (₹)
+                  {isEditing && netAdjustmentAmount !== 0 && (
+                    <span className="ml-1.5 text-xs text-primary font-normal">(adjusted)</span>
+                  )}
                 </label>
                 <div className={cn(
                   "h-10 px-3 rounded-md border font-semibold flex items-center gap-2 text-sm",
@@ -318,17 +333,16 @@ export function WorkEntryForm({ initialData, onSubmit, isSubmitting = false, isE
                   {Math.abs(effectiveDue).toLocaleString('en-IN')}
                   {effectiveDue < 0 && <span className="text-xs font-normal ml-1">(credit)</span>}
                   {paymentMode === 'Due' && !isEditing && (
-                    <span className="text-xs font-normal ml-1">(will collect later)</span>
+                    <span className="text-xs font-normal ml-1">(collect later)</span>
                   )}
                 </div>
                 {isEditing && (
-                  <p className="text-xs text-muted-foreground">Paid via Payment History</p>
+                  <p className="text-xs text-muted-foreground">Paid via Payment History · Adjusted via Deal Adjustments</p>
                 )}
               </div>
             )}
           </div>
 
-          {/* None mode hint */}
           {paymentMode === 'None' && !isEditing && (
             <div className="rounded-lg border border-slate-200 bg-slate-50 px-3 py-2 text-xs text-slate-600">
               Free service — ₹0 charged. Entry will be marked Completed automatically.

@@ -140,7 +140,90 @@ export interface WorkEntry {
   addedBy?: string;
   /** Entry-level initial payment intent. Does NOT affect paidAmount/dueAmount/payments[] logic. */
   paymentMode?: PaymentMode;
+  /**
+   * Denormalized running sum of all adjustment.amountChange values.
+   * Updated atomically by addAdjustment(). NEVER modify directly.
+   * finalTotal = totalAmount + netAdjustmentAmount
+   */
+  netAdjustmentAmount?: number;
+  /**
+   * Denormalized running sum of all adjustment.challanChange values.
+   * Updated atomically by addAdjustment(). NEVER modify directly.
+   */
+  netAdjustmentChallan?: number;
 }
+
+// ─── DEAL ADJUSTMENTS ────────────────────────────────────────────────────────
+
+export interface DealAdjustment {
+  id?: string;
+  /** Foreign key to workEntries/{id} */
+  entryId: string;
+  /** Change to totalAmount — positive = increase, negative = decrease */
+  amountChange: number;
+  /** Change to challanAmount — positive = increase, negative = decrease */
+  challanChange: number;
+  /** Required human-readable reason for the change */
+  reason: string;
+  recordedBy: string;
+  createdAt: Timestamp;
+}
+
+/**
+ * Record a deal adjustment and keep the parent WorkEntry's denormalized
+ * fields (netAdjustmentAmount, netAdjustmentChallan, dueAmount) in sync.
+ *
+ * Uses two sequential writes (sub-collection + parent update). Safe in both
+ * real Firestore and the in-memory mock.
+ */
+export const addAdjustment = async (
+  entryId: string,
+  data: { amountChange: number; challanChange: number; reason: string; recordedBy: string },
+  currentEntry: { totalAmount: number; paidAmount: number; netAdjustmentAmount?: number; netAdjustmentChallan?: number },
+): Promise<void> => {
+  if (!db) throw new Error('Firebase not configured');
+  const now = Timestamp.now();
+
+  // 1. Write to flat workAdjustments collection (works in mock + real Firestore)
+  await addDoc(collection(db, 'workAdjustments'), {
+    entryId,
+    amountChange: data.amountChange,
+    challanChange: data.challanChange,
+    reason: data.reason,
+    recordedBy: data.recordedBy,
+    createdAt: now,
+  });
+
+  // 2. Update denormalized fields + recalculate dueAmount on parent entry
+  const newNetAmount = (currentEntry.netAdjustmentAmount ?? 0) + data.amountChange;
+  const newNetChallan = (currentEntry.netAdjustmentChallan ?? 0) + data.challanChange;
+  const finalTotal = currentEntry.totalAmount + newNetAmount;
+  const newDueAmount = finalTotal - currentEntry.paidAmount;
+
+  await updateDoc(doc(db, 'workEntries', entryId), {
+    netAdjustmentAmount: newNetAmount,
+    netAdjustmentChallan: newNetChallan,
+    dueAmount: newDueAmount,
+  });
+};
+
+/** Subscribe to all adjustments for a given work entry, oldest-first. */
+export const subscribeToAdjustments = (
+  entryId: string,
+  callback: (adjustments: DealAdjustment[]) => void,
+) => {
+  if (!db) return () => {};
+  const q = query(
+    collection(db, 'workAdjustments'),
+    where('entryId', '==', entryId),
+    orderBy('createdAt', 'asc'),
+  );
+  return onSnapshot(q, (snap) => {
+    const list: DealAdjustment[] = [];
+    snap.forEach(d => list.push({ id: d.id, ...d.data() } as DealAdjustment));
+    callback(list);
+  }, (err) => console.error('[Firestore] workAdjustments error:', err.message));
+};
 
 export interface Category {
   id: string;

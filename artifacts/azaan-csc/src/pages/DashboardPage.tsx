@@ -499,7 +499,9 @@ export default function DashboardPage() {
                       </div>
                     </div>
                     <div className="flex items-center gap-2 shrink-0">
-                      <span className="text-sm font-semibold">{formatCurrency(entry.totalAmount)}</span>
+                      <span className="text-sm font-semibold">
+                        {formatCurrency(entry.totalAmount + (entry.netAdjustmentAmount ?? 0))}
+                      </span>
                       {entry.status === 'Completed'
                         ? <span className="text-[10px] font-semibold px-1.5 py-0.5 rounded-full bg-emerald-100 text-emerald-700">Done</span>
                         : entry.status === 'Rejected'
