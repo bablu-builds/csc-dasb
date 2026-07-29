@@ -1,744 +1,671 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useMemo } from 'react';
 import {
-  subscribeToWorkEntries, WorkEntry,
+  WorkEntry, subscribeToWorkEntries,
   subscribeToAepsWithdrawals, AepsWithdrawal,
   subscribeToElectricRecharges, ElectricRecharge,
   subscribeToMoneyTransfers, MoneyTransfer,
   subscribeToQuickActions, QuickActionEntry,
+  subscribeToPaymentHistory, PaymentHistoryRecord,
 } from '@/lib/firestore';
 import { useAuth } from '@/contexts/AuthContext';
-import { isToday, isThisWeek, isThisMonth, format, isWithinInterval, startOfDay, endOfDay, parseISO } from 'date-fns';
-import { Download, BarChart2, TrendingUp, IndianRupee, XCircle, Wallet, Zap, ArrowRightLeft, Receipt, Target, ShieldCheck, Banknote, Wifi, Printer } from 'lucide-react';
-import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
-import { Skeleton } from '@/components/ui/skeleton';
-import { Button } from '@/components/ui/button';
-import { Input } from '@/components/ui/input';
-import { Label } from '@/components/ui/label';
-import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
+import { startOfMonth, endOfMonth, isWithinInterval, format, subMonths } from 'date-fns';
 import { formatCurrency } from '@/lib/format';
+import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
+import { Button } from '@/components/ui/button';
+import { Skeleton } from '@/components/ui/skeleton';
 import {
-  BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, Cell, PieChart, Pie, Legend,
+  IndianRupee, TrendingUp, FileText, Receipt,
+  Banknote, Wifi, Clock, X, ShieldCheck, CheckCircle2,
+} from 'lucide-react';
+import {
+  BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, Legend, PieChart, Pie, Cell,
 } from 'recharts';
+import { resolveStatus } from '@/lib/payments';
 
-const CHART_COLORS = ['#4f46e5','#7c3aed','#0284c7','#059669','#d97706','#dc2626','#9333ea','#0891b2','#16a34a','#ea580c'];
+// ── Helpers ──────────────────────────────────────────────────────────────────
 
-type Period = 'today' | 'week' | 'month' | 'custom';
+function month(offset = 0) {
+  const base = offset === 0 ? new Date() : subMonths(new Date(), -offset);
+  return { start: startOfMonth(base), end: endOfMonth(base), label: format(base, 'MMMM yyyy') };
+}
 
-function ReportsSkeleton() {
-  return (
-    <div className="space-y-4 mt-4">
-      <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-        {[0,1,2].map(i => <Skeleton key={i} className="h-28 rounded-xl" />)}
-      </div>
-      <Skeleton className="h-64 rounded-xl" />
-    </div>
-  );
+function inRange(d: Date, start: Date, end: Date) {
+  return isWithinInterval(d, { start, end });
 }
 
 function SummaryCard({ label, value, sub, icon: Icon, color }: {
-  label: string; value: string; sub: string; icon: React.ElementType; color: string;
+  label: string; value: string; sub?: string; icon: React.ElementType; color: string;
 }) {
   return (
-    <Card className="p-5 shadow-card hover:shadow-card-hover transition-shadow">
-      <div className="flex items-start justify-between">
-        <div>
-          <p className="text-xs font-medium text-muted-foreground uppercase tracking-wide mb-2">{label}</p>
-          <div className="text-2xl font-bold">{value}</div>
-          <p className="text-xs text-muted-foreground mt-1">{sub}</p>
+    <Card className="shadow-sm">
+      <CardHeader className="flex flex-row items-center justify-between pb-2">
+        <CardTitle className="text-xs font-medium uppercase tracking-wide text-muted-foreground">{label}</CardTitle>
+        <div className={`h-8 w-8 rounded-full flex items-center justify-center ${color}`}>
+          <Icon className="h-4 w-4" />
         </div>
-        <div className={`h-10 w-10 rounded-xl ${color} flex items-center justify-center shrink-0`}>
-          <Icon className="h-5 w-5" />
-        </div>
-      </div>
+      </CardHeader>
+      <CardContent>
+        <div className="text-2xl font-bold">{value}</div>
+        {sub && <p className="text-xs text-muted-foreground mt-1">{sub}</p>}
+      </CardContent>
     </Card>
   );
 }
 
-function downloadCSV(filename: string, headers: string[], rows: (string | number)[]) {
-  const csv = [headers.join(','), ...rows].join('\n');
-  const blob = new Blob([csv], { type: 'text/csv;charset=utf-8;' });
-  const a = document.createElement('a');
-  a.href = URL.createObjectURL(blob);
-  a.download = `${filename}_${format(new Date(), 'yyyyMMdd')}.csv`;
-  a.click();
+const PIE_COLORS: Record<string, string> = {
+  Cash: '#10b981',
+  Online: '#3b82f6',
+  Due: '#f59e0b',
+  None: '#94a3b8',
+};
+
+function PaymentPieChart({ data }: { data: { name: string; value: number }[] }) {
+  const total = data.reduce((s, d) => s + d.value, 0);
+  if (total === 0) return (
+    <div className="flex flex-col items-center justify-center h-40 text-muted-foreground">
+      <CheckCircle2 className="h-8 w-8 mb-2 opacity-20" />
+      <p className="text-sm">No data</p>
+    </div>
+  );
+  return (
+    <ResponsiveContainer width="100%" height={180}>
+      <PieChart>
+        <Pie data={data} dataKey="value" nameKey="name" cx="50%" cy="50%" outerRadius={70} label={({ name, percent }) => `${name} ${(percent * 100).toFixed(0)}%`}>
+          {data.map(entry => (
+            <Cell key={entry.name} fill={PIE_COLORS[entry.name] ?? '#cbd5e1'} />
+          ))}
+        </Pie>
+        <Tooltip formatter={(v: number) => [v, 'Entries']} />
+      </PieChart>
+    </ResponsiveContainer>
+  );
 }
 
+// ── 4-way payment mode breakdown ──────────────────────────────────────────────
+
+interface PaymentModeStats {
+  Cash: number;
+  Online: number;
+  Due: number;
+  None: number;
+}
+
+function emptyStats(): PaymentModeStats { return { Cash: 0, Online: 0, Due: 0, None: 0 }; }
+
+function countMode(mode: string | undefined): keyof PaymentModeStats {
+  if (mode === 'Online') return 'Online';
+  if (mode === 'Due') return 'Due';
+  if (mode === 'None') return 'None';
+  return 'Cash'; // default for legacy entries
+}
+
+function modeStatsToChartData(stats: PaymentModeStats) {
+  return [
+    { name: 'Cash', value: stats.Cash },
+    { name: 'Online', value: stats.Online },
+    { name: 'Due', value: stats.Due },
+    { name: 'None', value: stats.None },
+  ].filter(d => d.value > 0);
+}
+
+function PaymentModeBreakdown({ stats, title }: { stats: PaymentModeStats; title: string }) {
+  const total = stats.Cash + stats.Online + stats.Due + stats.None;
+  if (total === 0) return null;
+  return (
+    <div className="text-sm">
+      <p className="text-xs font-semibold uppercase tracking-wide text-muted-foreground mb-2">{title}</p>
+      <div className="grid grid-cols-4 gap-2">
+        {([
+          { key: 'Cash', color: 'bg-emerald-100 text-emerald-700', icon: Banknote },
+          { key: 'Online', color: 'bg-blue-100 text-blue-700', icon: Wifi },
+          { key: 'Due', color: 'bg-amber-100 text-amber-700', icon: Clock },
+          { key: 'None', color: 'bg-slate-100 text-slate-600', icon: X },
+        ] as const).map(({ key, color, icon: Icon }) => (
+          <div key={key} className={`rounded-lg px-2 py-1.5 flex flex-col items-center ${color}`}>
+            <Icon className="h-3 w-3 mb-0.5" />
+            <span className="text-xs font-medium">{key}</span>
+            <span className="text-lg font-bold leading-tight">{stats[key]}</span>
+          </div>
+        ))}
+      </div>
+    </div>
+  );
+}
+
+// ── Main ─────────────────────────────────────────────────────────────────────
+
 export default function ReportsPage() {
-  const { role } = useAuth();
+  const { isOwner, canAccessFinancialServices } = useAuth();
+
   const [workEntries, setWorkEntries] = useState<WorkEntry[]>([]);
   const [aepsEntries, setAepsEntries] = useState<AepsWithdrawal[]>([]);
   const [rechargeEntries, setRechargeEntries] = useState<ElectricRecharge[]>([]);
   const [transferEntries, setTransferEntries] = useState<MoneyTransfer[]>([]);
   const [quickEntries, setQuickEntries] = useState<QuickActionEntry[]>([]);
+  const [paymentHistory, setPaymentHistory] = useState<PaymentHistoryRecord[]>([]);
   const [loading, setLoading] = useState(true);
-  const [period, setPeriod] = useState<Period>('month');
-  const [customFrom, setCustomFrom] = useState('');
-  const [customTo, setCustomTo] = useState('');
+
+  // Month selector: 0 = current, -1 = last month, etc.
+  const [monthOffset, setMonthOffset] = useState(0);
+  const selectedMonth = month(monthOffset);
 
   useEffect(() => {
-    let done = 0;
-    const finish = () => { done++; if (done === 5) setLoading(false); };
-    const u1 = subscribeToWorkEntries(d => { setWorkEntries(d); finish(); });
-    const u2 = subscribeToAepsWithdrawals(d => { setAepsEntries(d); finish(); });
-    const u3 = subscribeToElectricRecharges(d => { setRechargeEntries(d); finish(); });
-    const u4 = subscribeToMoneyTransfers(d => { setTransferEntries(d); finish(); });
-    const u5 = subscribeToQuickActions(d => { setQuickEntries(d); finish(); });
-    return () => { u1(); u2(); u3(); u4(); u5(); };
+    let resolved = 0;
+    const done = () => { resolved++; if (resolved === 6) setLoading(false); };
+    const u1 = subscribeToWorkEntries(d => { setWorkEntries(d); done(); });
+    const u2 = subscribeToAepsWithdrawals(d => { setAepsEntries(d); done(); });
+    const u3 = subscribeToElectricRecharges(d => { setRechargeEntries(d); done(); });
+    const u4 = subscribeToMoneyTransfers(d => { setTransferEntries(d); done(); });
+    const u5 = subscribeToQuickActions(d => { setQuickEntries(d); done(); });
+    const u6 = subscribeToPaymentHistory(d => { setPaymentHistory(d); done(); });
+    return () => { u1(); u2(); u3(); u4(); u5(); u6(); };
   }, []);
 
-  // Staff cannot see the Reports page — must be after all hooks
-  if (role === 'staff') {
-    return (
-      <div className="flex flex-col items-center justify-center py-24 text-center gap-4">
-        <div className="h-16 w-16 rounded-full bg-muted flex items-center justify-center">
-          <ShieldCheck className="h-8 w-8 text-muted-foreground" />
-        </div>
-        <h2 className="text-xl font-semibold">Access Restricted</h2>
-        <p className="text-muted-foreground max-w-xs">
-          Income reports are only visible to the Owner. Contact your owner if you need this information.
-        </p>
-      </div>
-    );
-  }
+  const { start, end } = selectedMonth;
 
-  // Filter by period
-  const inPeriod = (date: Date): boolean => {
-    if (period === 'today') return isToday(date);
-    if (period === 'week') return isThisWeek(date, { weekStartsOn: 1 });
-    if (period === 'month') return isThisMonth(date);
-    if (period === 'custom' && customFrom && customTo) {
-      return isWithinInterval(date, { start: startOfDay(parseISO(customFrom)), end: endOfDay(parseISO(customTo)) });
-    }
-    return isThisMonth(date);
-  };
+  // ── WORK ENTRIES this month ───────────────────────────────────────────────
+  const work = useMemo(() => workEntries.filter(e => inRange(e.date.toDate(), start, end)), [workEntries, start, end]);
 
-  const filteredWork = workEntries.filter(e => inPeriod(e.date.toDate()));
-  const filteredAeps = aepsEntries.filter(e => inPeriod(e.createdAt.toDate()));
-  const filteredRecharge = rechargeEntries.filter(e => inPeriod(e.createdAt.toDate()));
-  const filteredTransfer = transferEntries.filter(e => inPeriod(e.createdAt.toDate()));
-  const filteredQuick = quickEntries.filter(e => inPeriod(e.createdAt.toDate()));
+  const workCompleted = work.filter(e => e.status === 'Completed');
+  const workPending = work.filter(e => e.status === 'Pending');
+  const workRejected = work.filter(e => e.status === 'Rejected');
 
-  const activeWork = filteredWork.filter(e => e.status !== 'Rejected');
-  const rejectedWork = filteredWork.filter(e => e.status === 'Rejected');
-
-  // Profit breakdown
-  const workEarned = activeWork.reduce((s, e) => s + e.paidAmount, 0);
-  const workChallan = activeWork.reduce((s, e) => s + (e.challanAmount ?? 0), 0);
+  const workEarned = work.filter(e => e.status !== 'Rejected').reduce((s, e) => s + e.paidAmount, 0);
+  const workDue = work.filter(e => e.status !== 'Rejected').reduce((s, e) => s + Math.max(0, e.dueAmount), 0);
+  const workChallan = work.reduce((s, e) => s + (e.challanAmount ?? 0), 0);
   const workProfit = workEarned - workChallan;
-  const aepsProfit = filteredAeps.reduce((s, e) => s + e.profitMargin, 0);
-  const rechargeProfit = filteredRecharge.reduce((s, e) => s + e.profitMargin, 0);
-  const transferProfit = filteredTransfer.reduce((s, e) => s + e.profitMargin, 0);
-  // Quick work has no cost — the full amount is profit
-  const quickEarned = filteredQuick.reduce((s, e) => s + e.amount, 0);
-  const quickProfit = quickEarned;
-  const totalProfit = workProfit + aepsProfit + rechargeProfit + transferProfit + quickProfit;
 
-  const totalDues = activeWork.reduce((s, e) => s + e.dueAmount, 0);
+  // 4-way mode breakdown for work
+  const workModeStats = useMemo(() => {
+    const s = emptyStats();
+    work.filter(e => e.status !== 'Rejected').forEach(e => { s[countMode(e.paymentMode)]++; });
+    return s;
+  }, [work]);
 
-  // Payment mode breakdown — flatten all payment records across active work entries
-  const allPayments = activeWork.flatMap(e => e.payments ?? []);
-  const cashCollected = allPayments
-    .filter(p => (p.paymentMode ?? 'Cash') === 'Cash')
-    .reduce((s, p) => s + p.amount, 0);
-  const onlineCollected = allPayments
-    .filter(p => p.paymentMode === 'Online')
-    .reduce((s, p) => s + p.amount, 0);
+  // Top 5 categories by count
+  const categoryBreakdown = useMemo(() => {
+    const map: Record<string, { count: number; earned: number }> = {};
+    work.forEach(e => {
+      if (!map[e.category]) map[e.category] = { count: 0, earned: 0 };
+      map[e.category].count++;
+      if (e.status !== 'Rejected') map[e.category].earned += e.paidAmount;
+    });
+    return Object.entries(map).sort((a, b) => b[1].count - a[1].count).slice(0, 7);
+  }, [work]);
 
-  // Category breakdown
-  const categoryStats = activeWork.reduce((acc, e) => {
-    if (!acc[e.category]) acc[e.category] = { count: 0, earned: 0, challan: 0 };
-    acc[e.category].count++;
-    acc[e.category].earned += e.paidAmount;
-    acc[e.category].challan += e.challanAmount ?? 0;
-    return acc;
-  }, {} as Record<string, { count: number; earned: number; challan: number }>);
-  const sortedCategories = Object.entries(categoryStats).sort((a, b) => b[1].earned - a[1].earned);
+  // ── QUICK ACTIONS this month ──────────────────────────────────────────────
+  const quick = useMemo(() => quickEntries.filter(e => inRange(e.createdAt.toDate(), start, end)), [quickEntries, start, end]);
+  const quickPaid = quick.filter(e => resolveStatus(e.paymentStatus) === 'paid');
+  const quickEarned = quickPaid.reduce((s, e) => s + e.amount, 0);
+  const quickModeStats = useMemo(() => {
+    const s = emptyStats();
+    quick.forEach(e => { s[countMode(e.paymentMode)]++; });
+    return s;
+  }, [quick]);
 
-  const chartData = sortedCategories.slice(0, 10).map(([name, stats]) => ({
-    name: name.length > 14 ? name.slice(0, 14) + '…' : name,
-    fullName: name,
-    earned: stats.earned,
-    count: stats.count,
-  }));
+  const quickByCat = useMemo(() => {
+    const map: Record<string, { count: number; earned: number }> = {};
+    quick.forEach(e => {
+      if (!map[e.category]) map[e.category] = { count: 0, earned: 0 };
+      map[e.category].count++;
+      if (resolveStatus(e.paymentStatus) === 'paid') map[e.category].earned += e.amount;
+    });
+    return Object.entries(map).sort((a, b) => b[1].count - a[1].count);
+  }, [quick]);
 
-  const profitBreakdown = [
-    { name: 'Work/Certs', value: Math.max(0, workProfit), color: '#4f46e5' },
-    { name: 'Quick Work', value: quickProfit, color: '#f97316' },
-    { name: 'AEPS', value: aepsProfit, color: '#0284c7' },
-    { name: 'Recharge', value: rechargeProfit, color: '#d97706' },
-    { name: 'Transfers', value: transferProfit, color: '#059669' },
-  ].filter(d => d.value > 0);
+  // ── FINANCIAL SERVICES this month ────────────────────────────────────────
+  const aeps = useMemo(() => aepsEntries.filter(e => inRange(e.createdAt.toDate(), start, end)), [aepsEntries, start, end]);
+  const recharge = useMemo(() => rechargeEntries.filter(e => inRange(e.createdAt.toDate(), start, end)), [rechargeEntries, start, end]);
+  const transfer = useMemo(() => transferEntries.filter(e => inRange(e.createdAt.toDate(), start, end)), [transferEntries, start, end]);
 
-  const periodLabel = period === 'today' ? 'Today' : period === 'week' ? 'This Week' : period === 'month' ? 'This Month' : 'Custom Range';
+  const aepsPaid = aeps.filter(e => resolveStatus(e.paymentStatus) === 'paid');
+  const rechargePaid = recharge.filter(e => resolveStatus(e.paymentStatus) === 'paid');
+  const transferPaid = transfer.filter(e => resolveStatus(e.paymentStatus) === 'paid');
 
-  // CSV exports
-  const exportWork = () => {
-    const headers = ['Date','Customer','Mobile','Category','Total','Paid','Due','Challan','Status'];
-    const rows = filteredWork.map(e => [
-      format(e.date.toDate(), 'yyyy-MM-dd'), `"${e.customerName}"`, e.mobile, `"${e.category}"`,
-      e.totalAmount, e.paidAmount, e.dueAmount, e.challanAmount ?? 0, e.status,
-    ].join(','));
-    downloadCSV('work_report', headers, rows);
-  };
-  const exportAeps = () => {
-    const headers = ['Date','Customer','Bank','Mobile','Amount','Profit'];
-    const rows = filteredAeps.map(e => [
-      format(e.createdAt.toDate(), 'yyyy-MM-dd'), `"${e.customerName}"`, `"${e.bankName}"`,
-      e.mobile ?? '', e.amount, e.profitMargin,
-    ].join(','));
-    downloadCSV('aeps_report', headers, rows);
-  };
-  const exportRecharge = () => {
-    const headers = ['Date','Customer','ConsumerNo','Mobile','Amount','Profit'];
-    const rows = filteredRecharge.map(e => [
-      format(e.createdAt.toDate(), 'yyyy-MM-dd'), `"${e.customerName}"`, e.consumerNumber,
-      e.mobile ?? '', e.rechargeAmount, e.profitMargin,
-    ].join(','));
-    downloadCSV('recharge_report', headers, rows);
-  };
-  const exportTransfer = () => {
-    const headers = ['Date','Name','Account/Mobile','Amount','Profit'];
-    const rows = filteredTransfer.map(e => [
-      format(e.createdAt.toDate(), 'yyyy-MM-dd'), `"${e.name}"`,
-      e.mobileOrAccount, e.amount, e.profitMargin,
-    ].join(','));
-    downloadCSV('transfer_report', headers, rows);
-  };
-  const exportQuick = () => {
-    const headers = ['Date','Time','Category','Customer','Amount','AddedBy'];
-    const rows = filteredQuick.map(e => [
-      format(e.createdAt.toDate(), 'yyyy-MM-dd'),
-      format(e.createdAt.toDate(), 'HH:mm'),
-      `"${e.category}"`,
-      `"${e.customerName ?? ''}"`,
-      e.amount,
-      `"${e.addedBy}"`,
-    ].join(','));
-    downloadCSV('quick_work_report', headers, rows);
-  };
+  const aepsProfit = aepsPaid.reduce((s, e) => s + e.profitMargin, 0);
+  const rechargeProfit = rechargePaid.reduce((s, e) => s + e.profitMargin, 0);
+  const transferProfit = transferPaid.reduce((s, e) => s + e.profitMargin, 0);
 
-  // Quick Action Work — category breakdown
-  const quickCategoryStats = filteredQuick.reduce((acc, e) => {
-    if (!acc[e.category]) acc[e.category] = { count: 0, earned: 0 };
-    acc[e.category].count++;
-    acc[e.category].earned += e.amount;
-    return acc;
-  }, {} as Record<string, { count: number; earned: number }>);
-  const sortedQuickCategories = Object.entries(quickCategoryStats).sort((a, b) => b[1].earned - a[1].earned);
-  const quickChartData = sortedQuickCategories.map(([name, stats]) => ({
-    name, fullName: name, earned: stats.earned, count: stats.count,
-  }));
+  // Mode breakdowns for financial services
+  const aepsModeStats = useMemo(() => { const s = emptyStats(); aeps.forEach(e => { s[countMode(e.paymentMode)]++; }); return s; }, [aeps]);
+  const rechargeModeStats = useMemo(() => { const s = emptyStats(); recharge.forEach(e => { s[countMode(e.paymentMode)]++; }); return s; }, [recharge]);
+  const transferModeStats = useMemo(() => { const s = emptyStats(); transfer.forEach(e => { s[countMode(e.paymentMode)]++; }); return s; }, [transfer]);
+
+  // ── DUE SETTLEMENTS this month ───────────────────────────────────────────
+  const settlements = useMemo(() => paymentHistory.filter(r => inRange(r.settledAt.toDate(), start, end)), [paymentHistory, start, end]);
+  const settledCash = settlements.filter(r => r.mode === 'Cash').reduce((s, r) => s + r.amount, 0);
+  const settledOnline = settlements.filter(r => r.mode === 'Online').reduce((s, r) => s + r.amount, 0);
+
+  // ── GRAND TOTALS ─────────────────────────────────────────────────────────
+  const totalProfit = workProfit + quickEarned + aepsProfit + rechargeProfit + transferProfit;
+  const totalPendingDue = workDue +
+    aeps.filter(e => resolveStatus(e.paymentStatus) === 'pending').reduce((s, e) => s + e.amount, 0) +
+    recharge.filter(e => resolveStatus(e.paymentStatus) === 'pending').reduce((s, e) => s + e.rechargeAmount, 0) +
+    transfer.filter(e => resolveStatus(e.paymentStatus) === 'pending').reduce((s, e) => s + e.amount, 0) +
+    quick.filter(e => resolveStatus(e.paymentStatus) === 'pending').reduce((s, e) => s + e.amount, 0);
+
+  // ── 6-MONTH TREND ────────────────────────────────────────────────────────
+  const trendData = useMemo(() => {
+    return Array.from({ length: 6 }).map((_, i) => {
+      const m = month(-(5 - i));
+      const workE = workEntries.filter(e => inRange(e.date.toDate(), m.start, m.end) && e.status !== 'Rejected').reduce((s, e) => s + e.paidAmount, 0);
+      const quickE = quickEntries.filter(e => inRange(e.createdAt.toDate(), m.start, m.end) && resolveStatus(e.paymentStatus) === 'paid').reduce((s, e) => s + e.amount, 0);
+      const aepsP = aepsEntries.filter(e => inRange(e.createdAt.toDate(), m.start, m.end) && resolveStatus(e.paymentStatus) === 'paid').reduce((s, e) => s + e.profitMargin, 0);
+      const rechargeP = rechargeEntries.filter(e => inRange(e.createdAt.toDate(), m.start, m.end) && resolveStatus(e.paymentStatus) === 'paid').reduce((s, e) => s + e.profitMargin, 0);
+      const transferP = transferEntries.filter(e => inRange(e.createdAt.toDate(), m.start, m.end) && resolveStatus(e.paymentStatus) === 'paid').reduce((s, e) => s + e.profitMargin, 0);
+      return {
+        month: format(m.start, 'MMM yy'),
+        Work: Math.round(workE),
+        'Quick Work': Math.round(quickE),
+        ...(canAccessFinancialServices ? { AEPS: Math.round(aepsP), Recharge: Math.round(rechargeP), Transfer: Math.round(transferP) } : {}),
+      };
+    });
+  }, [workEntries, quickEntries, aepsEntries, rechargeEntries, transferEntries, canAccessFinancialServices]);
+
+  if (!isOwner) return (
+    <div className="flex flex-col items-center justify-center py-24 text-center gap-4">
+      <div className="h-16 w-16 rounded-full bg-muted flex items-center justify-center">
+        <ShieldCheck className="h-8 w-8 text-muted-foreground" />
+      </div>
+      <h2 className="text-xl font-semibold">Access Restricted</h2>
+      <p className="text-muted-foreground max-w-xs">Reports are only visible to the Owner.</p>
+    </div>
+  );
+
+  if (loading) return (
+    <div className="space-y-6">
+      <Skeleton className="h-8 w-48" />
+      <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+        {[0,1,2,3].map(i => <Skeleton key={i} className="h-24 rounded-xl" />)}
+      </div>
+    </div>
+  );
 
   return (
-    <div className="space-y-6 animate-fade-in-up">
-      {/* Header */}
-      <div className="flex flex-col md:flex-row justify-between md:items-center gap-4">
+    <div className="space-y-8 max-w-6xl">
+      {/* Header + Month Selector */}
+      <div className="flex flex-col sm:flex-row sm:items-center gap-4 justify-between">
         <div>
           <h1 className="text-2xl font-bold" style={{ fontFamily: 'var(--app-font-display)' }}>Reports</h1>
-          <p className="text-muted-foreground text-sm mt-1">Business performance and analytics</p>
+          <p className="text-muted-foreground text-sm mt-0.5">Month-wise earnings, payments, and due tracking</p>
+        </div>
+        <div className="flex items-center gap-2 bg-muted/50 rounded-xl p-1">
+          <Button size="sm" variant={monthOffset === -1 ? 'default' : 'ghost'} className="rounded-lg h-8 text-xs" onClick={() => setMonthOffset(-1)}>
+            {format(subMonths(new Date(), 1), 'MMM yyyy')}
+          </Button>
+          <Button size="sm" variant={monthOffset === 0 ? 'default' : 'ghost'} className="rounded-lg h-8 text-xs" onClick={() => setMonthOffset(0)}>
+            {format(new Date(), 'MMM yyyy')} ●
+          </Button>
         </div>
       </div>
 
-      {/* Period selector */}
-      <div className="bg-card border rounded-xl p-4 shadow-card flex flex-wrap items-end gap-4">
-        <div className="flex gap-2 flex-wrap">
-          {(['today','week','month','custom'] as Period[]).map(p => (
-            <button key={p} onClick={() => setPeriod(p)}
-              className={`px-3 py-1.5 rounded-lg text-sm font-medium transition-all border
-                ${period === p ? 'bg-primary text-white border-primary shadow-sm' : 'border-border text-muted-foreground hover:border-primary/40 hover:text-foreground'}`}>
-              {p === 'today' ? 'Today' : p === 'week' ? 'This Week' : p === 'month' ? 'This Month' : 'Custom Range'}
-            </button>
-          ))}
-        </div>
-        {period === 'custom' && (
-          <div className="flex items-end gap-3">
-            <div className="space-y-1">
-              <Label className="text-xs">From</Label>
-              <Input type="date" className="h-9 text-sm" value={customFrom} onChange={e => setCustomFrom(e.target.value)} />
-            </div>
-            <div className="space-y-1">
-              <Label className="text-xs">To</Label>
-              <Input type="date" className="h-9 text-sm" value={customTo} onChange={e => setCustomTo(e.target.value)} />
-            </div>
-          </div>
-        )}
+      {/* ── GRAND SUMMARY CARDS ─────────────────────────────────────── */}
+      <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+        <SummaryCard label="Total Work Earned" value={formatCurrency(workEarned)} sub={`${work.length} entries`} icon={IndianRupee} color="bg-indigo-50 text-indigo-600" />
+        <SummaryCard label="Work Profit (net)" value={formatCurrency(workProfit)} sub={`Challan deducted: ${formatCurrency(workChallan)}`} icon={TrendingUp} color="bg-emerald-50 text-emerald-600" />
+        <SummaryCard label="Quick Work Earned" value={formatCurrency(quickEarned)} sub={`${quick.length} entries (paid)`} icon={IndianRupee} color="bg-sky-50 text-sky-600" />
+        <SummaryCard
+          label="Total Pending Dues"
+          value={formatCurrency(totalPendingDue)}
+          sub="All sources combined"
+          icon={Clock}
+          color={`${totalPendingDue > 0 ? 'bg-amber-50 text-amber-600' : 'bg-slate-50 text-slate-500'}`}
+        />
       </div>
 
-      {loading ? <ReportsSkeleton /> : (
-        <Tabs defaultValue="profit" className="space-y-4">
-          <TabsList className="flex flex-wrap gap-1 h-auto bg-muted p-1 rounded-xl">
-            {[
-              { value: 'profit', label: '📊 Overall Profit' },
-              { value: 'work', label: '📋 Work / CSC' },
-              { value: 'quick', label: '🖨️ Quick Work' },
-              { value: 'challan', label: '🧾 Challan' },
-              { value: 'aeps', label: '💳 AEPS' },
-              { value: 'recharge', label: '⚡ Recharge' },
-              { value: 'transfer', label: '↔️ Transfer' },
-            ].map(t => (
-              <TabsTrigger key={t.value} value={t.value} className="text-xs font-medium rounded-lg data-[state=active]:shadow-sm" data-testid={`reports-tab-${t.value}`}>
-                {t.label}
-              </TabsTrigger>
-            ))}
-          </TabsList>
-
-          {/* ── OVERALL PROFIT ─────────────────────────────────── */}
-          <TabsContent value="profit" className="space-y-4 mt-4">
-            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
-              <SummaryCard label="Total Profit" value={formatCurrency(totalProfit)} sub={`${periodLabel} combined`}
-                icon={Target} color="bg-primary/10 text-primary" />
-              <SummaryCard label="Work/Cert Profit" value={formatCurrency(Math.max(0, workProfit))}
-                sub={`Earned ₹${(workEarned/1000).toFixed(1)}k − Challan ₹${(workChallan/1000).toFixed(1)}k`}
-                icon={IndianRupee} color="bg-indigo-50 text-indigo-600" />
-              <SummaryCard label="Financial Profit" value={formatCurrency(aepsProfit + rechargeProfit + transferProfit)}
-                sub="AEPS + Recharge + Transfer" icon={TrendingUp} color="bg-emerald-50 text-emerald-600" />
-              <SummaryCard label="Total Dues" value={formatCurrency(totalDues)}
-                sub="Outstanding from customers" icon={XCircle} color="bg-red-50 text-red-500" />
-            </div>
-
-            <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
-              {/* Profit breakdown pie */}
-              <div className="bg-card border rounded-xl p-5 shadow-card">
-                <h3 className="font-semibold text-sm mb-4">Profit by Source</h3>
-                {profitBreakdown.length === 0 ? (
-                  <div className="h-48 flex items-center justify-center text-muted-foreground">
-                    <p className="text-sm">No profit data for this period</p>
-                  </div>
-                ) : (
-                  <ResponsiveContainer width="100%" height={220}>
-                    <PieChart>
-                      <Pie data={profitBreakdown} dataKey="value" nameKey="name" cx="50%" cy="50%" outerRadius={80}
-                        label={({ name, percent }) => `${name} ${(percent * 100).toFixed(0)}%`} labelLine={false}>
-                        {profitBreakdown.map((d, i) => <Cell key={i} fill={d.color} />)}
-                      </Pie>
-                      <Tooltip formatter={(v: number) => formatCurrency(v)} contentStyle={{ borderRadius: '8px', fontSize: '12px' }} />
-                    </PieChart>
-                  </ResponsiveContainer>
-                )}
+      {/* ── WORK ENTRIES BREAKDOWN ──────────────────────────────────── */}
+      <section>
+        <h2 className="text-sm font-semibold text-muted-foreground uppercase tracking-wide mb-3">Work Entries — {selectedMonth.label}</h2>
+        <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
+          {/* Status summary */}
+          <Card>
+            <CardHeader className="pb-2">
+              <CardTitle className="text-sm">Status Breakdown</CardTitle>
+            </CardHeader>
+            <CardContent className="space-y-3">
+              <div className="grid grid-cols-3 gap-3 text-center">
+                <div className="rounded-lg bg-emerald-50 border border-emerald-100 py-3">
+                  <div className="text-2xl font-bold text-emerald-700">{workCompleted.length}</div>
+                  <div className="text-xs text-emerald-600 font-medium">Completed</div>
+                </div>
+                <div className="rounded-lg bg-amber-50 border border-amber-100 py-3">
+                  <div className="text-2xl font-bold text-amber-700">{workPending.length}</div>
+                  <div className="text-xs text-amber-600 font-medium">Pending</div>
+                </div>
+                <div className="rounded-lg bg-red-50 border border-red-100 py-3">
+                  <div className="text-2xl font-bold text-red-700">{workRejected.length}</div>
+                  <div className="text-xs text-red-600 font-medium">Rejected</div>
+                </div>
               </div>
+              <div className="flex justify-between text-sm border-t pt-3">
+                <span className="text-muted-foreground">Due outstanding</span>
+                <span className={`font-semibold ${workDue > 0 ? 'text-amber-700' : 'text-emerald-700'}`}>{formatCurrency(workDue)}</span>
+              </div>
+              <PaymentModeBreakdown stats={workModeStats} title="Payment Mode Breakdown" />
+            </CardContent>
+          </Card>
 
-              {/* Source breakdown table */}
-              <div className="bg-card border rounded-xl p-5 shadow-card">
-                <h3 className="font-semibold text-sm mb-4">Source Summary — {periodLabel}</h3>
+          {/* Payment mode pie */}
+          <Card>
+            <CardHeader className="pb-2">
+              <CardTitle className="text-sm">Payment Mode Distribution</CardTitle>
+            </CardHeader>
+            <CardContent>
+              <PaymentPieChart data={modeStatsToChartData(workModeStats)} />
+            </CardContent>
+          </Card>
+        </div>
+
+        {/* Category chart */}
+        {categoryBreakdown.length > 0 && (
+          <Card className="mt-4">
+            <CardHeader className="pb-2">
+              <CardTitle className="text-sm">Top Categories — Earned vs Count</CardTitle>
+            </CardHeader>
+            <CardContent>
+              <ResponsiveContainer width="100%" height={220}>
+                <BarChart data={categoryBreakdown.map(([cat, v]) => ({ category: cat.substring(0, 14), count: v.count, earned: v.earned }))}
+                  margin={{ top: 0, right: 0, left: -10, bottom: 0 }}>
+                  <CartesianGrid strokeDasharray="3 3" stroke="hsl(var(--border))" />
+                  <XAxis dataKey="category" tick={{ fontSize: 10 }} />
+                  <YAxis yAxisId="left" tick={{ fontSize: 10 }} />
+                  <YAxis yAxisId="right" orientation="right" tick={{ fontSize: 10 }} />
+                  <Tooltip formatter={(v: number, n: string) => [n === 'earned' ? formatCurrency(v) : v, n === 'earned' ? 'Earned' : 'Count']} />
+                  <Legend />
+                  <Bar yAxisId="left" dataKey="earned" fill="#4f46e5" name="Earned (₹)" radius={[3, 3, 0, 0]} />
+                  <Bar yAxisId="right" dataKey="count" fill="#94a3b8" name="Count" radius={[3, 3, 0, 0]} />
+                </BarChart>
+              </ResponsiveContainer>
+            </CardContent>
+          </Card>
+        )}
+      </section>
+
+      {/* ── QUICK ACTION WORK ──────────────────────────────────────── */}
+      {quick.length > 0 && (
+        <section>
+          <h2 className="text-sm font-semibold text-muted-foreground uppercase tracking-wide mb-3">Quick Action Work — {selectedMonth.label}</h2>
+          <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
+            <Card>
+              <CardHeader className="pb-2">
+                <CardTitle className="text-sm">Category Breakdown</CardTitle>
+              </CardHeader>
+              <CardContent className="space-y-2">
+                {quickByCat.map(([cat, v]) => (
+                  <div key={cat} className="flex items-center justify-between text-sm">
+                    <span className="font-medium">{cat}</span>
+                    <div className="flex items-center gap-4">
+                      <span className="text-muted-foreground">{v.count} entries</span>
+                      <span className="font-semibold tabular-nums">{formatCurrency(v.earned)}</span>
+                    </div>
+                  </div>
+                ))}
+                <div className="border-t pt-2 flex justify-between text-sm font-bold">
+                  <span>Total</span>
+                  <span>{formatCurrency(quickEarned)}</span>
+                </div>
+                <PaymentModeBreakdown stats={quickModeStats} title="Payment Modes" />
+              </CardContent>
+            </Card>
+            <Card>
+              <CardHeader className="pb-2">
+                <CardTitle className="text-sm">Payment Mode Distribution</CardTitle>
+              </CardHeader>
+              <CardContent>
+                <PaymentPieChart data={modeStatsToChartData(quickModeStats)} />
+              </CardContent>
+            </Card>
+          </div>
+        </section>
+      )}
+
+      {/* ── FINANCIAL SERVICES ────────────────────────────────────── */}
+      {canAccessFinancialServices && (aeps.length > 0 || recharge.length > 0 || transfer.length > 0) && (
+        <section>
+          <h2 className="text-sm font-semibold text-muted-foreground uppercase tracking-wide mb-3">Financial Services — {selectedMonth.label}</h2>
+          <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+            {/* AEPS */}
+            {aeps.length > 0 && (
+              <Card>
+                <CardHeader className="pb-2">
+                  <CardTitle className="text-sm flex items-center gap-2">AEPS Withdrawal</CardTitle>
+                </CardHeader>
+                <CardContent className="space-y-3">
+                  <div className="flex justify-between text-sm">
+                    <span className="text-muted-foreground">Total processed</span>
+                    <span className="font-semibold">{aepsPaid.reduce((s, e) => s + e.amount, 0).toLocaleString('en-IN', { style: 'currency', currency: 'INR', maximumFractionDigits: 0 })}</span>
+                  </div>
+                  <div className="flex justify-between text-sm">
+                    <span className="text-muted-foreground">Profit earned</span>
+                    <span className="font-bold text-emerald-700">{formatCurrency(aepsProfit)}</span>
+                  </div>
+                  <div className="flex justify-between text-sm">
+                    <span className="text-muted-foreground">Entries</span>
+                    <span>{aeps.length} total, {aepsPaid.length} paid</span>
+                  </div>
+                  <PaymentModeBreakdown stats={aepsModeStats} title="Mode Breakdown" />
+                </CardContent>
+              </Card>
+            )}
+
+            {/* Recharge */}
+            {recharge.length > 0 && (
+              <Card>
+                <CardHeader className="pb-2">
+                  <CardTitle className="text-sm">Electric Recharge</CardTitle>
+                </CardHeader>
+                <CardContent className="space-y-3">
+                  <div className="flex justify-between text-sm">
+                    <span className="text-muted-foreground">Total recharge</span>
+                    <span className="font-semibold">{formatCurrency(rechargePaid.reduce((s, e) => s + e.rechargeAmount, 0))}</span>
+                  </div>
+                  <div className="flex justify-between text-sm">
+                    <span className="text-muted-foreground">Profit earned</span>
+                    <span className="font-bold text-emerald-700">{formatCurrency(rechargeProfit)}</span>
+                  </div>
+                  <div className="flex justify-between text-sm">
+                    <span className="text-muted-foreground">Entries</span>
+                    <span>{recharge.length} total, {rechargePaid.length} paid</span>
+                  </div>
+                  <PaymentModeBreakdown stats={rechargeModeStats} title="Mode Breakdown" />
+                </CardContent>
+              </Card>
+            )}
+
+            {/* Transfer */}
+            {transfer.length > 0 && (
+              <Card>
+                <CardHeader className="pb-2">
+                  <CardTitle className="text-sm">Money Transfer</CardTitle>
+                </CardHeader>
+                <CardContent className="space-y-3">
+                  <div className="flex justify-between text-sm">
+                    <span className="text-muted-foreground">Total transferred</span>
+                    <span className="font-semibold">{formatCurrency(transferPaid.reduce((s, e) => s + e.amount, 0))}</span>
+                  </div>
+                  <div className="flex justify-between text-sm">
+                    <span className="text-muted-foreground">Profit earned</span>
+                    <span className="font-bold text-emerald-700">{formatCurrency(transferProfit)}</span>
+                  </div>
+                  <div className="flex justify-between text-sm">
+                    <span className="text-muted-foreground">Entries</span>
+                    <span>{transfer.length} total, {transferPaid.length} paid</span>
+                  </div>
+                  <PaymentModeBreakdown stats={transferModeStats} title="Mode Breakdown" />
+                </CardContent>
+              </Card>
+            )}
+          </div>
+        </section>
+      )}
+
+      {/* ── DUE SETTLEMENTS ─────────────────────────────────────────── */}
+      <section>
+        <h2 className="text-sm font-semibold text-muted-foreground uppercase tracking-wide mb-3">
+          Due Settlements — {selectedMonth.label}
+        </h2>
+        {settlements.length === 0 ? (
+          <Card>
+            <CardContent className="py-10 text-center text-muted-foreground">
+              <CheckCircle2 className="h-8 w-8 mx-auto mb-2 opacity-20" />
+              <p className="text-sm">No due settlements recorded this month.</p>
+            </CardContent>
+          </Card>
+        ) : (
+          <Card>
+            <CardHeader className="pb-2">
+              <div className="flex justify-between items-center">
+                <CardTitle className="text-sm">Settled Previously Due Payments</CardTitle>
+                <div className="flex gap-4 text-xs text-muted-foreground">
+                  <span className="flex items-center gap-1"><Banknote className="h-3 w-3 text-emerald-600" /> Cash: <strong>{formatCurrency(settledCash)}</strong></span>
+                  <span className="flex items-center gap-1"><Wifi className="h-3 w-3 text-blue-600" /> Online: <strong>{formatCurrency(settledOnline)}</strong></span>
+                </div>
+              </div>
+            </CardHeader>
+            <CardContent className="pt-0">
+              <div className="overflow-x-auto">
                 <table className="w-full text-sm">
                   <thead>
-                    <tr className="border-b text-muted-foreground text-xs uppercase">
-                      <th className="text-left pb-2 font-medium">Source</th>
-                      <th className="text-right pb-2 font-medium">Volume</th>
-                      <th className="text-right pb-2 font-medium">Profit</th>
+                    <tr className="border-b text-muted-foreground">
+                      <th className="text-left py-2 pr-4 font-medium">Settled At</th>
+                      <th className="text-left py-2 pr-4 font-medium">Customer</th>
+                      <th className="text-left py-2 pr-4 font-medium">Type</th>
+                      <th className="text-right py-2 pr-4 font-medium">Amount</th>
+                      <th className="text-left py-2 pr-4 font-medium">Via</th>
+                      <th className="text-left py-2 font-medium">Settled By</th>
                     </tr>
                   </thead>
                   <tbody className="divide-y">
-                    <tr className="hover:bg-muted/20">
-                      <td className="py-2.5 flex items-center gap-2"><IndianRupee className="h-3.5 w-3.5 text-primary" /> Work/Certs</td>
-                      <td className="py-2.5 text-right text-muted-foreground">{activeWork.length} entries</td>
-                      <td className="py-2.5 text-right font-semibold text-emerald-700">{formatCurrency(Math.max(0, workProfit))}</td>
-                    </tr>
-                    <tr className="hover:bg-muted/20">
-                      <td className="py-2.5 flex items-center gap-2"><Printer className="h-3.5 w-3.5 text-orange-600" /> Quick Work</td>
-                      <td className="py-2.5 text-right text-muted-foreground">{filteredQuick.length} entries</td>
-                      <td className="py-2.5 text-right font-semibold text-emerald-700">{formatCurrency(quickProfit)}</td>
-                    </tr>
-                    <tr className="hover:bg-muted/20">
-                      <td className="py-2.5 flex items-center gap-2"><Wallet className="h-3.5 w-3.5 text-sky-600" /> AEPS</td>
-                      <td className="py-2.5 text-right text-muted-foreground">{filteredAeps.length} txns</td>
-                      <td className="py-2.5 text-right font-semibold text-emerald-700">{formatCurrency(aepsProfit)}</td>
-                    </tr>
-                    <tr className="hover:bg-muted/20">
-                      <td className="py-2.5 flex items-center gap-2"><Zap className="h-3.5 w-3.5 text-amber-600" /> Recharge</td>
-                      <td className="py-2.5 text-right text-muted-foreground">{filteredRecharge.length} txns</td>
-                      <td className="py-2.5 text-right font-semibold text-emerald-700">{formatCurrency(rechargeProfit)}</td>
-                    </tr>
-                    <tr className="hover:bg-muted/20">
-                      <td className="py-2.5 flex items-center gap-2"><ArrowRightLeft className="h-3.5 w-3.5 text-violet-600" /> Transfers</td>
-                      <td className="py-2.5 text-right text-muted-foreground">{filteredTransfer.length} txns</td>
-                      <td className="py-2.5 text-right font-semibold text-emerald-700">{formatCurrency(transferProfit)}</td>
-                    </tr>
+                    {settlements.map(r => (
+                      <tr key={r.id} className="hover:bg-muted/20 transition-colors">
+                        <td className="py-2.5 pr-4 text-muted-foreground whitespace-nowrap text-xs">
+                          {format(r.settledAt.toDate(), 'dd MMM yyyy HH:mm')}
+                        </td>
+                        <td className="py-2.5 pr-4 font-medium">{r.customerName || '—'}</td>
+                        <td className="py-2.5 pr-4">
+                          <span className="text-xs text-muted-foreground capitalize">{r.entryType}</span>
+                        </td>
+                        <td className="py-2.5 pr-4 text-right font-semibold tabular-nums">{formatCurrency(r.amount)}</td>
+                        <td className="py-2.5 pr-4">
+                          <span className={`inline-flex items-center gap-1 text-xs font-medium px-2 py-0.5 rounded-full ${r.mode === 'Cash' ? 'bg-emerald-100 text-emerald-700' : 'bg-blue-100 text-blue-700'}`}>
+                            {r.mode === 'Cash' ? <Banknote className="h-3 w-3" /> : <Wifi className="h-3 w-3" />}
+                            {r.mode}
+                          </span>
+                        </td>
+                        <td className="py-2.5 text-muted-foreground text-xs italic">{r.settledBy}</td>
+                      </tr>
+                    ))}
                   </tbody>
-                  <tfoot className="border-t-2">
-                    <tr>
-                      <td className="pt-2.5 font-bold">Total Profit</td>
-                      <td className="pt-2.5 text-right text-muted-foreground">
-                        {activeWork.length + filteredQuick.length + filteredAeps.length + filteredRecharge.length + filteredTransfer.length}
-                      </td>
-                      <td className="pt-2.5 text-right font-bold text-emerald-700">{formatCurrency(totalProfit)}</td>
-                    </tr>
-                  </tfoot>
                 </table>
               </div>
-            </div>
-          </TabsContent>
+            </CardContent>
+          </Card>
+        )}
+      </section>
 
-          {/* ── WORK / CSC ─────────────────────────────────────── */}
-          <TabsContent value="work" className="space-y-4 mt-4">
-            <div className="flex justify-end">
-              <Button variant="outline" size="sm" onClick={exportWork} className="gap-2">
-                <Download className="h-3.5 w-3.5" /> Export CSV
-              </Button>
+      {/* ── GRAND PROFIT SUMMARY ────────────────────────────────────── */}
+      <section>
+        <h2 className="text-sm font-semibold text-muted-foreground uppercase tracking-wide mb-3">Grand Profit Summary — {selectedMonth.label}</h2>
+        <Card>
+          <CardContent className="pt-5 space-y-3">
+            <div className="flex justify-between text-sm"><span className="text-muted-foreground">Work Profit (net of challan)</span><span className="font-semibold">{formatCurrency(workProfit)}</span></div>
+            <div className="flex justify-between text-sm"><span className="text-muted-foreground">Quick Work Earnings</span><span className="font-semibold">{formatCurrency(quickEarned)}</span></div>
+            {canAccessFinancialServices && (
+              <>
+                <div className="flex justify-between text-sm"><span className="text-muted-foreground">AEPS Profit</span><span className="font-semibold">{formatCurrency(aepsProfit)}</span></div>
+                <div className="flex justify-between text-sm"><span className="text-muted-foreground">Electric Recharge Profit</span><span className="font-semibold">{formatCurrency(rechargeProfit)}</span></div>
+                <div className="flex justify-between text-sm"><span className="text-muted-foreground">Money Transfer Profit</span><span className="font-semibold">{formatCurrency(transferProfit)}</span></div>
+              </>
+            )}
+            <div className="flex justify-between text-base font-bold border-t pt-3">
+              <span>Total Profit</span>
+              <span className="text-primary">{formatCurrency(totalProfit)}</span>
             </div>
-            <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-              <SummaryCard label="Total Earned" value={formatCurrency(workEarned)} sub={`${activeWork.length} entries`}
-                icon={TrendingUp} color="bg-emerald-50 text-emerald-600" />
-              <SummaryCard label="Total Dues" value={formatCurrency(totalDues)} sub="Still outstanding"
-                icon={IndianRupee} color="bg-red-50 text-red-500" />
-              <SummaryCard label="Rejected" value={String(rejectedWork.length)} sub={`${formatCurrency(rejectedWork.reduce((s,e)=>s+(e.refundAmount??0),0))} refunded`}
-                icon={XCircle} color="bg-slate-100 text-slate-500" />
-            </div>
-
-            {/* Cash vs Online breakdown */}
-            {(cashCollected > 0 || onlineCollected > 0) && (
-              <div className="bg-card border rounded-xl p-5 shadow-card">
-                <h3 className="font-semibold text-sm mb-4">Payment Mode Breakdown — {periodLabel}</h3>
-                <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-                  <div className="flex items-center gap-3 p-3 rounded-lg bg-emerald-50 border border-emerald-200">
-                    <div className="h-9 w-9 rounded-lg bg-emerald-600 flex items-center justify-center shrink-0">
-                      <Banknote className="h-4.5 w-4.5 text-white" />
-                    </div>
-                    <div>
-                      <p className="text-xs font-medium text-emerald-700 uppercase tracking-wide">Cash Collected</p>
-                      <p className="text-xl font-bold text-emerald-800">{formatCurrency(cashCollected)}</p>
-                      <p className="text-xs text-emerald-600 mt-0.5">
-                        {allPayments.filter(p => (p.paymentMode ?? 'Cash') === 'Cash').length} payments
-                      </p>
-                    </div>
-                  </div>
-                  <div className="flex items-center gap-3 p-3 rounded-lg bg-blue-50 border border-blue-200">
-                    <div className="h-9 w-9 rounded-lg bg-blue-600 flex items-center justify-center shrink-0">
-                      <Wifi className="h-4.5 w-4.5 text-white" />
-                    </div>
-                    <div>
-                      <p className="text-xs font-medium text-blue-700 uppercase tracking-wide">Online Collected</p>
-                      <p className="text-xl font-bold text-blue-800">{formatCurrency(onlineCollected)}</p>
-                      <p className="text-xs text-blue-600 mt-0.5">
-                        {allPayments.filter(p => p.paymentMode === 'Online').length} payments
-                      </p>
-                    </div>
-                  </div>
-                </div>
+            {totalPendingDue > 0 && (
+              <div className="flex justify-between text-sm text-amber-700 bg-amber-50 border border-amber-200 rounded-lg px-3 py-2">
+                <span className="flex items-center gap-1.5"><Clock className="h-3.5 w-3.5" /> Pending Dues (all sources)</span>
+                <span className="font-bold">{formatCurrency(totalPendingDue)}</span>
               </div>
             )}
+          </CardContent>
+        </Card>
+      </section>
 
-            {sortedCategories.length > 0 && (
-              <div className="bg-card border rounded-xl shadow-card">
-                <div className="px-5 py-4 border-b flex justify-between items-center">
-                  <h3 className="font-semibold text-sm">Category Breakdown</h3>
-                </div>
-                <div className="p-5">
-                  <ResponsiveContainer width="100%" height={220}>
-                    <BarChart data={chartData} margin={{ top: 4, right: 8, left: 0, bottom: 40 }}>
-                      <CartesianGrid strokeDasharray="3 3" className="opacity-30" />
-                      <XAxis dataKey="name" tick={{ fontSize: 10 }} tickLine={false} angle={-35} textAnchor="end" interval={0} />
-                      <YAxis tick={{ fontSize: 11 }} tickLine={false} axisLine={false}
-                        tickFormatter={v => v === 0 ? '₹0' : `₹${(v/1000).toFixed(1)}k`} />
-                      <Tooltip formatter={(v: number, _, p: any) => [formatCurrency(v), p.payload.fullName]}
-                        contentStyle={{ borderRadius: '8px', fontSize: '12px' }} />
-                      <Bar dataKey="earned" radius={[4, 4, 0, 0]}>
-                        {chartData.map((_, i) => <Cell key={i} fill={CHART_COLORS[i % CHART_COLORS.length]} />)}
-                      </Bar>
-                    </BarChart>
-                  </ResponsiveContainer>
-                </div>
-                <div className="overflow-x-auto px-5 pb-5">
-                  <table className="w-full text-sm">
-                    <thead>
-                      <tr className="border-b text-muted-foreground text-xs uppercase">
-                        <th className="text-left pb-2 font-medium">Category</th>
-                        <th className="text-right pb-2 font-medium">Entries</th>
-                        <th className="text-right pb-2 font-medium">Earned</th>
-                        <th className="text-right pb-2 font-medium">Challan</th>
-                        <th className="text-right pb-2 font-medium">Net</th>
-                      </tr>
-                    </thead>
-                    <tbody className="divide-y">
-                      {sortedCategories.map(([cat, stats]) => (
-                        <tr key={cat} className="hover:bg-muted/20 transition-colors">
-                          <td className="py-2.5 font-medium">{cat}</td>
-                          <td className="py-2.5 text-right text-muted-foreground">{stats.count}</td>
-                          <td className="py-2.5 text-right font-semibold">{formatCurrency(stats.earned)}</td>
-                          <td className="py-2.5 text-right text-red-500">{formatCurrency(stats.challan)}</td>
-                          <td className="py-2.5 text-right font-bold text-emerald-700">{formatCurrency(stats.earned - stats.challan)}</td>
-                        </tr>
-                      ))}
-                    </tbody>
-                    <tfoot className="border-t-2">
-                      <tr>
-                        <td className="pt-2.5 font-bold">Total</td>
-                        <td className="pt-2.5 text-right font-bold">{sortedCategories.reduce((s,[,v])=>s+v.count,0)}</td>
-                        <td className="pt-2.5 text-right font-bold">{formatCurrency(workEarned)}</td>
-                        <td className="pt-2.5 text-right font-bold text-red-500">{formatCurrency(workChallan)}</td>
-                        <td className="pt-2.5 text-right font-bold text-emerald-700">{formatCurrency(workProfit)}</td>
-                      </tr>
-                    </tfoot>
-                  </table>
-                </div>
+      {/* ── 6-MONTH TREND ────────────────────────────────────────────── */}
+      <section>
+        <h2 className="text-sm font-semibold text-muted-foreground uppercase tracking-wide mb-3">6-Month Trend</h2>
+        <Card>
+          <CardContent className="pt-4">
+            <ResponsiveContainer width="100%" height={220}>
+              <BarChart data={trendData} margin={{ top: 0, right: 0, left: -10, bottom: 0 }}>
+                <CartesianGrid strokeDasharray="3 3" stroke="hsl(var(--border))" />
+                <XAxis dataKey="month" tick={{ fontSize: 11 }} />
+                <YAxis tick={{ fontSize: 11 }} />
+                <Tooltip formatter={(v: number) => [formatCurrency(v)]} />
+                <Legend />
+                <Bar dataKey="Work" stackId="a" fill="#4f46e5" radius={[0, 0, 0, 0]} />
+                <Bar dataKey="Quick Work" stackId="a" fill="#06b6d4" />
+                {canAccessFinancialServices && (
+                  <>
+                    <Bar dataKey="AEPS" stackId="a" fill="#10b981" />
+                    <Bar dataKey="Recharge" stackId="a" fill="#f59e0b" />
+                    <Bar dataKey="Transfer" stackId="a" fill="#8b5cf6" radius={[4, 4, 0, 0]} />
+                  </>
+                )}
+              </BarChart>
+            </ResponsiveContainer>
+          </CardContent>
+        </Card>
+      </section>
+
+      {/* ── PAYMENT RECEIPTS SUMMARY ─────────────────────────────────── */}
+      <section>
+        <h2 className="text-sm font-semibold text-muted-foreground uppercase tracking-wide mb-3">Cash vs Online Receipts — {selectedMonth.label}</h2>
+        <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
+          <Card>
+            <CardHeader className="flex flex-row items-center justify-between pb-2">
+              <CardTitle className="text-xs font-medium text-muted-foreground">Cash Collected</CardTitle>
+              <Banknote className="h-4 w-4 text-emerald-500" />
+            </CardHeader>
+            <CardContent>
+              <div className="text-2xl font-bold text-emerald-700">
+                {formatCurrency(
+                  work.filter(e => (e.paymentMode ?? 'Cash') === 'Cash' && e.status !== 'Rejected').reduce((s, e) => s + e.paidAmount, 0) +
+                  quick.filter(e => (e.paymentMode ?? 'Cash') === 'Cash' && resolveStatus(e.paymentStatus) === 'paid').reduce((s, e) => s + e.amount, 0) +
+                  settledCash
+                )}
               </div>
-            )}
-          </TabsContent>
-
-          {/* ── QUICK ACTION WORK ──────────────────────────────── */}
-          <TabsContent value="quick" className="space-y-4 mt-4" data-testid="reports-quick-tab-content">
-            <div className="flex justify-end">
-              <Button variant="outline" size="sm" onClick={exportQuick} className="gap-2" data-testid="reports-quick-export-btn">
-                <Download className="h-3.5 w-3.5" /> Export CSV
-              </Button>
-            </div>
-            <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-              <SummaryCard label="Quick Work Earned" value={formatCurrency(quickEarned)}
-                sub={`${filteredQuick.length} ${filteredQuick.length === 1 ? 'entry' : 'entries'}`}
-                icon={Printer} color="bg-orange-50 text-orange-600" />
-              <SummaryCard label="Quick Work Profit" value={formatCurrency(quickProfit)}
-                sub="Full amount (no cost)"
-                icon={TrendingUp} color="bg-emerald-50 text-emerald-600" />
-              <SummaryCard label="Avg / Entry"
-                value={filteredQuick.length ? formatCurrency(Math.round(quickEarned / filteredQuick.length)) : '₹0'}
-                sub="Per quick entry"
-                icon={IndianRupee} color="bg-indigo-50 text-primary" />
-            </div>
-
-            <div className="bg-card border rounded-xl shadow-card">
-              <div className="px-5 py-4 border-b flex justify-between items-center">
-                <h3 className="font-semibold text-sm">Category Breakdown — {periodLabel}</h3>
+              <p className="text-xs text-muted-foreground mt-1">Work + Quick + Settlements</p>
+            </CardContent>
+          </Card>
+          <Card>
+            <CardHeader className="flex flex-row items-center justify-between pb-2">
+              <CardTitle className="text-xs font-medium text-muted-foreground">Online Collected</CardTitle>
+              <Wifi className="h-4 w-4 text-blue-500" />
+            </CardHeader>
+            <CardContent>
+              <div className="text-2xl font-bold text-blue-700">
+                {formatCurrency(
+                  work.filter(e => e.paymentMode === 'Online' && e.status !== 'Rejected').reduce((s, e) => s + e.paidAmount, 0) +
+                  quick.filter(e => e.paymentMode === 'Online' && resolveStatus(e.paymentStatus) === 'paid').reduce((s, e) => s + e.amount, 0) +
+                  settledOnline
+                )}
               </div>
-              {sortedQuickCategories.length === 0 ? (
-                <div className="px-5 py-12 text-center text-muted-foreground text-sm">
-                  <Printer className="h-8 w-8 mx-auto mb-2 opacity-20" />
-                  No quick work entries for this period.
-                </div>
-              ) : (
-                <>
-                  <div className="p-5">
-                    <ResponsiveContainer width="100%" height={220}>
-                      <BarChart data={quickChartData} margin={{ top: 4, right: 8, left: 0, bottom: 40 }}>
-                        <CartesianGrid strokeDasharray="3 3" className="opacity-30" />
-                        <XAxis dataKey="name" tick={{ fontSize: 10 }} tickLine={false} angle={-35} textAnchor="end" interval={0} />
-                        <YAxis tick={{ fontSize: 11 }} tickLine={false} axisLine={false}
-                          tickFormatter={v => v === 0 ? '₹0' : `₹${(v/1000).toFixed(1)}k`} />
-                        <Tooltip formatter={(v: number, _, p: any) => [formatCurrency(v), p.payload.fullName]}
-                          contentStyle={{ borderRadius: '8px', fontSize: '12px' }} />
-                        <Bar dataKey="earned" radius={[4, 4, 0, 0]}>
-                          {quickChartData.map((_, i) => <Cell key={i} fill={CHART_COLORS[i % CHART_COLORS.length]} />)}
-                        </Bar>
-                      </BarChart>
-                    </ResponsiveContainer>
-                  </div>
-                  <div className="overflow-x-auto px-5 pb-5">
-                    <table className="w-full text-sm" data-testid="reports-quick-breakdown-table">
-                      <thead>
-                        <tr className="border-b text-muted-foreground text-xs uppercase">
-                          <th className="text-left pb-2 font-medium">Category</th>
-                          <th className="text-right pb-2 font-medium">Entries</th>
-                          <th className="text-right pb-2 font-medium">Earned</th>
-                          <th className="text-right pb-2 font-medium">Avg / Entry</th>
-                        </tr>
-                      </thead>
-                      <tbody className="divide-y">
-                        {sortedQuickCategories.map(([cat, stats]) => (
-                          <tr key={cat} className="hover:bg-muted/20 transition-colors">
-                            <td className="py-2.5 font-medium">{cat}</td>
-                            <td className="py-2.5 text-right text-muted-foreground">{stats.count}</td>
-                            <td className="py-2.5 text-right font-semibold text-emerald-700">{formatCurrency(stats.earned)}</td>
-                            <td className="py-2.5 text-right text-muted-foreground">{formatCurrency(Math.round(stats.earned / stats.count))}</td>
-                          </tr>
-                        ))}
-                      </tbody>
-                      <tfoot className="border-t-2">
-                        <tr>
-                          <td className="pt-2.5 font-bold">Total</td>
-                          <td className="pt-2.5 text-right font-bold">{sortedQuickCategories.reduce((s,[,v])=>s+v.count,0)}</td>
-                          <td className="pt-2.5 text-right font-bold text-emerald-700">{formatCurrency(quickEarned)}</td>
-                          <td className="pt-2.5 text-right text-muted-foreground">—</td>
-                        </tr>
-                      </tfoot>
-                    </table>
-                  </div>
-                </>
-              )}
-            </div>
-          </TabsContent>
-
-          {/* ── CHALLAN ────────────────────────────────────────── */}
-          <TabsContent value="challan" className="space-y-4 mt-4">
-            <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-              <SummaryCard label="Total Challan Spent" value={formatCurrency(workChallan)} sub={`${periodLabel}`}
-                icon={Receipt} color="bg-amber-50 text-amber-600" />
-              <SummaryCard label="Entries with Challan"
-                value={String(activeWork.filter(e => (e.challanAmount ?? 0) > 0).length)}
-                sub="Have challan recorded" icon={BarChart2} color="bg-indigo-50 text-primary" />
-              <SummaryCard label="Challan-Net Profit" value={formatCurrency(Math.max(0, workProfit))}
-                sub="After deducting challans" icon={TrendingUp} color="bg-emerald-50 text-emerald-600" />
-            </div>
-
-            <div className="bg-card border rounded-xl shadow-card overflow-hidden">
-              <div className="px-5 py-4 border-b bg-muted/20">
-                <h3 className="font-semibold text-sm">Challan Detail by Category</h3>
-              </div>
-              <div className="overflow-x-auto">
-                <table className="w-full text-sm">
-                  <thead className="bg-muted/40 border-b text-xs uppercase">
-                    <tr>
-                      <th className="px-5 py-3 text-left font-medium text-muted-foreground">Category</th>
-                      <th className="px-5 py-3 text-right font-medium text-muted-foreground">Entries</th>
-                      <th className="px-5 py-3 text-right font-medium text-muted-foreground">Total Challan</th>
-                      <th className="px-5 py-3 text-right font-medium text-muted-foreground">Avg / Entry</th>
-                    </tr>
-                  </thead>
-                  <tbody className="divide-y">
-                    {sortedCategories.filter(([,s])=>s.challan>0).map(([cat,stats]) => (
-                      <tr key={cat} className="hover:bg-muted/20 transition-colors">
-                        <td className="px-5 py-3 font-medium">{cat}</td>
-                        <td className="px-5 py-3 text-right text-muted-foreground">{stats.count}</td>
-                        <td className="px-5 py-3 text-right font-semibold text-amber-600">{formatCurrency(stats.challan)}</td>
-                        <td className="px-5 py-3 text-right text-muted-foreground">{formatCurrency(Math.round(stats.challan/stats.count))}</td>
-                      </tr>
-                    ))}
-                    {sortedCategories.filter(([,s])=>s.challan>0).length === 0 && (
-                      <tr><td colSpan={4} className="px-5 py-8 text-center text-muted-foreground text-sm">No challan data recorded for this period</td></tr>
-                    )}
-                  </tbody>
-                </table>
-              </div>
-            </div>
-          </TabsContent>
-
-          {/* ── AEPS ───────────────────────────────────────────── */}
-          <TabsContent value="aeps" className="space-y-4 mt-4">
-            <div className="flex justify-end">
-              <Button variant="outline" size="sm" onClick={exportAeps} className="gap-2">
-                <Download className="h-3.5 w-3.5" /> Export CSV
-              </Button>
-            </div>
-            <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-              <SummaryCard label="Total Processed" value={formatCurrency(filteredAeps.reduce((s,e)=>s+e.amount,0))}
-                sub={`${filteredAeps.length} withdrawals`} icon={Wallet} color="bg-sky-50 text-sky-600" />
-              <SummaryCard label="Total Profit" value={formatCurrency(aepsProfit)} sub="Commission earned"
-                icon={TrendingUp} color="bg-emerald-50 text-emerald-600" />
-              <SummaryCard label="Avg Profit/Txn" value={filteredAeps.length ? formatCurrency(Math.round(aepsProfit/filteredAeps.length)) : '₹0'}
-                sub="Per withdrawal" icon={IndianRupee} color="bg-indigo-50 text-primary" />
-            </div>
-            <div className="bg-card border rounded-xl shadow-card overflow-hidden">
-              <div className="px-5 py-4 border-b bg-muted/20"><h3 className="font-semibold text-sm">AEPS Transactions</h3></div>
-              <div className="overflow-x-auto">
-                <table className="w-full text-sm">
-                  <thead className="bg-muted/40 border-b text-xs uppercase">
-                    <tr>
-                      <th className="px-5 py-3 text-left font-medium text-muted-foreground">Date</th>
-                      <th className="px-5 py-3 text-left font-medium text-muted-foreground">Customer</th>
-                      <th className="px-5 py-3 text-left font-medium text-muted-foreground">Bank</th>
-                      <th className="px-5 py-3 text-right font-medium text-muted-foreground">Amount</th>
-                      <th className="px-5 py-3 text-right font-medium text-muted-foreground">Profit</th>
-                    </tr>
-                  </thead>
-                  <tbody className="divide-y">
-                    {filteredAeps.length === 0 ? (
-                      <tr><td colSpan={5} className="px-5 py-8 text-center text-muted-foreground text-sm">No AEPS data for this period</td></tr>
-                    ) : filteredAeps.map(e => (
-                      <tr key={e.id} className="hover:bg-muted/20 transition-colors">
-                        <td className="px-5 py-3 text-muted-foreground">{format(e.createdAt.toDate(),'dd MMM yyyy')}</td>
-                        <td className="px-5 py-3 font-medium">{e.customerName}</td>
-                        <td className="px-5 py-3 text-muted-foreground">{e.bankName}</td>
-                        <td className="px-5 py-3 text-right font-semibold">{formatCurrency(e.amount)}</td>
-                        <td className="px-5 py-3 text-right font-bold text-emerald-700">{formatCurrency(e.profitMargin)}</td>
-                      </tr>
-                    ))}
-                  </tbody>
-                </table>
-              </div>
-            </div>
-          </TabsContent>
-
-          {/* ── RECHARGE ───────────────────────────────────────── */}
-          <TabsContent value="recharge" className="space-y-4 mt-4">
-            <div className="flex justify-end">
-              <Button variant="outline" size="sm" onClick={exportRecharge} className="gap-2">
-                <Download className="h-3.5 w-3.5" /> Export CSV
-              </Button>
-            </div>
-            <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-              <SummaryCard label="Total Recharged" value={formatCurrency(filteredRecharge.reduce((s,e)=>s+e.rechargeAmount,0))}
-                sub={`${filteredRecharge.length} recharges`} icon={Zap} color="bg-amber-50 text-amber-600" />
-              <SummaryCard label="Total Profit" value={formatCurrency(rechargeProfit)} sub="Commission"
-                icon={TrendingUp} color="bg-emerald-50 text-emerald-600" />
-              <SummaryCard label="Avg Profit/Txn" value={filteredRecharge.length ? formatCurrency(Math.round(rechargeProfit/filteredRecharge.length)) : '₹0'}
-                sub="Per recharge" icon={IndianRupee} color="bg-indigo-50 text-primary" />
-            </div>
-            <div className="bg-card border rounded-xl shadow-card overflow-hidden">
-              <div className="px-5 py-4 border-b bg-muted/20"><h3 className="font-semibold text-sm">Recharge Transactions</h3></div>
-              <div className="overflow-x-auto">
-                <table className="w-full text-sm">
-                  <thead className="bg-muted/40 border-b text-xs uppercase">
-                    <tr>
-                      <th className="px-5 py-3 text-left font-medium text-muted-foreground">Date</th>
-                      <th className="px-5 py-3 text-left font-medium text-muted-foreground">Customer</th>
-                      <th className="px-5 py-3 text-left font-medium text-muted-foreground">Consumer No.</th>
-                      <th className="px-5 py-3 text-right font-medium text-muted-foreground">Amount</th>
-                      <th className="px-5 py-3 text-right font-medium text-muted-foreground">Profit</th>
-                    </tr>
-                  </thead>
-                  <tbody className="divide-y">
-                    {filteredRecharge.length === 0 ? (
-                      <tr><td colSpan={5} className="px-5 py-8 text-center text-muted-foreground text-sm">No recharge data for this period</td></tr>
-                    ) : filteredRecharge.map(e => (
-                      <tr key={e.id} className="hover:bg-muted/20 transition-colors">
-                        <td className="px-5 py-3 text-muted-foreground">{format(e.createdAt.toDate(),'dd MMM yyyy')}</td>
-                        <td className="px-5 py-3 font-medium">{e.customerName}</td>
-                        <td className="px-5 py-3 text-muted-foreground font-mono text-xs">{e.consumerNumber}</td>
-                        <td className="px-5 py-3 text-right font-semibold">{formatCurrency(e.rechargeAmount)}</td>
-                        <td className="px-5 py-3 text-right font-bold text-emerald-700">{formatCurrency(e.profitMargin)}</td>
-                      </tr>
-                    ))}
-                  </tbody>
-                </table>
-              </div>
-            </div>
-          </TabsContent>
-
-          {/* ── MONEY TRANSFER ─────────────────────────────────── */}
-          <TabsContent value="transfer" className="space-y-4 mt-4">
-            <div className="flex justify-end">
-              <Button variant="outline" size="sm" onClick={exportTransfer} className="gap-2">
-                <Download className="h-3.5 w-3.5" /> Export CSV
-              </Button>
-            </div>
-            <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-              <SummaryCard label="Total Transferred" value={formatCurrency(filteredTransfer.reduce((s,e)=>s+e.amount,0))}
-                sub={`${filteredTransfer.length} transfers`} icon={ArrowRightLeft} color="bg-violet-50 text-violet-600" />
-              <SummaryCard label="Total Profit" value={formatCurrency(transferProfit)} sub="Commission"
-                icon={TrendingUp} color="bg-emerald-50 text-emerald-600" />
-              <SummaryCard label="Avg Profit/Txn" value={filteredTransfer.length ? formatCurrency(Math.round(transferProfit/filteredTransfer.length)) : '₹0'}
-                sub="Per transfer" icon={IndianRupee} color="bg-indigo-50 text-primary" />
-            </div>
-            <div className="bg-card border rounded-xl shadow-card overflow-hidden">
-              <div className="px-5 py-4 border-b bg-muted/20"><h3 className="font-semibold text-sm">Transfer Transactions</h3></div>
-              <div className="overflow-x-auto">
-                <table className="w-full text-sm">
-                  <thead className="bg-muted/40 border-b text-xs uppercase">
-                    <tr>
-                      <th className="px-5 py-3 text-left font-medium text-muted-foreground">Date</th>
-                      <th className="px-5 py-3 text-left font-medium text-muted-foreground">Recipient</th>
-                      <th className="px-5 py-3 text-left font-medium text-muted-foreground">Account/Mobile</th>
-                      <th className="px-5 py-3 text-right font-medium text-muted-foreground">Amount</th>
-                      <th className="px-5 py-3 text-right font-medium text-muted-foreground">Profit</th>
-                    </tr>
-                  </thead>
-                  <tbody className="divide-y">
-                    {filteredTransfer.length === 0 ? (
-                      <tr><td colSpan={5} className="px-5 py-8 text-center text-muted-foreground text-sm">No transfer data for this period</td></tr>
-                    ) : filteredTransfer.map(e => (
-                      <tr key={e.id} className="hover:bg-muted/20 transition-colors">
-                        <td className="px-5 py-3 text-muted-foreground">{format(e.createdAt.toDate(),'dd MMM yyyy')}</td>
-                        <td className="px-5 py-3 font-medium">{e.name}</td>
-                        <td className="px-5 py-3 text-muted-foreground font-mono text-xs">{e.mobileOrAccount}</td>
-                        <td className="px-5 py-3 text-right font-semibold">{formatCurrency(e.amount)}</td>
-                        <td className="px-5 py-3 text-right font-bold text-emerald-700">{formatCurrency(e.profitMargin)}</td>
-                      </tr>
-                    ))}
-                  </tbody>
-                </table>
-              </div>
-            </div>
-          </TabsContent>
-        </Tabs>
-      )}
+              <p className="text-xs text-muted-foreground mt-1">Work + Quick + Settlements</p>
+            </CardContent>
+          </Card>
+          <Card>
+            <CardHeader className="flex flex-row items-center justify-between pb-2">
+              <CardTitle className="text-xs font-medium text-muted-foreground">Challan (Govt Fees)</CardTitle>
+              <Receipt className="h-4 w-4 text-muted-foreground" />
+            </CardHeader>
+            <CardContent>
+              <div className="text-2xl font-bold">{formatCurrency(workChallan)}</div>
+              <p className="text-xs text-muted-foreground mt-1">Deducted from work profit</p>
+            </CardContent>
+          </Card>
+        </div>
+      </section>
     </div>
   );
 }

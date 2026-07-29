@@ -4,7 +4,7 @@ import { updateWorkEntry, subscribeToWorkEntries, WorkEntry, addPaymentToEntry }
 import { useAuth } from '@/contexts/AuthContext';
 import { useToast } from '@/hooks/use-toast';
 import { WorkEntryForm, WorkEntryFormData } from '@/components/WorkEntryForm';
-import { ArrowLeft, Loader2, Clock, CheckCircle2, XCircle, Plus, IndianRupee, CreditCard, UserCircle2, Banknote, Wifi } from 'lucide-react';
+import { ArrowLeft, Loader2, Clock, CheckCircle2, XCircle, Plus, IndianRupee, CreditCard, UserCircle2 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Timestamp } from 'firebase/firestore';
@@ -14,20 +14,9 @@ import {
   Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter,
 } from '@/components/ui/dialog';
 import { cn } from '@/lib/utils';
-
-/** Small badge showing Cash (green) or Online (blue) payment mode. */
-function PaymentModeBadge({ mode }: { mode?: 'Cash' | 'Online' }) {
-  const m = mode ?? 'Cash';
-  return (
-    <span className={cn(
-      "inline-flex items-center gap-1 text-xs font-medium px-1.5 py-0.5 rounded",
-      m === 'Online' ? "bg-blue-100 text-blue-700" : "bg-emerald-100 text-emerald-700"
-    )}>
-      {m === 'Online' ? <Wifi className="h-3 w-3" /> : <Banknote className="h-3 w-3" />}
-      {m}
-    </span>
-  );
-}
+import { PaymentModeBadge } from '@/components/PaymentModeBadge';
+import { SettlementMode } from '@/lib/payments';
+import { Banknote, Wifi } from 'lucide-react';
 
 export default function EditWorkPage() {
   const { id } = useParams();
@@ -41,7 +30,7 @@ export default function EditWorkPage() {
   // Payment dialog
   const [paymentOpen, setPaymentOpen] = useState(false);
   const [paymentAmount, setPaymentAmount] = useState('');
-  const [paymentMode, setPaymentMode] = useState<'Cash' | 'Online'>('Cash');
+  const [paymentMode, setPaymentMode] = useState<SettlementMode>('Cash');
   const [addingPayment, setAddingPayment] = useState(false);
 
   useEffect(() => {
@@ -105,13 +94,12 @@ export default function EditWorkPage() {
     ...entry,
     challanAmount: entry.challanAmount ?? 0,
     date: entry.date.toDate(),
+    paymentMode: entry.paymentMode ?? 'Cash',
   };
 
-  // Payment history — merge legacy paidAmount with payments array
   const payments = entry.payments ?? [];
   const hasPaymentHistory = payments.length > 0;
 
-  // Duration calculation for completed/rejected entries
   const resolvedAt = entry.status === 'Completed' ? entry.completedAt : entry.status === 'Rejected' ? entry.rejectedAt : null;
   const duration = resolvedAt && entry.createdAt
     ? formatDistanceStrict(resolvedAt.toDate(), entry.createdAt.toDate())
@@ -130,7 +118,7 @@ export default function EditWorkPage() {
         </div>
       </div>
 
-      {/* Entry metadata — read-only info strip */}
+      {/* Entry metadata */}
       <div className="bg-muted/40 border rounded-lg px-4 py-3 text-xs text-muted-foreground flex flex-wrap gap-x-6 gap-y-1.5">
         {entry.addedBy && (
           <span className="flex items-center gap-1.5">
@@ -180,7 +168,6 @@ export default function EditWorkPage() {
                 </span>
               )}
             </div>
-            {/* Show "Add Payment" for all non-Rejected entries — overpayment is allowed */}
             {entry.status !== 'Rejected' && (
               <Button size="sm" className="gap-1.5 h-8 text-xs" onClick={() => setPaymentOpen(true)}>
                 <Plus className="h-3.5 w-3.5" /> Add Payment
@@ -202,7 +189,8 @@ export default function EditWorkPage() {
               <div key={i} className="px-6 py-3 flex items-center justify-between">
                 <div className="flex items-center gap-2.5">
                   <span className="text-sm font-medium">{formatCurrency(p.amount)}</span>
-                  <PaymentModeBadge mode={p.paymentMode} />
+                  {/* Use shared PaymentModeBadge — SettlementMode maps directly to Cash/Online */}
+                  <PaymentModeBadge mode={p.paymentMode ?? 'Cash'} />
                   <span className="text-xs text-muted-foreground">
                     {p.paidAt ? format(p.paidAt.toDate(), 'dd MMM yyyy, h:mm a') : 'Legacy entry'}
                   </span>
@@ -287,7 +275,7 @@ export default function EditWorkPage() {
               </p>
             ) : entry.dueAmount < 0 ? (
               <p className="text-sm text-blue-700 bg-blue-50 rounded-lg px-3 py-2 border border-blue-200">
-                This entry is already overpaid by <strong>{formatCurrency(Math.abs(entry.dueAmount))}</strong>. Recording another payment will increase the credit.
+                This entry is already overpaid by <strong>{formatCurrency(Math.abs(entry.dueAmount))}</strong>.
               </p>
             ) : (
               <p className="text-sm text-emerald-700 bg-emerald-50 rounded-lg px-3 py-2 border border-emerald-200">
@@ -295,7 +283,6 @@ export default function EditWorkPage() {
               </p>
             )}
 
-            {/* Amount */}
             <div className="relative">
               <IndianRupee className="absolute left-3 top-2.5 h-4 w-4 text-muted-foreground" />
               <Input
@@ -309,7 +296,7 @@ export default function EditWorkPage() {
               />
             </div>
 
-            {/* Payment Mode toggle */}
+            {/* Payment Mode toggle — Cash/Online only for settlements */}
             <div className="space-y-1.5">
               <p className="text-xs font-medium text-muted-foreground">Payment Mode</p>
               <div className="flex h-9 rounded-md border border-border overflow-hidden">
@@ -336,7 +323,6 @@ export default function EditWorkPage() {
               </div>
             </div>
 
-            {/* Soft warning when payment exceeds outstanding due */}
             {paymentAmount && entry.dueAmount > 0 && parseFloat(paymentAmount) > entry.dueAmount && (
               <p className="text-xs text-amber-700 bg-amber-50 border border-amber-200 rounded px-2 py-1.5">
                 ⚠ This payment exceeds the outstanding due by{' '}

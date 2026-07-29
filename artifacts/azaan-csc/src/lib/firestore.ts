@@ -5,6 +5,7 @@ import {
 import { initializeApp, deleteApp } from 'firebase/app';
 import { getAuth, createUserWithEmailAndPassword, signOut as firebaseSignOut } from 'firebase/auth';
 import { db, firebaseConfig } from '@/lib/firebase';
+import { PaymentMode, PaymentStatus, SettlementMode, deriveStatus } from '@/lib/payments';
 
 // ─── USER PROFILES ───────────────────────────────────────────────────────────
 
@@ -112,7 +113,7 @@ export interface PaymentRecord {
   paidAt?: Timestamp;
   addedBy?: string;
   /** How the payment was received. Defaults to 'Cash' for backward compatibility. */
-  paymentMode?: 'Cash' | 'Online';
+  paymentMode?: SettlementMode;
 }
 
 export interface WorkEntry {
@@ -137,6 +138,8 @@ export interface WorkEntry {
   isDeleted?: boolean;
   deletedAt?: Timestamp;
   addedBy?: string;
+  /** Entry-level initial payment intent. Does NOT affect paidAmount/dueAmount/payments[] logic. */
+  paymentMode?: PaymentMode;
 }
 
 export interface Category {
@@ -166,8 +169,6 @@ function stripUndefined<T extends Record<string, unknown>>(obj: T): Partial<T> {
 
 export const createWorkEntry = async (
   data: Omit<WorkEntry, 'id' | 'dueAmount' | 'createdAt' | 'completedAt' | 'rejectedAt'>,
-  /** Payment mode for the initial payment (if any). Defaults to 'Cash'. */
-  initialPaymentMode: 'Cash' | 'Online' = 'Cash',
 ) => {
   if (!db) throw new Error("Firebase not configured");
   const now = Timestamp.now();
@@ -181,9 +182,10 @@ export const createWorkEntry = async (
     ? stripUndefined({ rejectionReason, refundAmount } as Record<string, unknown>)
     : {};
 
-  // Seed the payments array from the initial paidAmount so payment history works from day one
-  const initialPayments: PaymentRecord[] = data.paidAmount > 0
-    ? [{ amount: data.paidAmount, paidAt: now, addedBy: data.addedBy ?? 'Unknown', paymentMode: initialPaymentMode }]
+  // Only create initial payment record for Cash/Online (not Due/None)
+  const mode = data.paymentMode ?? 'Cash';
+  const initialPayments: PaymentRecord[] = (data.paidAmount > 0 && (mode === 'Cash' || mode === 'Online'))
+    ? [{ amount: data.paidAmount, paidAt: now, addedBy: data.addedBy ?? 'Unknown', paymentMode: mode as SettlementMode }]
     : [];
 
   return addDoc(collection(db, 'workEntries'), {
@@ -249,7 +251,7 @@ export const restoreWorkEntry = async (id: string) => {
  */
 export const addPaymentToEntry = async (
   id: string,
-  payment: { amount: number; addedBy?: string; paymentMode?: 'Cash' | 'Online' },
+  payment: { amount: number; addedBy?: string; paymentMode?: SettlementMode },
   totalAmount: number,
   currentPaidAmount: number
 ): Promise<void> => {
@@ -387,16 +389,24 @@ export interface AepsWithdrawal {
   mobile?: string;
   amount: number;
   profitMargin: number;
-  /** How the customer paid. Defaults to 'Cash' for backward compatibility. */
-  paymentMode?: 'Cash' | 'Online';
+  /** Full 4-option payment mode selected at creation time. */
+  paymentMode?: PaymentMode;
+  /** Derived from paymentMode; 'paid' for legacy entries without this field. */
+  paymentStatus?: PaymentStatus;
+  /** Set when a 'Due' entry is settled — which mode was used. */
+  settledVia?: SettlementMode;
+  settledAt?: Timestamp;
+  settledBy?: string;
   createdAt: Timestamp;
   addedBy: string;
 }
 
 export const createAepsWithdrawal = async (data: Omit<AepsWithdrawal, 'id' | 'createdAt'>): Promise<void> => {
   if (!db) throw new Error('Firebase not configured');
+  const paymentStatus: PaymentStatus = deriveStatus(data.paymentMode ?? 'Cash');
   await addDoc(collection(db, 'aepsWithdrawals'), {
     ...stripUndefined(data as Record<string, unknown>),
+    paymentStatus,
     createdAt: Timestamp.now(),
   });
 };
@@ -420,16 +430,21 @@ export interface ElectricRecharge {
   mobile?: string;
   rechargeAmount: number;
   profitMargin: number;
-  /** How the customer paid. Defaults to 'Cash' for backward compatibility. */
-  paymentMode?: 'Cash' | 'Online';
+  paymentMode?: PaymentMode;
+  paymentStatus?: PaymentStatus;
+  settledVia?: SettlementMode;
+  settledAt?: Timestamp;
+  settledBy?: string;
   createdAt: Timestamp;
   addedBy: string;
 }
 
 export const createElectricRecharge = async (data: Omit<ElectricRecharge, 'id' | 'createdAt'>): Promise<void> => {
   if (!db) throw new Error('Firebase not configured');
+  const paymentStatus: PaymentStatus = deriveStatus(data.paymentMode ?? 'Cash');
   await addDoc(collection(db, 'electricRecharges'), {
     ...stripUndefined(data as Record<string, unknown>),
+    paymentStatus,
     createdAt: Timestamp.now(),
   });
 };
@@ -452,15 +467,23 @@ export interface MoneyTransfer {
   mobileOrAccount: string;
   amount: number;
   profitMargin: number;
-  /** How the customer paid. Defaults to 'Cash' for backward compatibility. */
-  paymentMode?: 'Cash' | 'Online';
+  paymentMode?: PaymentMode;
+  paymentStatus?: PaymentStatus;
+  settledVia?: SettlementMode;
+  settledAt?: Timestamp;
+  settledBy?: string;
   createdAt: Timestamp;
   addedBy: string;
 }
 
 export const createMoneyTransfer = async (data: Omit<MoneyTransfer, 'id' | 'createdAt'>): Promise<void> => {
   if (!db) throw new Error('Firebase not configured');
-  await addDoc(collection(db, 'moneyTransfers'), { ...data, createdAt: Timestamp.now() });
+  const paymentStatus: PaymentStatus = deriveStatus(data.paymentMode ?? 'Cash');
+  await addDoc(collection(db, 'moneyTransfers'), {
+    ...stripUndefined(data as Record<string, unknown>),
+    paymentStatus,
+    createdAt: Timestamp.now(),
+  });
 };
 
 export const subscribeToMoneyTransfers = (callback: (entries: MoneyTransfer[]) => void) => {
@@ -487,6 +510,11 @@ export interface QuickActionEntry {
   category: QuickActionCategory;
   customerName?: string;
   amount: number;
+  paymentMode?: PaymentMode;
+  paymentStatus?: PaymentStatus;
+  settledVia?: SettlementMode;
+  settledAt?: Timestamp;
+  settledBy?: string;
   createdAt: Timestamp;
   addedBy: string;
 }
@@ -495,8 +523,10 @@ export const createQuickAction = async (
   data: Omit<QuickActionEntry, 'id' | 'createdAt'>,
 ): Promise<void> => {
   if (!db) throw new Error('Firebase not configured');
+  const paymentStatus: PaymentStatus = deriveStatus(data.paymentMode ?? 'Cash');
   await addDoc(collection(db, 'quickActionWork'), {
     ...stripUndefined(data as Record<string, unknown>),
+    paymentStatus,
     createdAt: Timestamp.now(),
   });
 };
@@ -509,4 +539,86 @@ export const subscribeToQuickActions = (callback: (entries: QuickActionEntry[]) 
     snap.forEach(d => entries.push({ id: d.id, ...d.data() } as QuickActionEntry));
     callback(entries);
   }, (err) => console.error('[Firestore] quickActionWork error:', err.message));
+};
+
+// ─── PAYMENT HISTORY ─────────────────────────────────────────────────────────
+
+export type PaymentHistoryEntryType = 'aeps' | 'recharge' | 'transfer' | 'quickWork' | 'work';
+
+export interface PaymentHistoryRecord {
+  id?: string;
+  entryType: PaymentHistoryEntryType;
+  entryId: string;
+  amount: number;
+  /** The settlement method (Cash/Online — always a SettlementMode, never Due/None) */
+  mode: SettlementMode;
+  originalMode: 'Due';
+  settledAt: Timestamp;
+  settledBy: string;
+  customerName?: string;
+  category?: string;
+}
+
+const COLLECTION_MAP: Record<PaymentHistoryEntryType, string> = {
+  aeps: 'aepsWithdrawals',
+  recharge: 'electricRecharges',
+  transfer: 'moneyTransfers',
+  quickWork: 'quickActionWork',
+  work: 'workEntries',
+};
+
+/**
+ * Settle a pending (Due) entry atomically:
+ * 1. Updates the entry: paymentStatus='paid', settledVia, settledAt, settledBy
+ * 2. Creates a record in `paymentHistory`
+ *
+ * Safe for both real Firestore and the in-memory mock.
+ */
+export const settlePendingEntry = async (
+  entryType: PaymentHistoryEntryType,
+  entryId: string,
+  mode: SettlementMode,
+  settledBy: string,
+  meta: {
+    amount: number;
+    customerName?: string;
+    category?: string;
+  },
+): Promise<void> => {
+  if (!db) throw new Error('Firebase not configured');
+  const now = Timestamp.now();
+
+  // 1. Update the entry itself
+  const colName = COLLECTION_MAP[entryType];
+  await updateDoc(doc(db, colName, entryId), {
+    paymentStatus: 'paid' as PaymentStatus,
+    settledVia: mode,
+    settledAt: now,
+    settledBy,
+  });
+
+  // 2. Create paymentHistory record
+  const record: Omit<PaymentHistoryRecord, 'id'> = {
+    entryType,
+    entryId,
+    amount: meta.amount,
+    mode,
+    originalMode: 'Due',
+    settledAt: now,
+    settledBy,
+    ...(meta.customerName ? { customerName: meta.customerName } : {}),
+    ...(meta.category ? { category: meta.category } : {}),
+  };
+  await addDoc(collection(db, 'paymentHistory'), record);
+};
+
+/** Subscribe to all payment history records, newest first. */
+export const subscribeToPaymentHistory = (callback: (records: PaymentHistoryRecord[]) => void) => {
+  if (!db) return () => {};
+  const q = query(collection(db, 'paymentHistory'), orderBy('settledAt', 'desc'));
+  return onSnapshot(q, (snap) => {
+    const records: PaymentHistoryRecord[] = [];
+    snap.forEach(d => records.push({ id: d.id, ...d.data() } as PaymentHistoryRecord));
+    callback(records);
+  }, (err) => console.error('[Firestore] paymentHistory error:', err.message));
 };

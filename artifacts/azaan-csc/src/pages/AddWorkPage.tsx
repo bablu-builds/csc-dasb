@@ -17,11 +17,9 @@ export default function AddWorkPage() {
   const handleSubmit = async (data: Omit<WorkEntryFormData, 'date'> & { date: Timestamp }) => {
     setIsSubmitting(true);
     try {
-      // Record who added this entry — set at creation, never editable afterward
       const addedBy = userProfile?.displayName || userProfile?.email || 'Unknown';
-      // Extract paymentMode (not a WorkEntry field) before spreading into createWorkEntry
-      const { paymentMode, ...workData } = data;
-      await createWorkEntry({ ...workData, addedBy }, paymentMode);
+      // paymentMode is now part of WorkEntry — include it in the data object
+      await createWorkEntry({ ...data, addedBy });
       toast({
         title: "Work Added Successfully",
         description: `${data.customerName} — ${data.category}`,

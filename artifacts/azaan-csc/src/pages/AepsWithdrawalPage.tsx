@@ -1,6 +1,8 @@
 import { useState, useEffect, useMemo } from 'react';
 import { useAuth } from '@/contexts/AuthContext';
-import { subscribeToAepsWithdrawals, createAepsWithdrawal, AepsWithdrawal } from '@/lib/firestore';
+import {
+  subscribeToAepsWithdrawals, createAepsWithdrawal, AepsWithdrawal, settlePendingEntry,
+} from '@/lib/firestore';
 import { formatCurrency } from '@/lib/format';
 import { format, isToday, isThisMonth } from 'date-fns';
 import { useToast } from '@/hooks/use-toast';
@@ -11,9 +13,13 @@ import { Label } from '@/components/ui/label';
 import { Skeleton } from '@/components/ui/skeleton';
 import {
   Fingerprint, IndianRupee, TrendingUp, Hash, CalendarRange, Search, ShieldCheck,
-  PlusCircle, ChevronUp, Loader2, X, Banknote, Wifi,
+  PlusCircle, ChevronUp, Loader2, X,
 } from 'lucide-react';
-import { cn } from '@/lib/utils';
+import { PaymentModeSelector } from '@/components/PaymentModeSelector';
+import { PaymentModeBadge } from '@/components/PaymentModeBadge';
+import { MarkAsPaidDialog } from '@/components/MarkAsPaidDialog';
+import { PaymentMode, resolveStatus } from '@/lib/payments';
+import type { SettlementMode } from '@/lib/payments';
 
 const INDIAN_BANKS = [
   'State Bank of India (SBI)', 'Punjab National Bank (PNB)', 'Bank of Baroda (BOB)',
@@ -23,19 +29,6 @@ const INDIAN_BANKS = [
   'Indian Overseas Bank', 'Bank of Maharashtra', 'Punjab & Sind Bank',
   'Bandhan Bank', 'South Indian Bank', 'Federal Bank', 'RBL Bank',
 ];
-
-function PaymentModeBadge({ mode }: { mode?: 'Cash' | 'Online' }) {
-  const m = mode ?? 'Cash';
-  return (
-    <span className={cn(
-      "inline-flex items-center gap-1 text-xs font-medium px-1.5 py-0.5 rounded",
-      m === 'Online' ? "bg-blue-100 text-blue-700" : "bg-emerald-100 text-emerald-700"
-    )}>
-      {m === 'Online' ? <Wifi className="h-3 w-3" /> : <Banknote className="h-3 w-3" />}
-      {m}
-    </span>
-  );
-}
 
 function AccessDenied() {
   return (
@@ -65,8 +58,11 @@ export default function AepsWithdrawalPage() {
   const [mobile, setMobile] = useState('');
   const [amount, setAmount] = useState('');
   const [profitMargin, setProfitMargin] = useState('');
-  const [paymentMode, setPaymentMode] = useState<'Cash' | 'Online'>('Cash');
+  const [paymentMode, setPaymentMode] = useState<PaymentMode>('Cash');
   const [submitting, setSubmitting] = useState(false);
+
+  // Mark-as-paid dialog
+  const [settleEntry, setSettleEntry] = useState<AepsWithdrawal | null>(null);
 
   // Filter state
   const [search, setSearch] = useState('');
@@ -82,15 +78,17 @@ export default function AepsWithdrawalPage() {
     return () => unsub();
   }, [canAccessFinancialServices]);
 
-  // Permission guard — after all hooks
   if (!canAccessFinancialServices) return <AccessDenied />;
 
-  // Summary stats (from all entries, not filtered)
-  const todayTotal = entries.filter(e => isToday(e.createdAt.toDate())).reduce((s, e) => s + e.amount, 0);
+  // Summary stats (paid entries only)
+  const todayPaid = entries.filter(e => isToday(e.createdAt.toDate()) && resolveStatus(e.paymentStatus) === 'paid');
+  const todayTotal = todayPaid.reduce((s, e) => s + e.amount, 0);
   const todayCount = entries.filter(e => isToday(e.createdAt.toDate())).length;
-  const todayProfit = entries.filter(e => isToday(e.createdAt.toDate())).reduce((s, e) => s + (e.profitMargin ?? 0), 0);
-  const monthTotal = entries.filter(e => isThisMonth(e.createdAt.toDate())).reduce((s, e) => s + e.amount, 0);
-  const monthProfit = entries.filter(e => isThisMonth(e.createdAt.toDate())).reduce((s, e) => s + (e.profitMargin ?? 0), 0);
+  const todayProfit = todayPaid.reduce((s, e) => s + (e.profitMargin ?? 0), 0);
+  const monthPaid = entries.filter(e => isThisMonth(e.createdAt.toDate()) && resolveStatus(e.paymentStatus) === 'paid');
+  const monthTotal = monthPaid.reduce((s, e) => s + e.amount, 0);
+  const monthProfit = monthPaid.reduce((s, e) => s + (e.profitMargin ?? 0), 0);
+  const pendingCount = entries.filter(e => resolveStatus(e.paymentStatus) === 'pending').length;
 
   // Filtered list
   const filtered = useMemo(() => {
@@ -137,6 +135,16 @@ export default function AepsWithdrawalPage() {
     }
   };
 
+  const handleSettle = async (mode: SettlementMode) => {
+    if (!settleEntry?.id) return;
+    const by = userProfile?.displayName || userProfile?.email || 'Unknown';
+    await settlePendingEntry('aeps', settleEntry.id, mode, by, {
+      amount: settleEntry.amount,
+      customerName: settleEntry.customerName,
+    });
+    toast({ title: 'Payment recorded', description: `${settleEntry.customerName} — ${formatCurrency(settleEntry.amount)} via ${mode}` });
+  };
+
   const clearFilters = () => { setSearch(''); setStartDate(''); setEndDate(''); };
   const hasFilters = search || startDate || endDate;
 
@@ -158,59 +166,69 @@ export default function AepsWithdrawalPage() {
 
       {/* Summary Cards */}
       {loading ? (
-        <div className="grid grid-cols-1 sm:grid-cols-3 lg:grid-cols-5 gap-4">
-          {[0,1,2,3,4].map(i => <Card key={i}><CardContent className="pt-6"><Skeleton className="h-8 w-32 mb-2" /><Skeleton className="h-4 w-24" /></CardContent></Card>)}
+        <div className="grid grid-cols-1 sm:grid-cols-3 lg:grid-cols-6 gap-4">
+          {[0,1,2,3,4,5].map(i => <Card key={i}><CardContent className="pt-6"><Skeleton className="h-8 w-32 mb-2" /><Skeleton className="h-4 w-24" /></CardContent></Card>)}
         </div>
       ) : (
-        <div className="grid grid-cols-1 sm:grid-cols-3 lg:grid-cols-5 gap-4">
+        <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-4">
           <Card>
             <CardHeader className="pb-2 flex flex-row items-center justify-between">
-              <CardTitle className="text-sm font-medium text-muted-foreground">Today's Withdrawal</CardTitle>
+              <CardTitle className="text-xs font-medium text-muted-foreground">Today's Withdrawal</CardTitle>
               <IndianRupee className="h-4 w-4 text-muted-foreground" />
             </CardHeader>
             <CardContent>
               <div className="text-2xl font-bold">{formatCurrency(todayTotal)}</div>
-              <p className="text-xs text-muted-foreground mt-1">Total processed today</p>
+              <p className="text-xs text-muted-foreground mt-1">Paid entries today</p>
             </CardContent>
           </Card>
           <Card>
             <CardHeader className="pb-2 flex flex-row items-center justify-between">
-              <CardTitle className="text-sm font-medium text-muted-foreground">Today's Profit</CardTitle>
+              <CardTitle className="text-xs font-medium text-muted-foreground">Today's Profit</CardTitle>
               <TrendingUp className="h-4 w-4 text-muted-foreground" />
             </CardHeader>
             <CardContent>
               <div className="text-2xl font-bold text-emerald-700">{formatCurrency(todayProfit)}</div>
-              <p className="text-xs text-muted-foreground mt-1">Commission earned today</p>
+              <p className="text-xs text-muted-foreground mt-1">Commission today</p>
             </CardContent>
           </Card>
           <Card>
             <CardHeader className="pb-2 flex flex-row items-center justify-between">
-              <CardTitle className="text-sm font-medium text-muted-foreground">Today's Transactions</CardTitle>
+              <CardTitle className="text-xs font-medium text-muted-foreground">Today's Transactions</CardTitle>
               <Hash className="h-4 w-4 text-muted-foreground" />
             </CardHeader>
             <CardContent>
               <div className="text-2xl font-bold">{todayCount}</div>
-              <p className="text-xs text-muted-foreground mt-1">Withdrawals processed today</p>
+              <p className="text-xs text-muted-foreground mt-1">Processed today</p>
             </CardContent>
           </Card>
           <Card>
             <CardHeader className="pb-2 flex flex-row items-center justify-between">
-              <CardTitle className="text-sm font-medium text-muted-foreground">Month's Withdrawal</CardTitle>
+              <CardTitle className="text-xs font-medium text-muted-foreground">Month's Withdrawal</CardTitle>
               <IndianRupee className="h-4 w-4 text-muted-foreground" />
             </CardHeader>
             <CardContent>
               <div className="text-2xl font-bold">{formatCurrency(monthTotal)}</div>
-              <p className="text-xs text-muted-foreground mt-1">Total processed this month</p>
+              <p className="text-xs text-muted-foreground mt-1">Paid this month</p>
             </CardContent>
           </Card>
           <Card>
             <CardHeader className="pb-2 flex flex-row items-center justify-between">
-              <CardTitle className="text-sm font-medium text-muted-foreground">Month's Profit</CardTitle>
+              <CardTitle className="text-xs font-medium text-muted-foreground">Month's Profit</CardTitle>
               <TrendingUp className="h-4 w-4 text-muted-foreground" />
             </CardHeader>
             <CardContent>
               <div className="text-2xl font-bold text-emerald-700">{formatCurrency(monthProfit)}</div>
-              <p className="text-xs text-muted-foreground mt-1">Commission earned this month</p>
+              <p className="text-xs text-muted-foreground mt-1">Commission this month</p>
+            </CardContent>
+          </Card>
+          <Card className={pendingCount > 0 ? 'border-amber-300 bg-amber-50/40' : ''}>
+            <CardHeader className="pb-2 flex flex-row items-center justify-between">
+              <CardTitle className="text-xs font-medium text-muted-foreground">Pending Dues</CardTitle>
+              <IndianRupee className="h-4 w-4 text-amber-500" />
+            </CardHeader>
+            <CardContent>
+              <div className={`text-2xl font-bold ${pendingCount > 0 ? 'text-amber-600' : ''}`}>{pendingCount}</div>
+              <p className="text-xs text-muted-foreground mt-1">Due entries</p>
             </CardContent>
           </Card>
         </div>
@@ -258,22 +276,7 @@ export default function AepsWithdrawalPage() {
               </div>
               <div className="space-y-2">
                 <Label>Payment Mode</Label>
-                <div className="flex h-10 rounded-md border border-border overflow-hidden">
-                  <button type="button" onClick={() => setPaymentMode('Cash')}
-                    className={cn(
-                      "flex-1 flex items-center justify-center gap-1.5 text-sm font-medium transition-colors",
-                      paymentMode === 'Cash' ? "bg-emerald-600 text-white" : "bg-background text-muted-foreground hover:bg-muted/50"
-                    )}>
-                    <Banknote className="h-3.5 w-3.5" /> Cash
-                  </button>
-                  <button type="button" onClick={() => setPaymentMode('Online')}
-                    className={cn(
-                      "flex-1 flex items-center justify-center gap-1.5 text-sm font-medium transition-colors border-l border-border",
-                      paymentMode === 'Online' ? "bg-blue-600 text-white" : "bg-background text-muted-foreground hover:bg-muted/50"
-                    )}>
-                    <Wifi className="h-3.5 w-3.5" /> Online
-                  </button>
-                </div>
+                <PaymentModeSelector value={paymentMode} onChange={setPaymentMode} showHints />
               </div>
               <div className="sm:col-span-2 flex items-center gap-2">
                 <Button type="submit" disabled={submitting} className="w-full sm:w-auto">
@@ -332,26 +335,41 @@ export default function AepsWithdrawalPage() {
                     <th className="text-right py-2 pr-4 font-medium">Amount</th>
                     <th className="text-right py-2 pr-4 font-medium">Profit</th>
                     <th className="text-left py-2 pr-4 font-medium">Mode</th>
-                    <th className="text-left py-2 font-medium">Added By</th>
+                    <th className="text-left py-2 pr-4 font-medium">Added By</th>
+                    <th className="text-left py-2 font-medium">Action</th>
                   </tr>
                 </thead>
                 <tbody className="divide-y">
-                  {filtered.map(entry => (
-                    <tr key={entry.id} className="hover:bg-muted/30 transition-colors">
-                      <td className="py-3 pr-4 text-muted-foreground whitespace-nowrap">
-                        {format(entry.createdAt.toDate(), 'dd MMM yyyy HH:mm')}
-                      </td>
-                      <td className="py-3 pr-4 font-medium">{entry.customerName}</td>
-                      <td className="py-3 pr-4 text-muted-foreground">{entry.bankName}</td>
-                      <td className="py-3 pr-4 text-muted-foreground">{entry.mobile || '—'}</td>
-                      <td className="py-3 pr-4 text-right font-semibold tabular-nums">{formatCurrency(entry.amount)}</td>
-                      <td className="py-3 pr-4 text-right font-medium text-emerald-700 tabular-nums">
-                        {formatCurrency(entry.profitMargin ?? 0)}
-                      </td>
-                      <td className="py-3 pr-4"><PaymentModeBadge mode={entry.paymentMode} /></td>
-                      <td className="py-3 text-muted-foreground text-xs italic">{entry.addedBy}</td>
-                    </tr>
-                  ))}
+                  {filtered.map(entry => {
+                    const st = resolveStatus(entry.paymentStatus);
+                    return (
+                      <tr key={entry.id} className="hover:bg-muted/30 transition-colors">
+                        <td className="py-3 pr-4 text-muted-foreground whitespace-nowrap">
+                          {format(entry.createdAt.toDate(), 'dd MMM yyyy HH:mm')}
+                        </td>
+                        <td className="py-3 pr-4 font-medium">{entry.customerName}</td>
+                        <td className="py-3 pr-4 text-muted-foreground">{entry.bankName}</td>
+                        <td className="py-3 pr-4 text-muted-foreground">{entry.mobile || '—'}</td>
+                        <td className="py-3 pr-4 text-right font-semibold tabular-nums">{formatCurrency(entry.amount)}</td>
+                        <td className="py-3 pr-4 text-right font-medium text-emerald-700 tabular-nums">
+                          {formatCurrency(entry.profitMargin ?? 0)}
+                        </td>
+                        <td className="py-3 pr-4">
+                          <PaymentModeBadge mode={entry.paymentMode} status={entry.paymentStatus} settledVia={entry.settledVia} />
+                        </td>
+                        <td className="py-3 pr-4 text-muted-foreground text-xs italic">{entry.addedBy}</td>
+                        <td className="py-3">
+                          {st === 'pending' && (
+                            <Button size="sm" variant="outline"
+                              className="h-7 text-xs border-amber-300 text-amber-700 hover:bg-amber-50 whitespace-nowrap"
+                              onClick={() => setSettleEntry(entry)}>
+                              Mark Paid
+                            </Button>
+                          )}
+                        </td>
+                      </tr>
+                    );
+                  })}
                 </tbody>
               </table>
               <p className="text-xs text-muted-foreground mt-3">
@@ -361,6 +379,15 @@ export default function AepsWithdrawalPage() {
           )}
         </CardContent>
       </Card>
+
+      {/* Mark as Paid Dialog */}
+      <MarkAsPaidDialog
+        open={!!settleEntry}
+        onOpenChange={(o) => { if (!o) setSettleEntry(null); }}
+        customerName={settleEntry?.customerName}
+        amount={settleEntry?.amount ?? 0}
+        onConfirm={handleSettle}
+      />
     </div>
   );
 }

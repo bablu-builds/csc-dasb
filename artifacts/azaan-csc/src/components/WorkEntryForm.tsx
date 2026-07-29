@@ -15,10 +15,12 @@ import { Textarea } from '@/components/ui/textarea';
 import {
   Select, SelectContent, SelectItem, SelectTrigger, SelectValue,
 } from '@/components/ui/select';
-import { CalendarIcon, Loader2, IndianRupee, XCircle, Receipt, Banknote, Wifi } from 'lucide-react';
+import { CalendarIcon, Loader2, IndianRupee, XCircle, Receipt } from 'lucide-react';
 import { Calendar } from '@/components/ui/calendar';
 import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover';
 import { cn } from '@/lib/utils';
+import { PaymentModeSelector } from '@/components/PaymentModeSelector';
+import { PaymentMode } from '@/lib/payments';
 
 const formSchema = z.object({
   customerName: z.string().min(1, 'Name is required'),
@@ -33,7 +35,7 @@ const formSchema = z.object({
   address: z.string().optional(),
   rejectionReason: z.string().optional(),
   refundAmount: z.coerce.number().min(0, 'Amount cannot be negative').optional(),
-  paymentMode: z.enum(['Cash', 'Online']).default('Cash'),
+  paymentMode: z.enum(['Cash', 'Online', 'Due', 'None']).default('Cash'),
 });
 
 export type WorkEntryFormData = z.infer<typeof formSchema>;
@@ -108,11 +110,34 @@ export function WorkEntryForm({ initialData, onSubmit, isSubmitting = false, isE
   const status = form.watch('status');
   const paymentMode = form.watch('paymentMode');
 
+  // ── Payment mode side-effects ────────────────────────────────────────────
+  useEffect(() => {
+    if (isEditing) return; // edit mode: no auto-mutations
+    if (paymentMode === 'Due') {
+      // Due: paidAmount must be 0
+      form.setValue('paidAmount', 0);
+    } else if (paymentMode === 'None') {
+      // None (Free): force ₹0 total, ₹0 paid, Completed status
+      form.setValue('totalAmount', 0);
+      form.setValue('paidAmount', 0);
+      form.setValue('challanAmount', 0);
+      form.setValue('status', 'Completed');
+    }
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [paymentMode, isEditing]);
+
   // In edit mode: due = new totalAmount − current Firestore paidAmount (live preview as user edits total)
   // In add mode:  due = totalAmount − paidAmount from form state
   const effectiveDue = isEditing
     ? (total || 0) - currentPaidAmount
     : (total || 0) - (paid || 0);
+
+  // Hide paid amount input for Due (always 0) and None (always 0)
+  const showPaidAmount = !isEditing && paymentMode !== 'Due' && paymentMode !== 'None';
+  // Hide all payment fields for None (free service)
+  const showPaymentFields = paymentMode !== 'None' || isEditing;
+  // For None mode, totalAmount is locked at 0
+  const isTotalLocked = !isEditing && paymentMode === 'None';
 
   const handleSubmit = async (values: WorkEntryFormData) => {
     await onSubmit({ ...values, date: Timestamp.fromDate(values.date) });
@@ -198,10 +223,29 @@ export function WorkEntryForm({ initialData, onSubmit, isSubmitting = false, isE
           </FormItem>
         )} />
 
-        {/* Amount section */}
+        {/* Amount + Payment section */}
         <div className="p-5 bg-muted/30 rounded-xl border space-y-4">
           <p className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">Payment Details</p>
-          <div className={cn("grid gap-4", isEditing ? "grid-cols-1 md:grid-cols-3" : "grid-cols-1 md:grid-cols-2 lg:grid-cols-4")}>
+
+          {/* Payment Mode Selector — always visible except in edit mode */}
+          {!isEditing && (
+            <FormField control={form.control} name="paymentMode" render={({ field }) => (
+              <FormItem>
+                <FormLabel className="text-sm font-medium">Payment Mode</FormLabel>
+                <FormControl>
+                  <PaymentModeSelector
+                    value={field.value as PaymentMode}
+                    onChange={field.onChange}
+                    showHints
+                  />
+                </FormControl>
+                <FormMessage />
+              </FormItem>
+            )} />
+          )}
+
+          <div className={cn("grid gap-4", isEditing ? "grid-cols-1 md:grid-cols-3" : "grid-cols-1 md:grid-cols-2 lg:grid-cols-3")}>
+            {/* Total Amount */}
             <FormField control={form.control} name="totalAmount" render={({ field }) => (
               <FormItem>
                 <FormLabel className="text-sm font-medium">Total Amount (₹)</FormLabel>
@@ -209,6 +253,7 @@ export function WorkEntryForm({ initialData, onSubmit, isSubmitting = false, isE
                   <div className="relative">
                     <IndianRupee className="absolute left-3 top-2.5 h-4 w-4 text-muted-foreground" />
                     <Input type="number" min={0} className={cn(inputClass, "pl-9")}
+                      disabled={isTotalLocked}
                       {...numericFieldProps(field)} />
                   </div>
                 </FormControl>
@@ -216,95 +261,79 @@ export function WorkEntryForm({ initialData, onSubmit, isSubmitting = false, isE
               </FormItem>
             )} />
 
-            {/* Paid Amount + Payment Mode — only shown when creating a new entry */}
-            {!isEditing && (
-              <>
-                <FormField control={form.control} name="paidAmount" render={({ field }) => (
-                  <FormItem>
-                    <FormLabel className="text-sm font-medium">Paid Amount (₹)</FormLabel>
-                    <FormControl>
-                      <div className="relative">
-                        <IndianRupee className="absolute left-3 top-2.5 h-4 w-4 text-muted-foreground" />
-                        <Input type="number" min={0} className={cn(inputClass, "pl-9")}
-                          {...numericFieldProps(field)} />
-                      </div>
-                    </FormControl>
-                    <FormMessage />
-                  </FormItem>
-                )} />
-
-                <FormField control={form.control} name="paymentMode" render={({ field }) => (
-                  <FormItem>
-                    <FormLabel className="text-sm font-medium">Payment Mode</FormLabel>
-                    <FormControl>
-                      <div className="flex h-10 rounded-md border border-border overflow-hidden">
-                        <button type="button"
-                          onClick={() => field.onChange('Cash')}
-                          className={cn(
-                            "flex-1 flex items-center justify-center gap-1.5 text-sm font-medium transition-colors",
-                            paymentMode === 'Cash'
-                              ? "bg-emerald-600 text-white"
-                              : "bg-background text-muted-foreground hover:text-foreground hover:bg-muted/50"
-                          )}>
-                          <Banknote className="h-3.5 w-3.5" /> Cash
-                        </button>
-                        <button type="button"
-                          onClick={() => field.onChange('Online')}
-                          className={cn(
-                            "flex-1 flex items-center justify-center gap-1.5 text-sm font-medium transition-colors border-l border-border",
-                            paymentMode === 'Online'
-                              ? "bg-blue-600 text-white"
-                              : "bg-background text-muted-foreground hover:text-foreground hover:bg-muted/50"
-                          )}>
-                          <Wifi className="h-3.5 w-3.5" /> Online
-                        </button>
-                      </div>
-                    </FormControl>
-                    <FormMessage />
-                  </FormItem>
-                )} />
-              </>
+            {/* Paid Amount — only shown when mode is Cash or Online (not Due/None, not editing) */}
+            {showPaidAmount && (
+              <FormField control={form.control} name="paidAmount" render={({ field }) => (
+                <FormItem>
+                  <FormLabel className="text-sm font-medium">Paid Amount (₹)</FormLabel>
+                  <FormControl>
+                    <div className="relative">
+                      <IndianRupee className="absolute left-3 top-2.5 h-4 w-4 text-muted-foreground" />
+                      <Input type="number" min={0} className={cn(inputClass, "pl-9")}
+                        {...numericFieldProps(field)} />
+                    </div>
+                  </FormControl>
+                  <FormMessage />
+                </FormItem>
+              )} />
             )}
 
-            <FormField control={form.control} name="challanAmount" render={({ field }) => (
-              <FormItem>
-                <FormLabel className="text-sm font-medium flex items-center gap-1.5">
-                  <Receipt className="h-3.5 w-3.5 text-muted-foreground" />
-                  Challan (₹)
-                </FormLabel>
-                <FormControl>
-                  <div className="relative">
-                    <IndianRupee className="absolute left-3 top-2.5 h-4 w-4 text-muted-foreground" />
-                    <Input type="number" min={0} className={cn(inputClass, "pl-9")}
-                      {...numericFieldProps(field as { value: number | undefined; onChange: (v: string | number) => void })} />
-                  </div>
-                </FormControl>
-                <FormMessage />
-              </FormItem>
-            )} />
+            {/* Challan — hidden for None mode */}
+            {showPaymentFields && (
+              <FormField control={form.control} name="challanAmount" render={({ field }) => (
+                <FormItem>
+                  <FormLabel className="text-sm font-medium flex items-center gap-1.5">
+                    <Receipt className="h-3.5 w-3.5 text-muted-foreground" />
+                    Challan (₹)
+                  </FormLabel>
+                  <FormControl>
+                    <div className="relative">
+                      <IndianRupee className="absolute left-3 top-2.5 h-4 w-4 text-muted-foreground" />
+                      <Input type="number" min={0} className={cn(inputClass, "pl-9")}
+                        {...numericFieldProps(field as { value: number | undefined; onChange: (v: string | number) => void })} />
+                    </div>
+                  </FormControl>
+                  <FormMessage />
+                </FormItem>
+              )} />
+            )}
 
-            {/* Due Amount — read-only calculated display */}
-            <div className="space-y-2">
-              <label className="block text-sm font-medium leading-none">
-                {effectiveDue < 0 ? 'Overpaid' : 'Due Amount'} (₹)
-              </label>
-              <div className={cn(
-                "h-10 px-3 rounded-md border font-semibold flex items-center gap-2 text-sm",
-                effectiveDue > 0
-                  ? "bg-red-50 border-red-200 text-red-700"
-                  : effectiveDue < 0
-                  ? "bg-blue-50 border-blue-200 text-blue-700"
-                  : "bg-emerald-50 border-emerald-200 text-emerald-700"
-              )}>
-                <IndianRupee className="h-4 w-4" />
-                {Math.abs(effectiveDue).toLocaleString('en-IN')}
-                {effectiveDue < 0 && <span className="text-xs font-normal ml-1">(credit)</span>}
+            {/* Due Amount — read-only calculated display (hidden for None) */}
+            {showPaymentFields && (
+              <div className="space-y-2">
+                <label className="block text-sm font-medium leading-none">
+                  {effectiveDue < 0 ? 'Overpaid' : 'Due Amount'} (₹)
+                </label>
+                <div className={cn(
+                  "h-10 px-3 rounded-md border font-semibold flex items-center gap-2 text-sm",
+                  paymentMode === 'Due' && !isEditing
+                    ? "bg-amber-50 border-amber-200 text-amber-700"
+                    : effectiveDue > 0
+                    ? "bg-red-50 border-red-200 text-red-700"
+                    : effectiveDue < 0
+                    ? "bg-blue-50 border-blue-200 text-blue-700"
+                    : "bg-emerald-50 border-emerald-200 text-emerald-700"
+                )}>
+                  <IndianRupee className="h-4 w-4" />
+                  {Math.abs(effectiveDue).toLocaleString('en-IN')}
+                  {effectiveDue < 0 && <span className="text-xs font-normal ml-1">(credit)</span>}
+                  {paymentMode === 'Due' && !isEditing && (
+                    <span className="text-xs font-normal ml-1">(will collect later)</span>
+                  )}
+                </div>
+                {isEditing && (
+                  <p className="text-xs text-muted-foreground">Paid via Payment History</p>
+                )}
               </div>
-              {isEditing && (
-                <p className="text-xs text-muted-foreground">Paid via Payment History</p>
-              )}
-            </div>
+            )}
           </div>
+
+          {/* None mode hint */}
+          {paymentMode === 'None' && !isEditing && (
+            <div className="rounded-lg border border-slate-200 bg-slate-50 px-3 py-2 text-xs text-slate-600">
+              Free service — ₹0 charged. Entry will be marked Completed automatically.
+            </div>
+          )}
         </div>
 
         {/* Status & Address */}
@@ -312,7 +341,8 @@ export function WorkEntryForm({ initialData, onSubmit, isSubmitting = false, isE
           <FormField control={form.control} name="status" render={({ field }) => (
             <FormItem>
               <FormLabel className="text-sm font-medium">Status</FormLabel>
-              <Select onValueChange={field.onChange} defaultValue={field.value}>
+              <Select onValueChange={field.onChange} value={field.value}
+                disabled={paymentMode === 'None' && !isEditing}>
                 <FormControl>
                   <SelectTrigger className={inputClass}>
                     <SelectValue placeholder="Select status" />

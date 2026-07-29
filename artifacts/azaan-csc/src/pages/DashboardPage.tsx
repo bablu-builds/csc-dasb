@@ -20,6 +20,7 @@ import { Badge } from '@/components/ui/badge';
 import { Timestamp } from 'firebase/firestore';
 import { formatCurrency } from '@/lib/format';
 import { useToast } from '@/hooks/use-toast';
+import { resolveStatus } from '@/lib/payments';
 import {
   BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer,
 } from 'recharts';
@@ -115,39 +116,85 @@ export default function DashboardPage() {
 
   const today = new Date();
 
-  // Work entry stats
+  // ── Earnings (exclude pending/free) ──────────────────────────────────────
+
+  // Work: paidAmount already reflects actual collected cash (0 for Due entries)
   const todayWork = workEntries.filter(e => isToday(e.date.toDate()) && e.status !== 'Rejected');
   const workTodayEarning = todayWork.reduce((s, e) => s + e.paidAmount, 0);
-  const workMonthEarning = workEntries.filter(e => isThisMonth(e.date.toDate()) && e.status !== 'Rejected').reduce((s, e) => s + e.paidAmount, 0);
+  const workMonthEarning = workEntries
+    .filter(e => isThisMonth(e.date.toDate()) && e.status !== 'Rejected')
+    .reduce((s, e) => s + e.paidAmount, 0);
 
-  // Quick Action Work (included in Today's/This Month earnings)
-  const todayQuickEarning = quickEntries.filter(e => isToday(e.createdAt.toDate())).reduce((s, e) => s + e.amount, 0);
-  const monthQuickEarning = quickEntries.filter(e => isThisMonth(e.createdAt.toDate())).reduce((s, e) => s + e.amount, 0);
+  // Quick Action Work — exclude pending/free entries
+  const todayQuickEarning = quickEntries
+    .filter(e => isToday(e.createdAt.toDate()) && resolveStatus(e.paymentStatus) === 'paid')
+    .reduce((s, e) => s + e.amount, 0);
+  const monthQuickEarning = quickEntries
+    .filter(e => isThisMonth(e.createdAt.toDate()) && resolveStatus(e.paymentStatus) === 'paid')
+    .reduce((s, e) => s + e.amount, 0);
 
   const todaysEarning = workTodayEarning + todayQuickEarning;
   const monthEarning = workMonthEarning + monthQuickEarning;
 
   const pendingCount = workEntries.filter(e => e.status === 'Pending').length;
-  const totalDue = workEntries.reduce((s, e) => s + e.dueAmount, 0);
+  const totalDue = workEntries.reduce((s, e) => s + Math.max(0, e.dueAmount), 0);
   const rejectedEntries = workEntries.filter(e => e.status === 'Rejected');
   const rejectedCount = rejectedEntries.length;
   const totalRefunded = rejectedEntries.reduce((s, e) => s + (e.refundAmount || 0), 0);
   const uniqueCustomers = new Set(workEntries.map(e => e.mobile)).size;
 
-  // Combined profit for owner (AEPS + Recharge + MoneyTransfer + Quick)
-  const todayAepsProfit = aepsEntries.filter(e => isToday(e.createdAt.toDate())).reduce((s, e) => s + e.profitMargin, 0);
-  const todayRechargeProfit = rechargeEntries.filter(e => isToday(e.createdAt.toDate())).reduce((s, e) => s + e.profitMargin, 0);
-  const todayTransferProfit = transferEntries.filter(e => isToday(e.createdAt.toDate())).reduce((s, e) => s + e.profitMargin, 0);
+  // ── Total Pending Dues (all 5 sources) ──────────────────────────────────
+  const workPendingDue = workEntries
+    .filter(e => e.status !== 'Rejected' && e.dueAmount > 0)
+    .reduce((s, e) => s + e.dueAmount, 0);
+  const aepsPendingDue = aepsEntries
+    .filter(e => resolveStatus(e.paymentStatus) === 'pending')
+    .reduce((s, e) => s + e.amount, 0);
+  const rechargePendingDue = rechargeEntries
+    .filter(e => resolveStatus(e.paymentStatus) === 'pending')
+    .reduce((s, e) => s + e.rechargeAmount, 0);
+  const transferPendingDue = transferEntries
+    .filter(e => resolveStatus(e.paymentStatus) === 'pending')
+    .reduce((s, e) => s + e.amount, 0);
+  const quickPendingDue = quickEntries
+    .filter(e => resolveStatus(e.paymentStatus) === 'pending')
+    .reduce((s, e) => s + e.amount, 0);
+
+  const totalPendingDues = workPendingDue + aepsPendingDue + rechargePendingDue + transferPendingDue + quickPendingDue;
+  const pendingDueCount =
+    workEntries.filter(e => e.status !== 'Rejected' && e.dueAmount > 0).length +
+    aepsEntries.filter(e => resolveStatus(e.paymentStatus) === 'pending').length +
+    rechargeEntries.filter(e => resolveStatus(e.paymentStatus) === 'pending').length +
+    transferEntries.filter(e => resolveStatus(e.paymentStatus) === 'pending').length +
+    quickEntries.filter(e => resolveStatus(e.paymentStatus) === 'pending').length;
+
+  // ── Profit (exclude pending/free) ───────────────────────────────────────
+  const todayAepsProfit = aepsEntries
+    .filter(e => isToday(e.createdAt.toDate()) && resolveStatus(e.paymentStatus) === 'paid')
+    .reduce((s, e) => s + e.profitMargin, 0);
+  const todayRechargeProfit = rechargeEntries
+    .filter(e => isToday(e.createdAt.toDate()) && resolveStatus(e.paymentStatus) === 'paid')
+    .reduce((s, e) => s + e.profitMargin, 0);
+  const todayTransferProfit = transferEntries
+    .filter(e => isToday(e.createdAt.toDate()) && resolveStatus(e.paymentStatus) === 'paid')
+    .reduce((s, e) => s + e.profitMargin, 0);
   const todayChallanCost = todayWork.reduce((s, e) => s + (e.challanAmount ?? 0), 0);
   const todayWorkProfit = workTodayEarning - todayChallanCost;
-  // Quick work has no challan/cost, so amount === profit
   const todayQuickProfit = todayQuickEarning;
   const todayTotalProfit = todayWorkProfit + todayAepsProfit + todayRechargeProfit + todayTransferProfit + todayQuickProfit;
 
-  const monthAepsProfit = aepsEntries.filter(e => isThisMonth(e.createdAt.toDate())).reduce((s, e) => s + e.profitMargin, 0);
-  const monthRechargeProfit = rechargeEntries.filter(e => isThisMonth(e.createdAt.toDate())).reduce((s, e) => s + e.profitMargin, 0);
-  const monthTransferProfit = transferEntries.filter(e => isThisMonth(e.createdAt.toDate())).reduce((s, e) => s + e.profitMargin, 0);
-  const monthChallanCost = workEntries.filter(e => isThisMonth(e.date.toDate()) && e.status !== 'Rejected').reduce((s, e) => s + (e.challanAmount ?? 0), 0);
+  const monthAepsProfit = aepsEntries
+    .filter(e => isThisMonth(e.createdAt.toDate()) && resolveStatus(e.paymentStatus) === 'paid')
+    .reduce((s, e) => s + e.profitMargin, 0);
+  const monthRechargeProfit = rechargeEntries
+    .filter(e => isThisMonth(e.createdAt.toDate()) && resolveStatus(e.paymentStatus) === 'paid')
+    .reduce((s, e) => s + e.profitMargin, 0);
+  const monthTransferProfit = transferEntries
+    .filter(e => isThisMonth(e.createdAt.toDate()) && resolveStatus(e.paymentStatus) === 'paid')
+    .reduce((s, e) => s + e.profitMargin, 0);
+  const monthChallanCost = workEntries
+    .filter(e => isThisMonth(e.date.toDate()) && e.status !== 'Rejected')
+    .reduce((s, e) => s + (e.challanAmount ?? 0), 0);
   const monthWorkProfit = workMonthEarning - monthChallanCost;
   const monthQuickProfit = monthQuickEarning;
   const monthTotalProfit = monthWorkProfit + monthAepsProfit + monthRechargeProfit + monthTransferProfit + monthQuickProfit;
@@ -159,7 +206,7 @@ export default function DashboardPage() {
     .filter(e => e.daysPending >= 3 || e.dueAmount > 0)
     .sort((a, b) => b.daysPending - a.daysPending);
 
-  // Last 7 days chart (includes Quick Action Work income)
+  // Last 7 days chart (paid entries only)
   const chartData = Array.from({ length: 7 }).map((_, i) => {
     const day = subDays(today, 6 - i);
     const dayKey = format(day, 'yyyy-MM-dd');
@@ -167,7 +214,7 @@ export default function DashboardPage() {
       .filter(e => format(e.date.toDate(), 'yyyy-MM-dd') === dayKey && e.status !== 'Rejected')
       .reduce((s, e) => s + e.paidAmount, 0);
     const quickEarned = quickEntries
-      .filter(e => format(e.createdAt.toDate(), 'yyyy-MM-dd') === dayKey)
+      .filter(e => format(e.createdAt.toDate(), 'yyyy-MM-dd') === dayKey && resolveStatus(e.paymentStatus) === 'paid')
       .reduce((s, e) => s + e.amount, 0);
     return { day: format(day, 'dd MMM'), earned: workEarned + quickEarned };
   });
@@ -181,8 +228,6 @@ export default function DashboardPage() {
     if (!entry.id) return;
     setCompletingId(entry.id);
     try {
-      // Only update status — pass currentPaidAmount so dueAmount recalculates correctly
-      // without touching the payments array or overwriting paidAmount
       await updateWorkEntry(entry.id, { status: 'Completed', totalAmount: entry.totalAmount }, entry.paidAmount);
       toast({ title: 'Marked as Completed', description: `${entry.customerName} — ${entry.category}` });
     } catch (err: any) {
@@ -262,7 +307,7 @@ export default function DashboardPage() {
               </CardHeader>
               <CardContent>
                 <div className="text-2xl font-bold text-primary">{formatCurrency(todaysEarning)}</div>
-                <p className="text-xs text-muted-foreground mt-1">Today</p>
+                <p className="text-xs text-muted-foreground mt-1">Today (paid)</p>
               </CardContent>
             </Card>
 
@@ -305,16 +350,21 @@ export default function DashboardPage() {
               </CardContent>
             </Card>
 
-            <Card className="shadow-sm hover:shadow-md transition-shadow">
+            {/* UPGRADED: Total Pending Dues across all 5 sources */}
+            <Card className={`shadow-sm hover:shadow-md transition-shadow ${totalPendingDues > 0 ? 'border-amber-300 bg-amber-50/30' : ''}`}>
               <CardHeader className="flex flex-row items-center justify-between pb-2">
-                <CardTitle className="text-xs font-medium uppercase tracking-wide text-muted-foreground">Due Amount</CardTitle>
-                <div className="h-8 w-8 rounded-full bg-red-50 flex items-center justify-center">
-                  <IndianRupee className="h-4 w-4 text-red-500" />
+                <CardTitle className="text-xs font-medium uppercase tracking-wide text-muted-foreground">Pending Dues</CardTitle>
+                <div className="h-8 w-8 rounded-full bg-amber-50 flex items-center justify-center">
+                  <IndianRupee className="h-4 w-4 text-amber-600" />
                 </div>
               </CardHeader>
               <CardContent>
-                <div className="text-2xl font-bold text-red-600">{formatCurrency(totalDue)}</div>
-                <p className="text-xs text-muted-foreground mt-1">To be collected</p>
+                <div className={`text-2xl font-bold ${totalPendingDues > 0 ? 'text-amber-600' : ''}`}>
+                  {formatCurrency(totalPendingDues)}
+                </div>
+                <p className="text-xs text-muted-foreground mt-1">
+                  {pendingDueCount} entr{pendingDueCount === 1 ? 'y' : 'ies'} · all sources
+                </p>
               </CardContent>
             </Card>
 
@@ -334,7 +384,7 @@ export default function DashboardPage() {
             </Card>
           </div>
 
-          {/* Combined profit overview (includes AEPS/Recharge/Transfer) */}
+          {/* Combined profit overview */}
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 mb-4">
             <StatCard
               label="Today's Total Profit"
@@ -346,7 +396,7 @@ export default function DashboardPage() {
             <StatCard
               label="Month's Total Profit"
               value={formatCurrency(monthTotalProfit)}
-              sub="Work + Quick + AEPS + Recharge + Transfer combined"
+              sub="Work + Quick + AEPS + Recharge + Transfer (paid only)"
               icon={IndianRupee}
               gradient="bg-gradient-to-br from-indigo-500 to-indigo-700"
             />
@@ -355,7 +405,7 @@ export default function DashboardPage() {
           {/* 7-day earnings chart */}
           <Card className="shadow-sm">
             <CardHeader className="pb-2">
-              <CardTitle className="text-sm font-semibold">7-Day Work Earnings</CardTitle>
+              <CardTitle className="text-sm font-semibold">7-Day Work Earnings (Paid)</CardTitle>
             </CardHeader>
             <CardContent>
               <ResponsiveContainer width="100%" height={180}>
@@ -372,7 +422,7 @@ export default function DashboardPage() {
         </section>
       )}
 
-      {/* ── BOTTOM ROW: Pending summary + Recent activity ────────── */}
+      {/* ── BOTTOM ROW ──────────────────────────────────────────── */}
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
         {/* Category-wise pending */}
         <div>
