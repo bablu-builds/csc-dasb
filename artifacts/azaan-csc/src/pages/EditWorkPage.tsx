@@ -401,9 +401,14 @@ export default function EditWorkPage() {
                   {format(new Date(item.ts), 'dd MMM yyyy, h:mm a')}
                 </div>
                 {item.kind === 'created' && (
-                  <div className="flex items-center gap-1.5 text-sm mt-0.5">
-                    <Clock className="h-3.5 w-3.5 text-muted-foreground" />
-                    Entry created
+                  <div className="mt-0.5">
+                    <div className="flex items-center gap-1.5 text-sm text-muted-foreground font-medium">
+                      <Clock className="h-3.5 w-3.5" />
+                      Entry created
+                    </div>
+                    <div className="text-xs text-muted-foreground ml-5 mt-0.5">
+                      Total {formatCurrency(entry.totalAmount)} · Challan {formatCurrency(entry.challanAmount ?? 0)}
+                    </div>
                   </div>
                 )}
                 {item.kind === 'payment' && (
@@ -466,6 +471,7 @@ export default function EditWorkPage() {
           isEditing={true}
           currentPaidAmount={entry.paidAmount}
           netAdjustmentAmount={netAdjAmount}
+          netAdjustmentChallan={netAdjChallan}
         />
       </div>
 

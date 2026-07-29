@@ -53,6 +53,11 @@ interface WorkEntryFormProps {
    * When provided, the due-amount preview in edit mode adds this to the original totalAmount.
    */
   netAdjustmentAmount?: number;
+  /**
+   * Sum of all Deal Adjustments challanChange for this entry.
+   * When provided, shows the effective challan info line in edit mode.
+   */
+  netAdjustmentChallan?: number;
 }
 
 /** Shared helper: value → '' when 0 so the field shows blank (avoids leading-zero bug). */
@@ -73,6 +78,7 @@ export function WorkEntryForm({
   isEditing = false,
   currentPaidAmount = 0,
   netAdjustmentAmount = 0,
+  netAdjustmentChallan = 0,
 }: WorkEntryFormProps) {
   const { categories } = useSettings();
 
@@ -264,10 +270,23 @@ export function WorkEntryForm({
                       {...numericFieldProps(field)} />
                   </div>
                 </FormControl>
-                {isEditing && netAdjustmentAmount !== 0 && (
-                  <p className="text-xs text-muted-foreground mt-1">
-                    Original value — use Deal Adjustments to change the effective total
-                  </p>
+                {isEditing && (
+                  netAdjustmentAmount !== 0 ? (
+                    <p className="text-xs text-muted-foreground mt-1">
+                      Current Effective Total:{' '}
+                      <span className="font-semibold text-foreground">
+                        ₹{((field.value as number || 0) + netAdjustmentAmount).toLocaleString('en-IN')}
+                      </span>
+                      <span className="ml-1">
+                        (Orig ₹{(field.value as number || 0).toLocaleString('en-IN')}{' '}
+                        {netAdjustmentAmount >= 0 ? '+' : '−'} Adj ₹{Math.abs(netAdjustmentAmount).toLocaleString('en-IN')})
+                      </span>
+                    </p>
+                  ) : (
+                    <p className="text-xs text-muted-foreground mt-1">
+                      Original value — use Deal Adjustments to change the effective total
+                    </p>
+                  )
                 )}
                 <FormMessage />
               </FormItem>
@@ -306,6 +325,18 @@ export function WorkEntryForm({
                     </div>
                   </FormControl>
                   <FormMessage />
+                  {isEditing && netAdjustmentChallan !== 0 && (
+                    <p className="text-xs text-muted-foreground mt-1">
+                      Current Effective Challan:{' '}
+                      <span className="font-semibold text-foreground">
+                        ₹{((field.value as number || 0) + netAdjustmentChallan).toLocaleString('en-IN')}
+                      </span>
+                      <span className="ml-1">
+                        (Orig ₹{(field.value as number || 0).toLocaleString('en-IN')}{' '}
+                        {netAdjustmentChallan >= 0 ? '+' : '−'} Adj ₹{Math.abs(netAdjustmentChallan).toLocaleString('en-IN')})
+                      </span>
+                    </p>
+                  )}
                 </FormItem>
               )} />
             )}
