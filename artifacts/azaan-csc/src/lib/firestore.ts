@@ -543,13 +543,13 @@ export const createAepsWithdrawal = async (data: Omit<AepsWithdrawal, 'id' | 'cr
 };
 
 export const subscribeToAepsWithdrawals = (callback: (entries: AepsWithdrawal[]) => void) => {
-  if (!db) return () => {};
+  if (!db) { callback([]); return () => {}; }
   const q = query(collection(db, 'aepsWithdrawals'), orderBy('createdAt', 'desc'));
   return onSnapshot(q, (snap) => {
     const entries: AepsWithdrawal[] = [];
     snap.forEach(d => entries.push({ id: d.id, ...d.data() } as AepsWithdrawal));
     callback(entries);
-  }, (err) => console.error('[Firestore] aepsWithdrawals error:', err.message));
+  }, (err) => { console.error('[Firestore] aepsWithdrawals error:', err.code, err.message); callback([]); });
 };
 
 // ─── ELECTRIC RECHARGES ───────────────────────────────────────────────────────
