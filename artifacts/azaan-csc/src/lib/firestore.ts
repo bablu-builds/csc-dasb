@@ -28,6 +28,35 @@ export const getUserProfile = async (uid: string): Promise<UserProfile | null> =
 };
 
 /**
+ * Subscribe to a user's profile document with a real-time listener.
+ * Calls `callback` immediately with the current value, then on every change.
+ * Calls `callback(null)` if the document does not exist.
+ */
+export const subscribeToUserProfile = (
+  uid: string,
+  callback: (profile: UserProfile | null) => void,
+): () => void => {
+  if (!db) {
+    callback(null);
+    return () => {};
+  }
+  return onSnapshot(
+    doc(db, 'users', uid),
+    (snap) => {
+      if (snap.exists()) {
+        callback({ uid: snap.id, ...snap.data() } as UserProfile);
+      } else {
+        callback(null);
+      }
+    },
+    (err) => {
+      console.error('[Firestore] User profile listener error:', err.code, err.message);
+      callback(null);
+    },
+  );
+};
+
+/**
  * Called when a logged-in user has no `users/{uid}` document yet.
  * If no user docs exist at all → create this user as owner (first-time setup).
  * If user docs exist but this user isn't one of them → unauthorised (caller should sign out).

@@ -1,8 +1,8 @@
-import { useState, useEffect, createContext, useContext, ReactNode } from 'react';
+import { useState, useEffect, useRef, createContext, useContext, ReactNode } from 'react';
 import { User, onAuthStateChanged, signOut as firebaseSignOut } from 'firebase/auth';
 import { auth, isConfigured } from '@/lib/firebase';
 import { useToast } from '@/hooks/use-toast';
-import { UserProfile, getUserProfile, bootstrapUserProfile } from '@/lib/firestore';
+import { UserProfile, subscribeToUserProfile, bootstrapUserProfile } from '@/lib/firestore';
 
 export type UserRole = 'owner' | 'staff';
 
@@ -39,6 +39,10 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const [profileLoading, setProfileLoading] = useState(true);
   const { toast } = useToast();
 
+  // Tracks which UID we've already attempted bootstrap for, so we never
+  // call bootstrapUserProfile more than once per login session.
+  const bootstrapAttemptedRef = useRef<string | null>(null);
+
   useEffect(() => {
     if (!auth) {
       setLoading(false);
@@ -46,46 +50,79 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       return;
     }
 
-    const unsubscribe = onAuthStateChanged(auth, async (u) => {
+    // Holds the unsubscribe function for the active profile listener so we can
+    // clean it up when the auth user changes or the component unmounts.
+    let unsubscribeProfile: (() => void) | null = null;
+
+    const unsubscribeAuth = onAuthStateChanged(auth, (u) => {
       setUser(u);
       setLoading(false);
+
+      // Tear down the previous user's profile listener.
+      if (unsubscribeProfile) {
+        unsubscribeProfile();
+        unsubscribeProfile = null;
+      }
 
       if (!u) {
         setUserProfile(null);
         setProfileLoading(false);
+        bootstrapAttemptedRef.current = null;
         return;
       }
 
       setProfileLoading(true);
-      try {
-        const profile = await getUserProfile(u.uid);
+      bootstrapAttemptedRef.current = null;
+
+      // Real-time listener on users/{uid} — fires immediately with the current
+      // value from Firestore (bypasses local cache for the first snapshot) and
+      // then on every subsequent change. This means:
+      //   • Manual role edits in the Firebase Console propagate within seconds.
+      //   • No stale cache issues on logout/login.
+      unsubscribeProfile = subscribeToUserProfile(u.uid, async (profile) => {
         if (profile) {
+          // Document exists — use whatever role is in Firestore right now.
           setUserProfile(profile);
+          setProfileLoading(false);
         } else {
-          // No profile yet — try to bootstrap as owner if this is the very first user
-          const bootstrapped = await bootstrapUserProfile(
-            u.uid,
-            u.email ?? '',
-            u.displayName || u.email?.split('@')[0] || 'Owner',
-          );
-          if (bootstrapped) {
-            setUserProfile(bootstrapped);
+          // Document does not exist yet. Attempt bootstrap exactly once per
+          // login (tracked by uid) so we don't loop if Firestore is slow.
+          if (bootstrapAttemptedRef.current !== u.uid) {
+            bootstrapAttemptedRef.current = u.uid;
+            try {
+              const bootstrapped = await bootstrapUserProfile(
+                u.uid,
+                u.email ?? '',
+                u.displayName || u.email?.split('@')[0] || 'Owner',
+              );
+              if (bootstrapped) {
+                // bootstrapUserProfile wrote the doc → onSnapshot will fire
+                // again automatically and set userProfile via the branch above.
+              } else {
+                // Users already exist but this account has no profile doc →
+                // unauthorized (LoginPage handles sign-out / messaging).
+                setUserProfile(null);
+                setProfileLoading(false);
+              }
+            } catch (err) {
+              console.error('[AuthContext] Error bootstrapping user profile:', err);
+              setUserProfile(null);
+              setProfileLoading(false);
+            }
           } else {
-            // Not the first user and no profile → email-link staff whose profile
-            // will be created by LoginPage after signInWithEmailLink completes.
-            // Keep userProfile null for now; LoginPage will reload.
+            // Bootstrap already attempted for this UID — profile genuinely
+            // doesn't exist (e.g. staff whose doc was revoked).
             setUserProfile(null);
+            setProfileLoading(false);
           }
         }
-      } catch (err) {
-        console.error('[AuthContext] Error loading user profile:', err);
-        setUserProfile(null);
-      } finally {
-        setProfileLoading(false);
-      }
+      });
     });
 
-    return () => unsubscribe();
+    return () => {
+      unsubscribeAuth();
+      if (unsubscribeProfile) unsubscribeProfile();
+    };
   }, []);
 
   const logout = async () => {
