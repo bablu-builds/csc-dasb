@@ -4,7 +4,7 @@ import {
 } from 'firebase/firestore';
 import { db } from '@/lib/firebase';
 
-export type UserRole = 'owner' | 'staff';
+export type UserRole = 'owner' | 'manager' | 'staff';
 
 export interface UserProfile {
   email: string;

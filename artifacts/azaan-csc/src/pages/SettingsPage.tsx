@@ -6,11 +6,12 @@ import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
-import { Loader2, Plus, Trash2, Users, ShieldCheck, UserX, UserPlus, Eye, EyeOff } from 'lucide-react';
+import { Loader2, Plus, Trash2, Users, ShieldCheck, UserX, UserPlus, Eye, EyeOff, Database } from 'lucide-react';
 import { Badge } from '@/components/ui/badge';
 import { useToast } from '@/hooks/use-toast';
 import {
-  UserProfile, subscribeToStaff, createStaffAccount, revokeStaffAccess, updateStaffPermissions,
+  UserProfile, subscribeToStaff, createStaffAccount,
+  revokeStaffAccess, updateStaffPermissions, updateStaffRole,
 } from '@/lib/firestore';
 import { sendPasswordResetEmail } from 'firebase/auth';
 import { auth } from '@/lib/firebase';
@@ -19,6 +20,7 @@ import {
   AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent,
   AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle,
 } from '@/components/ui/alert-dialog';
+import FirebaseControlTab from '@/components/FirebaseControlTab';
 
 export default function SettingsPage() {
   const { shopSettings, saveShopSettings, categories, createCategory, removeCategory } = useSettings();
@@ -46,7 +48,9 @@ export default function SettingsPage() {
   const [lastCreated, setLastCreated] = useState<{ email: string; name: string } | null>(null);
   const [resetLoadingUid, setResetLoadingUid] = useState<string | null>(null);
   const [newStaffFinancial, setNewStaffFinancial] = useState(false);
+  const [newStaffRole, setNewStaffRole] = useState<'manager' | 'staff'>('staff');
   const [financialToggleUid, setFinancialToggleUid] = useState<string | null>(null);
+  const [roleChangeUid, setRoleChangeUid] = useState<string | null>(null);
 
   useEffect(() => {
     if (!isOwner) { setStaffLoading(false); return; }
@@ -92,13 +96,15 @@ export default function SettingsPage() {
         staffPassword,
         userProfile?.email ?? '',
         newStaffFinancial,
+        newStaffRole,
       );
       setLastCreated({ email: staffEmail.trim(), name: staffName.trim() });
       setStaffName('');
       setStaffEmail('');
       setStaffPassword('');
       setNewStaffFinancial(false);
-      toast({ title: 'Staff account created', description: `${staffName.trim()} can now log in.` });
+      setNewStaffRole('staff');
+      toast({ title: `${newStaffRole === 'manager' ? 'Manager' : 'Staff'} account created`, description: `${staffName.trim()} can now log in.` });
     } catch (err: any) {
       const msg = err.code === 'auth/email-already-in-use'
         ? 'That email already has a Firebase account.'
@@ -139,6 +145,22 @@ export default function SettingsPage() {
     }
   };
 
+  const handleChangeRole = async (staff: UserProfile, newRole: 'manager' | 'staff') => {
+    if (!staff.uid || staff.role === newRole) return;
+    setRoleChangeUid(staff.uid);
+    try {
+      await updateStaffRole(staff.uid, newRole);
+      toast({
+        title: 'Role updated',
+        description: `${staff.displayName || staff.email} is now a ${newRole === 'manager' ? 'Manager' : 'Staff'} member.`,
+      });
+    } catch (err: any) {
+      toast({ variant: 'destructive', title: 'Error changing role', description: err.message });
+    } finally {
+      setRoleChangeUid(null);
+    }
+  };
+
   const handleRevokeConfirm = async () => {
     if (!revokeTarget?.uid) return;
     setIsRevoking(true);
@@ -159,17 +181,23 @@ export default function SettingsPage() {
     <div className="space-y-6 max-w-3xl">
       <div>
         <h1 className="text-2xl font-bold">Settings</h1>
-        <p className="text-muted-foreground text-sm mt-1">Manage shop information, categories and staff</p>
+        <p className="text-muted-foreground text-sm mt-1">Manage shop information, categories, staff and system</p>
       </div>
 
       <Tabs defaultValue="shop" className="w-full">
-        <TabsList className="w-full sm:w-auto grid grid-cols-3 sm:flex">
+        <TabsList className={`w-full sm:w-auto grid ${isOwner ? 'grid-cols-4' : 'grid-cols-3'} sm:flex`}>
           <TabsTrigger value="shop">Shop Info</TabsTrigger>
           <TabsTrigger value="categories">Categories</TabsTrigger>
           <TabsTrigger value="staff" className="flex items-center gap-1.5">
             <Users className="h-3.5 w-3.5" />
             Staff
           </TabsTrigger>
+          {isOwner && (
+            <TabsTrigger value="firebase" className="flex items-center gap-1.5">
+              <Database className="h-3.5 w-3.5" />
+              Firebase
+            </TabsTrigger>
+          )}
         </TabsList>
 
         {/* Shop Info */}
@@ -255,15 +283,15 @@ export default function SettingsPage() {
             </Card>
           ) : (
             <>
-              {/* Create staff account */}
+              {/* Create staff / manager account */}
               <Card>
                 <CardHeader className="pb-4">
                   <CardTitle className="text-base flex items-center gap-2">
                     <UserPlus className="h-4 w-4" />
-                    Add Staff Member
+                    Add Team Member
                   </CardTitle>
                   <CardDescription>
-                    Create a new staff account. Share the email and password with them directly.
+                    Create a new staff or manager account. Share the email and password with them directly.
                   </CardDescription>
                 </CardHeader>
                 <CardContent>
@@ -271,12 +299,12 @@ export default function SettingsPage() {
                     <div className="grid sm:grid-cols-2 gap-4">
                       <div className="space-y-2">
                         <Label>Full Name</Label>
-                        <Input className={inp} placeholder="Staff member's name"
+                        <Input className={inp} placeholder="Member's name"
                           value={staffName} onChange={e => setStaffName(e.target.value)} required />
                       </div>
                       <div className="space-y-2">
                         <Label>Email Address</Label>
-                        <Input className={inp} type="email" placeholder="staff@example.com"
+                        <Input className={inp} type="email" placeholder="user@example.com"
                           value={staffEmail} onChange={e => setStaffEmail(e.target.value)} required />
                       </div>
                     </div>
@@ -302,31 +330,75 @@ export default function SettingsPage() {
                           {showPassword ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
                         </button>
                       </div>
-                      <p className="text-xs text-muted-foreground">Share this password with the staff member verbally or on paper.</p>
+                      <p className="text-xs text-muted-foreground">Share this password with them verbally or on paper.</p>
                     </div>
 
-                    <div className="flex items-start gap-3 p-3 rounded-lg border bg-muted/40">
-                      <input
-                        type="checkbox"
-                        id="newStaffFinancial"
-                        checked={newStaffFinancial}
-                        onChange={e => setNewStaffFinancial(e.target.checked)}
-                        className="mt-0.5 h-4 w-4 rounded border-gray-300 accent-primary"
-                      />
-                      <div>
-                        <label htmlFor="newStaffFinancial" className="text-sm font-medium cursor-pointer">
-                          Allow access to AEPS, Recharge &amp; Money Transfer
-                        </label>
-                        <p className="text-xs text-muted-foreground mt-0.5">
-                          Enables this staff member to see and use the financial service modules.
-                        </p>
+                    {/* Role selection */}
+                    <div className="space-y-2">
+                      <Label>Role</Label>
+                      <div className="grid grid-cols-2 gap-2">
+                        <button
+                          type="button"
+                          onClick={() => setNewStaffRole('staff')}
+                          className={`p-3 rounded-lg border-2 text-left transition-colors ${
+                            newStaffRole === 'staff'
+                              ? 'border-primary bg-primary/5'
+                              : 'border-border hover:border-muted-foreground/40'
+                          }`}
+                        >
+                          <div className="font-semibold text-sm">Staff</div>
+                          <p className="text-xs text-muted-foreground mt-0.5">
+                            Work entries only. Reports & Settings restricted.
+                          </p>
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => setNewStaffRole('manager')}
+                          className={`p-3 rounded-lg border-2 text-left transition-colors ${
+                            newStaffRole === 'manager'
+                              ? 'border-violet-500 bg-violet-50'
+                              : 'border-border hover:border-muted-foreground/40'
+                          }`}
+                        >
+                          <div className="font-semibold text-sm text-violet-700">Manager</div>
+                          <p className="text-xs text-muted-foreground mt-0.5">
+                            Full work + reports + financial. No staff management.
+                          </p>
+                        </button>
                       </div>
                     </div>
 
+                    {/* Financial access (only relevant for staff) */}
+                    {newStaffRole === 'staff' && (
+                      <div className="flex items-start gap-3 p-3 rounded-lg border bg-muted/40">
+                        <input
+                          type="checkbox"
+                          id="newStaffFinancial"
+                          checked={newStaffFinancial}
+                          onChange={e => setNewStaffFinancial(e.target.checked)}
+                          className="mt-0.5 h-4 w-4 rounded border-gray-300 accent-primary"
+                        />
+                        <div>
+                          <label htmlFor="newStaffFinancial" className="text-sm font-medium cursor-pointer">
+                            Allow access to AEPS, Recharge &amp; Money Transfer
+                          </label>
+                          <p className="text-xs text-muted-foreground mt-0.5">
+                            Enables this staff member to see and use the financial service modules.
+                          </p>
+                        </div>
+                      </div>
+                    )}
+
+                    {newStaffRole === 'manager' && (
+                      <div className="p-3 rounded-lg border bg-violet-50 border-violet-200 text-sm text-violet-800">
+                        Managers automatically have financial access (AEPS, Recharge, Money Transfer) and can view Reports. They cannot manage staff or Firebase settings.
+                      </div>
+                    )}
+
                     <Button type="submit" disabled={isCreatingStaff || !staffName.trim() || !staffEmail.trim() || !staffPassword.trim()}>
                       {isCreatingStaff
-                        ? <><Loader2 className="mr-2 h-4 w-4 animate-spin" />Creating Account…</>
-                        : <><UserPlus className="mr-2 h-4 w-4" />Create Staff Account</>}
+                        ? <><Loader2 className="mr-2 h-4 w-4 animate-spin" />Creating…</>
+                        : <><UserPlus className="mr-2 h-4 w-4" />Create {newStaffRole === 'manager' ? 'Manager' : 'Staff'} Account</>}
                     </Button>
                   </form>
 
@@ -345,7 +417,7 @@ export default function SettingsPage() {
                 <CardHeader className="pb-4">
                   <CardTitle className="text-base flex items-center gap-2">
                     <Users className="h-4 w-4" />
-                    Staff Members
+                    Team Members
                     {staffList.length > 0 && (
                       <Badge variant="secondary" className="ml-auto">{staffList.length}</Badge>
                     )}
@@ -355,12 +427,12 @@ export default function SettingsPage() {
                   {staffLoading ? (
                     <div className="flex items-center gap-2 text-muted-foreground text-sm py-4">
                       <Loader2 className="h-4 w-4 animate-spin" />
-                      Loading staff…
+                      Loading team…
                     </div>
                   ) : staffList.length === 0 ? (
                     <div className="text-center py-8 text-muted-foreground">
                       <Users className="h-8 w-8 mx-auto mb-2 opacity-20" />
-                      <p className="text-sm">No staff members yet.</p>
+                      <p className="text-sm">No team members yet.</p>
                     </div>
                   ) : (
                     <div className="space-y-3">
@@ -369,7 +441,13 @@ export default function SettingsPage() {
                           <div className="flex-1 min-w-0">
                             <div className="flex items-center gap-2 flex-wrap">
                               <span className="font-semibold text-sm">{staff.displayName || '(no name)'}</span>
-                              {staff.canAccessFinancialServices && (
+                              {/* Role badge */}
+                              {staff.role === 'manager' ? (
+                                <Badge variant="outline" className="text-xs border-violet-300 text-violet-700 bg-violet-50">Manager</Badge>
+                              ) : (
+                                <Badge variant="outline" className="text-xs">Staff</Badge>
+                              )}
+                              {staff.canAccessFinancialServices && staff.role !== 'manager' && (
                                 <Badge variant="outline" className="text-xs border-emerald-300 text-emerald-700">Financial</Badge>
                               )}
                             </div>
@@ -381,19 +459,36 @@ export default function SettingsPage() {
                             )}
                           </div>
                           <div className="flex items-center gap-2 flex-wrap">
+                            {/* Role toggle */}
                             <Button
                               variant="outline"
                               size="sm"
                               className="text-xs"
-                              onClick={() => handleToggleFinancial(staff)}
-                              disabled={financialToggleUid === staff.uid}
+                              onClick={() => handleChangeRole(staff, staff.role === 'manager' ? 'staff' : 'manager')}
+                              disabled={roleChangeUid === staff.uid}
                             >
-                              {financialToggleUid === staff.uid
+                              {roleChangeUid === staff.uid
                                 ? <Loader2 className="h-3.5 w-3.5 animate-spin" />
-                                : staff.canAccessFinancialServices
-                                  ? '✓ Financial Access'
-                                  : 'Grant Financial Access'}
+                                : staff.role === 'manager'
+                                  ? 'Demote to Staff'
+                                  : 'Promote to Manager'}
                             </Button>
+                            {/* Financial access toggle (only for staff) */}
+                            {staff.role === 'staff' && (
+                              <Button
+                                variant="outline"
+                                size="sm"
+                                className="text-xs"
+                                onClick={() => handleToggleFinancial(staff)}
+                                disabled={financialToggleUid === staff.uid}
+                              >
+                                {financialToggleUid === staff.uid
+                                  ? <Loader2 className="h-3.5 w-3.5 animate-spin" />
+                                  : staff.canAccessFinancialServices
+                                    ? '✓ Financial Access'
+                                    : 'Grant Financial Access'}
+                              </Button>
+                            )}
                             <Button
                               variant="ghost"
                               size="sm"
@@ -424,6 +519,13 @@ export default function SettingsPage() {
             </>
           )}
         </TabsContent>
+
+        {/* Firebase Control — owner only */}
+        {isOwner && (
+          <TabsContent value="firebase" className="mt-5">
+            <FirebaseControlTab />
+          </TabsContent>
+        )}
       </Tabs>
 
       {/* Revoke access confirmation dialog */}
@@ -432,7 +534,7 @@ export default function SettingsPage() {
           <AlertDialogHeader>
             <AlertDialogTitle>Revoke access for {revokeTarget?.displayName || revokeTarget?.email}?</AlertDialogTitle>
             <AlertDialogDescription>
-              This will remove their staff account from the portal. They will be signed out immediately and won't be able to log in again. This cannot be undone.
+              This will remove their account from the portal. They will be signed out immediately and won't be able to log in again. This cannot be undone.
             </AlertDialogDescription>
           </AlertDialogHeader>
           <AlertDialogFooter>

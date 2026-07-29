@@ -13,7 +13,7 @@ export interface UserProfile {
   uid?: string;
   email: string;
   displayName?: string;
-  role: 'owner' | 'staff';
+  role: 'owner' | 'manager' | 'staff';
   createdAt: Timestamp;
   invitedBy?: string;
   canAccessFinancialServices?: boolean;
@@ -79,21 +79,24 @@ export const bootstrapUserProfile = async (
   return { uid, ...profile };
 };
 
-/** Subscribe to all staff members (role = 'staff'). */
+/** Subscribe to all non-owner members (role = 'staff' or 'manager'). */
 export const subscribeToStaff = (callback: (staff: UserProfile[]) => void) => {
   if (!db) return () => {};
-  const q = query(collection(db, 'users'), where('role', '==', 'staff'), orderBy('createdAt', 'asc'));
+  // Use 'in' without orderBy to avoid composite index; sort client-side
+  const q = query(collection(db, 'users'), where('role', 'in', ['staff', 'manager']));
   return onSnapshot(q, (snap) => {
     const staff: UserProfile[] = [];
     snap.forEach(d => staff.push({ uid: d.id, ...d.data() } as UserProfile));
+    staff.sort((a, b) => (a.createdAt?.toMillis() ?? 0) - (b.createdAt?.toMillis() ?? 0));
     callback(staff);
   }, (err) => {
     console.error('[Firestore] Staff listener error:', err.code, err.message);
+    callback([]);
   });
 };
 
 /**
- * Create a staff Firebase Auth account + Firestore profile without interrupting the owner's session.
+ * Create a staff/manager Firebase Auth account + Firestore profile without interrupting the owner's session.
  * Uses a secondary (temporary) Firebase app instance so the owner stays signed in.
  */
 export const createStaffAccount = async (
@@ -102,6 +105,7 @@ export const createStaffAccount = async (
   password: string,
   ownerEmail: string,
   canAccessFinancialServices = false,
+  role: 'manager' | 'staff' = 'staff',
 ): Promise<void> => {
   if (!db) throw new Error('Firebase not configured');
   const tempAppName = `staff-creation-${Date.now()}`;
@@ -112,15 +116,22 @@ export const createStaffAccount = async (
     await setDoc(doc(db, 'users', cred.user.uid), {
       email,
       displayName: name,
-      role: 'staff',
+      role,
       createdAt: Timestamp.now(),
       invitedBy: ownerEmail,
-      canAccessFinancialServices,
+      // Managers always have financial access; only store flag for staff
+      canAccessFinancialServices: role === 'manager' ? true : canAccessFinancialServices,
     });
   } finally {
     await firebaseSignOut(secondaryAuth).catch(() => {});
     await deleteApp(secondaryApp).catch(() => {});
   }
+};
+
+/** Update a staff/manager member's role. Only owner may call this. */
+export const updateStaffRole = async (uid: string, role: 'manager' | 'staff'): Promise<void> => {
+  if (!db) throw new Error('Firebase not configured');
+  await updateDoc(doc(db, 'users', uid), { role });
 };
 
 /** Toggle whether a staff member can access financial service modules. */
@@ -388,7 +399,7 @@ export const addPaymentToEntry = async (
 
 /** Active entries only — excludes any document with isDeleted === true. */
 export const subscribeToWorkEntries = (callback: (entries: WorkEntry[]) => void) => {
-  if (!db) return () => {};
+  if (!db) { callback([]); return () => {}; }
   const q = query(collection(db, 'workEntries'), orderBy('date', 'desc'));
   return onSnapshot(q, (snapshot) => {
     const entries: WorkEntry[] = [];
@@ -397,12 +408,15 @@ export const subscribeToWorkEntries = (callback: (entries: WorkEntry[]) => void)
       if (!data.isDeleted) entries.push(data);
     });
     callback(entries);
+  }, (err) => {
+    console.error('[Firestore] workEntries listener error:', err.code, err.message);
+    callback([]);
   });
 };
 
 /** Deleted entries only — for the Recycle Bin page. */
 export const subscribeToDeletedEntries = (callback: (entries: WorkEntry[]) => void) => {
-  if (!db) return () => {};
+  if (!db) { callback([]); return () => {}; }
   const q = query(collection(db, 'workEntries'), orderBy('date', 'desc'));
   return onSnapshot(q, (snapshot) => {
     const entries: WorkEntry[] = [];
@@ -412,6 +426,9 @@ export const subscribeToDeletedEntries = (callback: (entries: WorkEntry[]) => vo
     });
     entries.sort((a, b) => (b.deletedAt?.toMillis() ?? 0) - (a.deletedAt?.toMillis() ?? 0));
     callback(entries);
+  }, (err) => {
+    console.error('[Firestore] deletedEntries listener error:', err.code, err.message);
+    callback([]);
   });
 };
 

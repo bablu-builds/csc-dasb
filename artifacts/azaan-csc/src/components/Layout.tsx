@@ -3,7 +3,7 @@ import { useAuth } from '@/contexts/AuthContext';
 import { useSettings } from '@/contexts/SettingsContext';
 import {
   LayoutDashboard, PlusCircle, List, Clock, BarChart3, Settings,
-  LogOut, Menu, Store, X, Trash2, Zap, Wallet, ArrowRightLeft, ChevronRight,
+  LogOut, Menu, Store, X, Trash2, Zap, ArrowRightLeft, ChevronRight,
   User2, Fingerprint, Printer,
 } from 'lucide-react';
 import { useState } from 'react';
@@ -13,7 +13,10 @@ interface NavItem {
   label: string;
   icon: React.ElementType;
   isPrimary?: boolean;
+  /** Only show to owner */
   ownerOnly?: boolean;
+  /** Show to owner + manager */
+  ownerOrManagerOnly?: boolean;
   financialOnly?: boolean;
 }
 
@@ -32,7 +35,7 @@ const financialNavItems: NavItem[] = [
 ];
 
 const adminNavItems: NavItem[] = [
-  { href: '/reports', label: 'Reports', icon: BarChart3, ownerOnly: true },
+  { href: '/reports', label: 'Reports', icon: BarChart3, ownerOrManagerOnly: true },
   { href: '/settings', label: 'Settings', icon: Settings },
   { href: '/deleted', label: 'Deleted Items', icon: Trash2 },
 ];
@@ -64,12 +67,19 @@ function NavLink({ item, isActive, onClick }: {
   );
 }
 
-function SidebarContent({ location, onNav, isOwner, canAccessFinancialServices, shopName, displayName, userEmail, logout }: {
+function SidebarContent({ location, onNav, isOwner, isManager, canAccessFinancialServices, shopName, displayName, userEmail, logout }: {
   location: string; onNav?: () => void;
-  isOwner: boolean; canAccessFinancialServices: boolean;
+  isOwner: boolean; isManager: boolean; canAccessFinancialServices: boolean;
   shopName: string; displayName: string; userEmail: string; logout: () => void;
 }) {
   const initial = (displayName[0] || 'U').toUpperCase();
+  const roleBadge = isOwner ? 'Owner' : isManager ? 'Manager' : 'Staff';
+  const roleBadgeClass = isOwner
+    ? 'bg-sidebar-primary/30 text-sidebar-primary'
+    : isManager
+    ? 'bg-violet-500/20 text-violet-300'
+    : 'bg-sidebar-accent text-sidebar-foreground';
+
   return (
     <div className="flex flex-col h-full bg-sidebar">
       {/* Logo */}
@@ -113,7 +123,11 @@ function SidebarContent({ location, onNav, isOwner, canAccessFinancialServices, 
           </span>
         </div>
         {adminNavItems
-          .filter(item => !item.ownerOnly || isOwner)
+          .filter(item => {
+            if (item.ownerOnly) return isOwner;
+            if (item.ownerOrManagerOnly) return isOwner || isManager;
+            return true;
+          })
           .map(item => (
             <NavLink key={item.href} item={item} isActive={location === item.href} onClick={onNav} />
           ))}
@@ -129,10 +143,8 @@ function SidebarContent({ location, onNav, isOwner, canAccessFinancialServices, 
             <div className="text-white text-sm font-semibold truncate">{displayName}</div>
             <div className="text-sidebar-foreground text-xs truncate">{userEmail}</div>
           </div>
-          <span className={`text-[10px] px-2 py-0.5 rounded-full font-semibold shrink-0 ${
-            isOwner ? 'bg-sidebar-primary/30 text-sidebar-primary' : 'bg-sidebar-accent text-sidebar-foreground'
-          }`}>
-            {isOwner ? 'Owner' : 'Staff'}
+          <span className={`text-[10px] px-2 py-0.5 rounded-full font-semibold shrink-0 ${roleBadgeClass}`}>
+            {roleBadge}
           </span>
         </div>
         <button
@@ -148,7 +160,7 @@ function SidebarContent({ location, onNav, isOwner, canAccessFinancialServices, 
 }
 
 export function Layout({ children }: { children: React.ReactNode }) {
-  const { logout, isConfigured, isOwner, canAccessFinancialServices, displayName, user } = useAuth();
+  const { logout, isConfigured, isOwner, isManager, canAccessFinancialServices, displayName, user } = useAuth();
   const { shopSettings } = useSettings();
   const [location] = useLocation();
   const [drawerOpen, setDrawerOpen] = useState(false);
@@ -156,6 +168,7 @@ export function Layout({ children }: { children: React.ReactNode }) {
   const commonProps = {
     location,
     isOwner,
+    isManager,
     canAccessFinancialServices,
     shopName: shopSettings.shopName,
     displayName,
@@ -220,8 +233,10 @@ export function Layout({ children }: { children: React.ReactNode }) {
               <User2 className="h-3.5 w-3.5 text-primary" />
             </div>
             <span className="text-sm font-medium text-foreground">{displayName}</span>
-            <span className={`text-xs px-2 py-0.5 rounded-full font-medium ${isOwner ? 'bg-indigo-50 text-indigo-700' : 'bg-slate-100 text-slate-600'}`}>
-              {isOwner ? 'Owner' : 'Staff'}
+            <span className={`text-xs px-2 py-0.5 rounded-full font-medium ${
+              isOwner ? 'bg-indigo-50 text-indigo-700' : isManager ? 'bg-violet-50 text-violet-700' : 'bg-slate-100 text-slate-600'
+            }`}>
+              {isOwner ? 'Owner' : isManager ? 'Manager' : 'Staff'}
             </span>
           </div>
         </header>

@@ -105,15 +105,22 @@ export default function DashboardPage() {
   const { toast } = useToast();
 
   useEffect(() => {
-    let resolved = 0;
-    const done = () => { resolved++; if (resolved === 5) setLoading(false); };
+    // Use a Set so each source only contributes once to the "all loaded" count,
+    // even if its listener fires multiple times. A 10-second timeout ensures
+    // the skeleton never freezes permanently (e.g. due to Firestore permission errors).
+    const loaded = new Set<string>();
+    const done = (key: string) => {
+      loaded.add(key);
+      if (loaded.size >= 5) setLoading(false);
+    };
+    const timer = setTimeout(() => setLoading(false), 10_000);
 
-    const u1 = subscribeToWorkEntries((d) => { setWorkEntries(d); done(); });
-    const u2 = subscribeToAepsWithdrawals((d) => { setAepsEntries(d); done(); });
-    const u3 = subscribeToElectricRecharges((d) => { setRechargeEntries(d); done(); });
-    const u4 = subscribeToMoneyTransfers((d) => { setTransferEntries(d); done(); });
-    const u5 = subscribeToQuickActions((d) => { setQuickEntries(d); done(); });
-    return () => { u1(); u2(); u3(); u4(); u5(); };
+    const u1 = subscribeToWorkEntries((d) => { setWorkEntries(d); done('work'); });
+    const u2 = subscribeToAepsWithdrawals((d) => { setAepsEntries(d); done('aeps'); });
+    const u3 = subscribeToElectricRecharges((d) => { setRechargeEntries(d); done('recharge'); });
+    const u4 = subscribeToMoneyTransfers((d) => { setTransferEntries(d); done('transfer'); });
+    const u5 = subscribeToQuickActions((d) => { setQuickEntries(d); done('quick'); });
+    return () => { clearTimeout(timer); u1(); u2(); u3(); u4(); u5(); };
   }, []);
 
   const today = new Date();

@@ -39,7 +39,7 @@ function AuthenticatedApp() {
           <Route path="/pending" component={PendingWorkPage} />
           <Route path="/quick-work" component={QuickWorkPage} />
           <Route path="/reports">
-              <RoleRoute allow="owner"><ReportsPage /></RoleRoute>
+              <RoleRoute allow={['owner', 'manager']}><ReportsPage /></RoleRoute>
             </Route>
           <Route path="/settings" component={SettingsPage} />
           <Route path="/deleted" component={DeletedItemsPage} />

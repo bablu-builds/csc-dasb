@@ -4,13 +4,14 @@ import { auth, isConfigured } from '@/lib/firebase';
 import { useToast } from '@/hooks/use-toast';
 import { UserProfile, subscribeToUserProfile, bootstrapUserProfile } from '@/lib/firestore';
 
-export type UserRole = 'owner' | 'staff';
+export type UserRole = 'owner' | 'manager' | 'staff';
 
 interface AuthContextType {
   user: User | null;
   userProfile: UserProfile | null;
   role: UserRole | null;
   isOwner: boolean;
+  isManager: boolean;
   canAccessFinancialServices: boolean;
   displayName: string;
   loading: boolean;
@@ -24,6 +25,7 @@ const AuthContext = createContext<AuthContextType>({
   userProfile: null,
   role: null,
   isOwner: false,
+  isManager: false,
   canAccessFinancialServices: false,
   displayName: '',
   loading: true,
@@ -138,12 +140,14 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
   const role = userProfile?.role ?? null;
   const isOwner = role === 'owner';
-  const canAccessFinancialServices = isOwner || (userProfile?.canAccessFinancialServices === true);
+  const isManager = role === 'manager';
+  // Managers always have financial access; staff need explicit permission
+  const canAccessFinancialServices = isOwner || isManager || (userProfile?.canAccessFinancialServices === true);
   const displayName = userProfile?.displayName || user?.displayName || user?.email?.split('@')[0] || 'Staff';
 
   return (
     <AuthContext.Provider value={{
-      user, userProfile, role, isOwner, canAccessFinancialServices,
+      user, userProfile, role, isOwner, isManager, canAccessFinancialServices,
       displayName, loading, profileLoading, logout, isConfigured,
     }}>
       {children}
