@@ -178,7 +178,8 @@ export default function DashboardPage() {
   const todayTransferProfit = transferEntries
     .filter(e => isToday(e.createdAt.toDate()) && resolveStatus(e.paymentStatus) === 'paid')
     .reduce((s, e) => s + e.profitMargin, 0);
-  const todayChallanCost = todayWork.reduce((s, e) => s + (e.challanAmount ?? 0), 0);
+  // Use final challan = original + any challan adjustments
+  const todayChallanCost = todayWork.reduce((s, e) => s + (e.challanAmount ?? 0) + (e.netAdjustmentChallan ?? 0), 0);
   const todayWorkProfit = workTodayEarning - todayChallanCost;
   const todayQuickProfit = todayQuickEarning;
   const todayTotalProfit = todayWorkProfit + todayAepsProfit + todayRechargeProfit + todayTransferProfit + todayQuickProfit;

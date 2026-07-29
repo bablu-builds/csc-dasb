@@ -172,7 +172,8 @@ export default function ReportsPage() {
 
   const workEarned = work.filter(e => e.status !== 'Rejected').reduce((s, e) => s + e.paidAmount, 0);
   const workDue = work.filter(e => e.status !== 'Rejected').reduce((s, e) => s + Math.max(0, e.dueAmount), 0);
-  const workChallan = work.reduce((s, e) => s + (e.challanAmount ?? 0), 0);
+  // Use final challan = original + any challan adjustments
+  const workChallan = work.reduce((s, e) => s + (e.challanAmount ?? 0) + (e.netAdjustmentChallan ?? 0), 0);
   const workProfit = workEarned - workChallan;
 
   // 4-way mode breakdown for work
