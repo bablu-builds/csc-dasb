@@ -100,6 +100,7 @@ export default function DashboardPage() {
   const [transferEntries, setTransferEntries] = useState<MoneyTransfer[]>([]);
   const [quickEntries, setQuickEntries] = useState<QuickActionEntry[]>([]);
   const [loading, setLoading] = useState(true);
+  const [firestoreError, setFirestoreError] = useState<string | null>(null);
   const [completingId, setCompletingId] = useState<string | null>(null);
   const { isOwner, canAccessFinancialServices } = useAuth();
   const { toast } = useToast();
@@ -119,7 +120,10 @@ export default function DashboardPage() {
     const u2 = subscribeToAepsWithdrawals((d) => { setAepsEntries(d); done('aeps'); });
     const u3 = subscribeToElectricRecharges((d) => { setRechargeEntries(d); done('recharge'); });
     const u4 = subscribeToMoneyTransfers((d) => { setTransferEntries(d); done('transfer'); });
-    const u5 = subscribeToQuickActions((d) => { setQuickEntries(d); done('quick'); });
+    const u5 = subscribeToQuickActions(
+      (d) => { setQuickEntries(d); done('quick'); },
+      (err) => { done('quick'); setFirestoreError(`Quick Action Work: ${err.message}`); },
+    );
     return () => { clearTimeout(timer); u1(); u2(); u3(); u4(); u5(); };
   }, []);
 
@@ -259,6 +263,12 @@ export default function DashboardPage() {
 
   return (
     <div className="space-y-7">
+      {firestoreError && (
+        <div className="flex items-center gap-2 rounded-lg border border-destructive/40 bg-destructive/10 px-4 py-3 text-sm text-destructive">
+          <AlertTriangle className="h-4 w-4 shrink-0" />
+          <span><strong>Data error:</strong> {firestoreError}. Check Firestore rules or your connection.</span>
+        </div>
+      )}
       {/* Page header */}
       <div className="flex items-center justify-between">
         <h1 className="text-2xl font-bold" style={{ fontFamily: 'var(--app-font-display)' }}>Dashboard</h1>

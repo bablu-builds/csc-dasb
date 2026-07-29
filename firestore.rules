@@ -106,14 +106,14 @@ service cloud.firestore {
       allow read, write: if canAccessFinancial();
     }
 
-    // ── Quick Action Work ─────────────────────────────────────────────────────
+    // ── Quick Action Work — all authenticated roles can read and write ─────────
     match /quickActionWork/{id} {
-      allow read, write: if canAccessFinancial();
+      allow read, write: if isAnyRole();
     }
 
-    // ── Payment History ───────────────────────────────────────────────────────
+    // ── Payment History — all authenticated roles can read and write ──────────
     match /paymentHistory/{id} {
-      allow read, write: if canAccessFinancial();
+      allow read, write: if isAnyRole();
     }
   }
 }

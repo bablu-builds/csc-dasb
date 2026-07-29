@@ -144,6 +144,7 @@ export default function ReportsPage() {
   const [quickEntries, setQuickEntries] = useState<QuickActionEntry[]>([]);
   const [paymentHistory, setPaymentHistory] = useState<PaymentHistoryRecord[]>([]);
   const [loading, setLoading] = useState(true);
+  const [firestoreError, setFirestoreError] = useState<string | null>(null);
 
   // Month selector: 0 = current, -1 = last month, etc.
   const [monthOffset, setMonthOffset] = useState(0);
@@ -156,8 +157,14 @@ export default function ReportsPage() {
     const u2 = subscribeToAepsWithdrawals(d => { setAepsEntries(d); done(); });
     const u3 = subscribeToElectricRecharges(d => { setRechargeEntries(d); done(); });
     const u4 = subscribeToMoneyTransfers(d => { setTransferEntries(d); done(); });
-    const u5 = subscribeToQuickActions(d => { setQuickEntries(d); done(); });
-    const u6 = subscribeToPaymentHistory(d => { setPaymentHistory(d); done(); });
+    const u5 = subscribeToQuickActions(
+      d => { setQuickEntries(d); done(); },
+      (err) => { done(); setFirestoreError(`Quick Action Work: ${err.message}`); },
+    );
+    const u6 = subscribeToPaymentHistory(
+      d => { setPaymentHistory(d); done(); },
+      (err) => { done(); setFirestoreError(`Payment History: ${err.message}`); },
+    );
     return () => { u1(); u2(); u3(); u4(); u5(); u6(); };
   }, []);
 
@@ -284,6 +291,12 @@ export default function ReportsPage() {
 
   return (
     <div className="space-y-8 max-w-6xl">
+      {firestoreError && (
+        <div className="flex items-center gap-2 rounded-lg border border-destructive/40 bg-destructive/10 px-4 py-3 text-sm text-destructive">
+          <X className="h-4 w-4 shrink-0" />
+          <span><strong>Data error:</strong> {firestoreError}. Some report data may be incomplete. Check Firestore rules.</span>
+        </div>
+      )}
       {/* Header + Month Selector */}
       <div className="flex flex-col sm:flex-row sm:items-center gap-4 justify-between">
         <div>

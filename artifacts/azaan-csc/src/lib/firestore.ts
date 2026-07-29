@@ -662,14 +662,20 @@ export const createQuickAction = async (
   });
 };
 
-export const subscribeToQuickActions = (callback: (entries: QuickActionEntry[]) => void) => {
+export const subscribeToQuickActions = (
+  callback: (entries: QuickActionEntry[]) => void,
+  onError?: (err: Error) => void,
+) => {
   if (!db) return () => {};
   const q = query(collection(db, 'quickActionWork'), orderBy('createdAt', 'desc'));
   return onSnapshot(q, (snap) => {
     const entries: QuickActionEntry[] = [];
     snap.forEach(d => entries.push({ id: d.id, ...d.data() } as QuickActionEntry));
     callback(entries);
-  }, (err) => console.error('[Firestore] quickActionWork error:', err.message));
+  }, (err) => {
+    console.error('[Firestore] quickActionWork error:', err.message);
+    onError?.(err);
+  });
 };
 
 // ─── PAYMENT HISTORY ─────────────────────────────────────────────────────────
@@ -744,12 +750,18 @@ export const settlePendingEntry = async (
 };
 
 /** Subscribe to all payment history records, newest first. */
-export const subscribeToPaymentHistory = (callback: (records: PaymentHistoryRecord[]) => void) => {
+export const subscribeToPaymentHistory = (
+  callback: (records: PaymentHistoryRecord[]) => void,
+  onError?: (err: Error) => void,
+) => {
   if (!db) return () => {};
   const q = query(collection(db, 'paymentHistory'), orderBy('settledAt', 'desc'));
   return onSnapshot(q, (snap) => {
     const records: PaymentHistoryRecord[] = [];
     snap.forEach(d => records.push({ id: d.id, ...d.data() } as PaymentHistoryRecord));
     callback(records);
-  }, (err) => console.error('[Firestore] paymentHistory error:', err.message));
+  }, (err) => {
+    console.error('[Firestore] paymentHistory error:', err.message);
+    onError?.(err);
+  });
 };
