@@ -240,7 +240,9 @@ export default function WorkListPage() {
                       </button>
                     </td>
                     <td className="px-4 py-3">
-                      <Badge variant="secondary" className="font-normal text-xs">{entry.category}</Badge>
+                      <Badge variant="secondary" className="font-normal text-xs">
+                        {entry.category === 'Other' && entry.otherCategory ? entry.otherCategory : entry.category}
+                      </Badge>
                     </td>
                     <td className="px-4 py-3 text-right">
                       {(() => {
@@ -350,7 +352,9 @@ export default function WorkListPage() {
                       <div className="font-semibold">{entry.customerName}</div>
                       <div className="text-sm text-muted-foreground mt-0.5">{format(entry.date.toDate(), 'dd MMM yyyy')}</div>
                       <div className="mt-2 flex flex-wrap gap-2">
-                        <Badge variant="secondary" className="text-xs">{entry.category}</Badge>
+                        <Badge variant="secondary" className="text-xs">
+                          {entry.category === 'Other' && entry.otherCategory ? entry.otherCategory : entry.category}
+                        </Badge>
                         <StatusBadge status={entry.status} />
                       </div>
                       {entry.addedBy && (

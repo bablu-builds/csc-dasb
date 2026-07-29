@@ -64,7 +64,9 @@ function ReminderRow({ entry, onComplete, completing }: {
           </span>
         </div>
         <div className="flex flex-wrap items-center gap-2 mt-1">
-          <Badge variant="secondary" className="text-xs font-normal py-0">{entry.category}</Badge>
+          <Badge variant="secondary" className="text-xs font-normal py-0">
+            {entry.category === 'Other' && entry.otherCategory ? entry.otherCategory : entry.category}
+          </Badge>
           <span className={`text-xs font-semibold px-2 py-0.5 rounded-full border
             ${isVeryUrgent ? 'text-red-700 bg-red-100 border-red-200' :
               isUrgent ? 'text-amber-700 bg-amber-100 border-amber-200' :
@@ -230,7 +232,7 @@ export default function DashboardPage() {
     setCompletingId(entry.id);
     try {
       await updateWorkEntry(entry.id, { status: 'Completed', totalAmount: entry.totalAmount }, entry.paidAmount);
-      toast({ title: 'Marked as Completed', description: `${entry.customerName} — ${entry.category}` });
+      toast({ title: 'Marked as Completed', description: `${entry.customerName} — ${entry.category === 'Other' && entry.otherCategory ? entry.otherCategory : entry.category}` });
     } catch (err: any) {
       toast({ variant: 'destructive', title: 'Error', description: err.message });
     } finally {
@@ -488,7 +490,9 @@ export default function DashboardPage() {
                     <div className="min-w-0">
                       <div className="font-medium text-sm truncate">{entry.customerName}</div>
                       <div className="flex items-center gap-2 mt-0.5 flex-wrap">
-                        <span className="text-xs text-muted-foreground">{entry.category}</span>
+                        <span className="text-xs text-muted-foreground">
+                          {entry.category === 'Other' && entry.otherCategory ? entry.otherCategory : entry.category}
+                        </span>
                         <span className="text-xs text-muted-foreground">·</span>
                         <span className="text-xs text-muted-foreground">{format(entry.date.toDate(), 'dd MMM')}</span>
                         {entry.addedBy && (

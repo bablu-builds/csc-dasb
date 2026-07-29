@@ -26,6 +26,7 @@ const formSchema = z.object({
   customerName: z.string().min(1, 'Name is required'),
   mobile: z.string().length(10, 'Mobile must be exactly 10 digits').regex(/^\d+$/, 'Must be only digits'),
   category: z.string().min(1, 'Category is required'),
+  otherCategory: z.string().optional(),
   workDetail: z.string().optional(),
   date: z.date(),
   totalAmount: z.coerce.number().min(0, 'Amount cannot be negative'),
@@ -36,7 +37,10 @@ const formSchema = z.object({
   rejectionReason: z.string().optional(),
   refundAmount: z.coerce.number().min(0, 'Amount cannot be negative').optional(),
   paymentMode: z.enum(['Cash', 'Online', 'Due', 'None']).default('Cash'),
-});
+}).refine(
+  (data) => data.category !== 'Other' || (data.otherCategory ?? '').trim().length > 0,
+  { message: 'Please specify the work category', path: ['otherCategory'] }
+);
 
 export type WorkEntryFormData = z.infer<typeof formSchema>;
 
@@ -88,6 +92,7 @@ export function WorkEntryForm({
       customerName: initialData?.customerName || '',
       mobile: initialData?.mobile || '',
       category: initialData?.category || '',
+      otherCategory: initialData?.otherCategory || '',
       workDetail: initialData?.workDetail || '',
       date: initialData?.date || new Date(),
       totalAmount: initialData?.totalAmount || 0,
@@ -108,6 +113,7 @@ export function WorkEntryForm({
       customerName: initialData.customerName ?? '',
       mobile: initialData.mobile ?? '',
       category: initialData.category ?? '',
+      otherCategory: initialData.otherCategory ?? '',
       workDetail: initialData.workDetail ?? '',
       date: initialData.date ?? new Date(),
       totalAmount: initialData.totalAmount ?? 0,
@@ -126,6 +132,8 @@ export function WorkEntryForm({
   const paid = form.watch('paidAmount');
   const status = form.watch('status');
   const paymentMode = form.watch('paymentMode');
+  const category = form.watch('category');
+  const isOtherCategory = category === 'Other';
 
   // ── Payment mode side-effects ────────────────────────────────────────────
   useEffect(() => {
@@ -182,24 +190,51 @@ export function WorkEntryForm({
             </FormItem>
           )} />
 
-          <FormField control={form.control} name="category" render={({ field }) => (
-            <FormItem>
-              <FormLabel className="text-sm font-medium">Work Category <span className="text-destructive">*</span></FormLabel>
-              <Select onValueChange={field.onChange} defaultValue={field.value}>
-                <FormControl>
-                  <SelectTrigger className={inputClass}>
-                    <SelectValue placeholder="Select category" />
-                  </SelectTrigger>
-                </FormControl>
-                <SelectContent>
-                  {categories.map((cat) => (
-                    <SelectItem key={cat.id} value={cat.name}>{cat.name}</SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
-              <FormMessage />
-            </FormItem>
-          )} />
+          <div className="space-y-3">
+            <FormField control={form.control} name="category" render={({ field }) => (
+              <FormItem>
+                <FormLabel className="text-sm font-medium">Work Category <span className="text-destructive">*</span></FormLabel>
+                <Select onValueChange={(val) => { field.onChange(val); if (val !== 'Other') form.setValue('otherCategory', ''); }} defaultValue={field.value}>
+                  <FormControl>
+                    <SelectTrigger className={inputClass}>
+                      <SelectValue placeholder="Select category" />
+                    </SelectTrigger>
+                  </FormControl>
+                  <SelectContent>
+                    {categories.map((cat) => (
+                      <SelectItem key={cat.id} value={cat.name}>{cat.name}</SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+                <FormMessage />
+              </FormItem>
+            )} />
+
+            {/* Animated "Specify Work Category" field — only when Other is selected */}
+            <div
+              className={cn(
+                "overflow-hidden transition-all duration-300 ease-in-out",
+                isOtherCategory ? "max-h-24 opacity-100 translate-y-0" : "max-h-0 opacity-0 -translate-y-1 pointer-events-none"
+              )}
+            >
+              <FormField control={form.control} name="otherCategory" render={({ field }) => (
+                <FormItem>
+                  <FormLabel className="text-sm font-medium">
+                    Specify Work Category <span className="text-destructive">*</span>
+                  </FormLabel>
+                  <FormControl>
+                    <Input
+                      placeholder="Enter the type of work..."
+                      className={inputClass}
+                      {...field}
+                      tabIndex={isOtherCategory ? 0 : -1}
+                    />
+                  </FormControl>
+                  <FormMessage />
+                </FormItem>
+              )} />
+            </div>
+          </div>
 
           <FormField control={form.control} name="date" render={({ field }) => (
             <FormItem className="flex flex-col">

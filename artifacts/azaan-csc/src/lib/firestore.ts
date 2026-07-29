@@ -138,6 +138,8 @@ export interface WorkEntry {
   isDeleted?: boolean;
   deletedAt?: Timestamp;
   addedBy?: string;
+  /** When category === 'Other', stores the custom category text entered by the user. */
+  otherCategory?: string;
   /** Entry-level initial payment intent. Does NOT affect paidAmount/dueAmount/payments[] logic. */
   paymentMode?: PaymentMode;
   /**

@@ -215,6 +215,7 @@ export default function EditWorkPage() {
     challanAmount: entry.challanAmount ?? 0,
     date: entry.date.toDate(),
     paymentMode: entry.paymentMode ?? 'Cash',
+    otherCategory: entry.otherCategory ?? '',
   };
 
   const payments = entry.payments ?? [];
@@ -231,7 +232,7 @@ export default function EditWorkPage() {
         </Button>
         <div>
           <h1 className="text-2xl font-bold" style={{ fontFamily: 'var(--app-font-display)' }}>Edit Work Entry</h1>
-          <p className="text-muted-foreground text-sm mt-0.5">{entry.customerName} — {entry.category}</p>
+          <p className="text-muted-foreground text-sm mt-0.5">{entry.customerName} — {entry.category === 'Other' && entry.otherCategory ? entry.otherCategory : entry.category}</p>
         </div>
       </div>
 

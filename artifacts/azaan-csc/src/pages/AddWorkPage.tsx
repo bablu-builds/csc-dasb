@@ -22,7 +22,7 @@ export default function AddWorkPage() {
       await createWorkEntry({ ...data, addedBy });
       toast({
         title: "Work Added Successfully",
-        description: `${data.customerName} — ${data.category}`,
+        description: `${data.customerName} — ${data.category === 'Other' && data.otherCategory ? data.otherCategory : data.category}`,
       });
       setLocation('/dashboard');
     } catch (error: any) {
