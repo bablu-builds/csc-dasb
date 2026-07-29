@@ -22,33 +22,48 @@ service cloud.firestore {
       return isAuth() && getRole() == 'owner';
     }
 
+    function isManager() {
+      return isAuth() && getRole() == 'manager';
+    }
+
     function isStaff() {
       return isAuth() && getRole() == 'staff';
     }
 
-    function isOwnerOrStaff() {
-      return isOwner() || isStaff();
+    function isOwnerOrManager() {
+      return isOwner() || isManager();
     }
 
-    // Staff with explicit financial-services permission, or the owner
+    function isAnyRole() {
+      return isOwner() || isManager() || isStaff();
+    }
+
+    // Staff with explicit financial-services permission, or manager/owner
     function canAccessFinancial() {
-      return isOwner() || (isStaff() && get(userDoc()).data.canAccessFinancialServices == true);
+      return isOwner()
+        || isManager()
+        || (isStaff() && get(userDoc()).data.canAccessFinancialServices == true);
     }
 
-    // ── workEntries — both roles can read and write ───────────────────────────
+    // ── workEntries — all authenticated roles can read and write ─────────────
     match /workEntries/{entryId} {
-      allow read, write: if isOwnerOrStaff();
+      allow read, write: if isAnyRole();
     }
 
-    // ── categories — both roles can read; owner manages ──────────────────────
+    // ── workAdjustments — all authenticated roles can read and write ─────────
+    match /workAdjustments/{adjId} {
+      allow read, write: if isAnyRole();
+    }
+
+    // ── categories — all roles can read; owner/manager manage ────────────────
     match /categories/{catId} {
-      allow read: if isOwnerOrStaff();
-      allow write: if isOwner();
+      allow read: if isAnyRole();
+      allow write: if isOwnerOrManager();
     }
 
-    // ── settings — both roles can read; owner can write ──────────────────────
+    // ── settings — all roles can read; only owner can write ──────────────────
     match /settings/{docId} {
-      allow read: if isOwnerOrStaff();
+      allow read: if isAnyRole();
       allow write: if isOwner();
     }
 
@@ -60,8 +75,8 @@ service cloud.firestore {
       allow read: if isOwner();
       // A user can create their own profile (owner bootstrap or email-link first sign-in)
       allow create: if isAuth() && request.auth.uid == uid
-                    && request.resource.data.role in ['owner', 'staff'];
-      // Only owner can update/delete other user profiles
+                    && request.resource.data.role in ['owner', 'manager', 'staff'];
+      // Only owner can update/delete other user profiles (staff/manager management)
       allow update, delete: if isOwner();
       // A user can update their own profile (e.g. display name) but NOT change role
       allow update: if isAuth() && request.auth.uid == uid
@@ -88,6 +103,16 @@ service cloud.firestore {
 
     // ── Money Transfers ───────────────────────────────────────────────────────
     match /moneyTransfers/{id} {
+      allow read, write: if canAccessFinancial();
+    }
+
+    // ── Quick Action Work ─────────────────────────────────────────────────────
+    match /quickActionWork/{id} {
+      allow read, write: if canAccessFinancial();
+    }
+
+    // ── Payment History ───────────────────────────────────────────────────────
+    match /paymentHistory/{id} {
       allow read, write: if canAccessFinancial();
     }
   }
