@@ -1,5 +1,11 @@
 import { useState, useEffect, useMemo, useCallback } from 'react';
-import { WorkEntry, subscribeToWorkEntries } from '@/lib/firestore';
+import {
+  WorkEntry, subscribeToWorkEntries,
+  AepsWithdrawal, subscribeToAepsWithdrawals,
+  ElectricRecharge, subscribeToElectricRecharges,
+  MoneyTransfer, subscribeToMoneyTransfers,
+  QuickActionEntry, subscribeToQuickActions,
+} from '@/lib/firestore';
 import { useAuth } from '@/contexts/AuthContext';
 import {
   startOfDay, endOfDay, startOfWeek, endOfWeek,
@@ -7,6 +13,7 @@ import {
   isWithinInterval, format, eachDayOfInterval, isSameDay,
 } from 'date-fns';
 import { formatCurrency } from '@/lib/format';
+import { resolveStatus } from '@/lib/payments';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -24,7 +31,7 @@ import {
 } from 'lucide-react';
 import {
   LineChart, Line, BarChart, Bar, XAxis, YAxis, CartesianGrid,
-  Tooltip, ResponsiveContainer,
+  Tooltip, ResponsiveContainer, Cell,
 } from 'recharts';
 import type { DateRange } from 'react-day-picker';
 
@@ -32,7 +39,7 @@ import type { DateRange } from 'react-day-picker';
 
 type PresetKey = 'today' | 'yesterday' | 'thisWeek' | 'thisMonth' | 'lastMonth' | 'custom';
 type SortDir = 'asc' | 'desc' | null;
-type TabKey = 'overview' | 'work' | 'category';
+type TabKey = 'overview' | 'work' | 'category' | 'aeps' | 'recharge' | 'transfer' | 'quick';
 
 interface DateRangeState {
   from: Date;
@@ -136,9 +143,7 @@ function StatusBadge({ status }: { status: WorkEntry['status'] }) {
     Rejected: 'bg-red-100 text-red-700 border-red-200',
   };
   return (
-    <span
-      className={`inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium border ${map[status]}`}
-    >
+    <span className={`inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium border ${map[status]}`}>
       {status}
     </span>
   );
@@ -148,6 +153,24 @@ function StatusBadge({ status }: { status: WorkEntry['status'] }) {
 
 function getWorkChallan(e: WorkEntry): number {
   return (e.challanAmount ?? 0) + (e.netAdjustmentChallan ?? 0);
+}
+
+// ── SortableTable helper ──────────────────────────────────────────────────────
+
+/** Thin wrapper so each tab can define <Th> without repeating the sort logic */
+function makeTh(sortState: ReturnType<typeof useSortState>) {
+  return function Th({
+    col, label, align = 'left',
+  }: { col: string; label: string; align?: 'left' | 'right' }) {
+    return (
+      <TableHead
+        className={`cursor-pointer select-none whitespace-nowrap ${align === 'right' ? 'text-right' : ''} hover:text-foreground transition-colors`}
+        onClick={() => sortState.toggle(col)}
+      >
+        {label}<SortIcon dir={sortState.getDir(col)} />
+      </TableHead>
+    );
+  };
 }
 
 // ── Date Range Filter ─────────────────────────────────────────────────────────
@@ -241,7 +264,95 @@ function DateRangeFilter({
   );
 }
 
+// ── Reusable stat summary row ─────────────────────────────────────────────────
+
+function StatCards({ items }: {
+  items: { label: string; value: string; sub?: string; cls?: string }[];
+}) {
+  return (
+    <div className={`grid gap-3 ${items.length === 3 ? 'grid-cols-1 sm:grid-cols-3' : 'grid-cols-2 sm:grid-cols-4'}`}>
+      {items.map(s => (
+        <Card key={s.label}>
+          <CardContent className="pt-4 pb-3">
+            <p className="text-xs text-muted-foreground uppercase tracking-wide mb-1">{s.label}</p>
+            <p className={`text-xl font-semibold ${s.cls ?? ''}`}>{s.value}</p>
+            {s.sub && <p className="text-xs text-muted-foreground mt-0.5">{s.sub}</p>}
+          </CardContent>
+        </Card>
+      ))}
+    </div>
+  );
+}
+
+// ── Daily trend chart (reused across AEPS / Recharge / Transfer) ──────────────
+
+function DailyTrendChart({
+  data,
+  color,
+  valueKey,
+  label,
+}: {
+  data: { date: string; value: number }[];
+  color: string;
+  valueKey?: string;
+  label: string;
+}) {
+  const hasData = data.some(d => d.value > 0);
+  if (!hasData) {
+    return (
+      <div className="flex flex-col items-center justify-center h-36 text-muted-foreground">
+        <TrendingUp className="h-7 w-7 mb-2 opacity-20" />
+        <p className="text-sm">No data in this period.</p>
+      </div>
+    );
+  }
+  return (
+    <ResponsiveContainer width="100%" height={200}>
+      <BarChart data={data} margin={{ top: 4, right: 8, left: -10, bottom: 0 }}>
+        <CartesianGrid strokeDasharray="3 3" stroke="hsl(var(--border))" />
+        <XAxis dataKey="date" tick={{ fontSize: 11 }} interval="preserveStartEnd" />
+        <YAxis tick={{ fontSize: 11 }} />
+        <Tooltip formatter={(v: number) => [formatCurrency(v), label]} />
+        <Bar dataKey="value" name={valueKey ?? label} radius={[3, 3, 0, 0]}>
+          {data.map((_, i) => <Cell key={i} fill={color} />)}
+        </Bar>
+      </BarChart>
+    </ResponsiveContainer>
+  );
+}
+
+function buildDailyTrend(
+  entries: { ts: Date; value: number }[],
+  from: Date,
+  to: Date,
+): { date: string; value: number }[] {
+  let days: Date[] = [];
+  try { days = eachDayOfInterval({ start: from, end: to }); } catch { return []; }
+  if (days.length > 90) {
+    const map: Record<string, number> = {};
+    entries.forEach(e => {
+      const k = format(e.ts, 'dd MMM');
+      map[k] = (map[k] ?? 0) + e.value;
+    });
+    return Object.entries(map).map(([date, value]) => ({ date, value: Math.round(value) }));
+  }
+  return days.map(day => ({
+    date: format(day, 'dd MMM'),
+    value: Math.round(
+      entries.filter(e => isSameDay(e.ts, day)).reduce((s, e) => s + e.value, 0),
+    ),
+  }));
+}
+
 // ── Tab: Overview ─────────────────────────────────────────────────────────────
+
+const SOURCE_COLORS: Record<string, string> = {
+  Work: '#4f46e5',
+  AEPS: '#10b981',
+  Recharge: '#f59e0b',
+  Transfer: '#8b5cf6',
+  'Quick Work': '#06b6d4',
+};
 
 interface ProfitSource {
   label: string;
@@ -251,73 +362,65 @@ interface ProfitSource {
 
 function OverviewTab({
   work,
+  aeps,
+  recharge,
+  transfer,
+  quick,
   dateRange,
 }: {
   work: WorkEntry[];
+  aeps: AepsWithdrawal[];
+  recharge: ElectricRecharge[];
+  transfer: MoneyTransfer[];
+  quick: QuickActionEntry[];
   dateRange: DateRangeState;
 }) {
-  const active = work.filter(e => e.status !== 'Rejected');
+  const activeWork = work.filter(e => e.status !== 'Rejected');
+  const workCollected = activeWork.reduce((s, e) => s + e.paidAmount, 0);
+  const workChallan = activeWork.reduce((s, e) => s + getWorkChallan(e), 0);
+  const workProfit = workCollected - workChallan;
 
-  const totalCollected = active.reduce((s, e) => s + e.paidAmount, 0);
-  const totalChallan = active.reduce((s, e) => s + getWorkChallan(e), 0);
-  const workProfit = totalCollected - totalChallan;
+  const aepsPaid    = aeps.filter(e => resolveStatus(e.paymentStatus) === 'paid');
+  const rechargePaid = recharge.filter(e => resolveStatus(e.paymentStatus) === 'paid');
+  const transferPaid = transfer.filter(e => resolveStatus(e.paymentStatus) === 'paid');
+  const quickPaid   = quick.filter(e => resolveStatus(e.paymentStatus) === 'paid');
 
-  const totalDue = active.reduce((s, e) => s + Math.max(0, e.dueAmount), 0);
-  const totalCredit = active.reduce(
-    (s, e) => s + (e.dueAmount < 0 ? -e.dueAmount : 0),
-    0,
-  );
+  const aepsProfit     = aepsPaid.reduce((s, e) => s + e.profitMargin, 0);
+  const rechargeProfit = rechargePaid.reduce((s, e) => s + e.profitMargin, 0);
+  const transferProfit = transferPaid.reduce((s, e) => s + e.profitMargin, 0);
+  const quickEarned    = quickPaid.reduce((s, e) => s + e.amount, 0);
 
-  // profitSources — extend this array in Part 2 to add more income streams
+  const totalDue    = activeWork.reduce((s, e) => s + Math.max(0, e.dueAmount), 0);
+  const totalCredit = activeWork.reduce((s, e) => s + (e.dueAmount < 0 ? -e.dueAmount : 0), 0);
+
+  // profitSources — single place to add/remove income streams
   const profitSources: ProfitSource[] = [
-    {
-      label: 'Work',
-      profit: workProfit,
-      sub: `${formatCurrency(totalCollected)} collected − ${formatCurrency(totalChallan)} challan`,
-    },
-    // Part 2: push({ label: 'Quick Work', profit: quickProfit })
-    // Part 2: push({ label: 'AEPS', profit: aepsProfit })
-    // Part 2: push({ label: 'Recharge', profit: rechargeProfit })
-    // Part 2: push({ label: 'Transfer', profit: transferProfit })
-  ];
+    { label: 'Work',       profit: workProfit,     sub: `${formatCurrency(workCollected)} − ${formatCurrency(workChallan)} challan` },
+    { label: 'AEPS',       profit: aepsProfit,     sub: `${aepsPaid.length} transactions` },
+    { label: 'Recharge',   profit: rechargeProfit, sub: `${rechargePaid.length} transactions` },
+    { label: 'Transfer',   profit: transferProfit, sub: `${transferPaid.length} transactions` },
+    { label: 'Quick Work', profit: quickEarned,    sub: `${quickPaid.length} transactions` },
+  ].filter(s => s.profit !== 0 || s.label === 'Work');
+
   const totalProfit = profitSources.reduce((s, src) => s + src.profit, 0);
 
-  // Daily trend — group entries by day within the range
-  const trendData = useMemo(() => {
-    let days: Date[] = [];
-    try {
-      days = eachDayOfInterval({ start: dateRange.from, end: dateRange.to });
-    } catch {
-      return [];
-    }
-    // For very large ranges (>90 days) only show bars for days that have data
-    if (days.length > 90) {
-      const dayMap: Record<string, { profit: number; revenue: number }> = {};
-      active.forEach(e => {
-        const key = format(e.date.toDate(), 'dd MMM');
-        if (!dayMap[key]) dayMap[key] = { profit: 0, revenue: 0 };
-        dayMap[key].revenue += e.paidAmount;
-        dayMap[key].profit += e.paidAmount - getWorkChallan(e);
-      });
-      return Object.entries(dayMap)
-        .map(([date, v]) => ({ date, profit: Math.round(v.profit), revenue: Math.round(v.revenue) }))
-        .sort((a, b) => a.date.localeCompare(b.date));
-    }
-    return days.map(day => {
-      const dayEntries = active.filter(e => isSameDay(e.date.toDate(), day));
-      const rev = dayEntries.reduce((s, e) => s + e.paidAmount, 0);
-      const chal = dayEntries.reduce((s, e) => s + getWorkChallan(e), 0);
-      return { date: format(day, 'dd MMM'), profit: Math.round(rev - chal), revenue: Math.round(rev) };
-    });
-  }, [active, dateRange]);
+  // Breakdown chart data
+  const breakdownData = profitSources.map(s => ({ name: s.label, profit: Math.round(s.profit) }));
 
-  const hasEntries = active.length > 0;
+  // Daily work profit trend
+  const trendData = useMemo(() => {
+    const workTrend = buildDailyTrend(
+      activeWork.map(e => ({ ts: e.date.toDate(), value: e.paidAmount - getWorkChallan(e) })),
+      dateRange.from, dateRange.to,
+    );
+    return workTrend;
+  }, [activeWork, dateRange]);
 
   return (
     <div className="space-y-6">
       {/* KPI cards */}
       <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
-        <Card className="lg:col-span-1 border-primary/20 bg-primary/5">
+        <Card className="border-primary/20 bg-primary/5">
           <CardHeader className="pb-2 flex flex-row items-center justify-between">
             <CardTitle className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">
               Total Profit
@@ -326,26 +429,33 @@ function OverviewTab({
           </CardHeader>
           <CardContent>
             <div className="text-3xl font-bold text-primary">{formatCurrency(totalProfit)}</div>
-            {profitSources.map(src => (
-              <div key={src.label} className="mt-1.5 text-xs text-muted-foreground">
-                <span className="font-medium text-foreground">{src.label}:</span>{' '}
-                {formatCurrency(src.profit)}
-                {src.sub && <span className="block opacity-70 mt-0.5">{src.sub}</span>}
-              </div>
-            ))}
+            <div className="mt-2 space-y-1">
+              {profitSources.map(src => (
+                <div key={src.label} className="flex items-center justify-between text-xs">
+                  <span className="flex items-center gap-1.5">
+                    <span
+                      className="inline-block h-2 w-2 rounded-full"
+                      style={{ background: SOURCE_COLORS[src.label] ?? '#94a3b8' }}
+                    />
+                    <span className="text-muted-foreground">{src.label}</span>
+                  </span>
+                  <span className="font-medium tabular-nums">{formatCurrency(src.profit)}</span>
+                </div>
+              ))}
+            </div>
           </CardContent>
         </Card>
 
         <Card>
           <CardHeader className="pb-2 flex flex-row items-center justify-between">
             <CardTitle className="text-xs font-medium uppercase tracking-wide text-muted-foreground">
-              Revenue Collected
+              Work Revenue
             </CardTitle>
             <IndianRupee className="h-4 w-4 text-emerald-500" />
           </CardHeader>
           <CardContent>
-            <div className="text-2xl font-bold text-emerald-700">{formatCurrency(totalCollected)}</div>
-            <p className="text-xs text-muted-foreground mt-1">{active.length} work entries</p>
+            <div className="text-2xl font-bold text-emerald-700">{formatCurrency(workCollected)}</div>
+            <p className="text-xs text-muted-foreground mt-1">{activeWork.length} entries</p>
           </CardContent>
         </Card>
 
@@ -360,13 +470,14 @@ function OverviewTab({
             <div className={`text-2xl font-bold ${totalDue > 0 ? 'text-amber-700' : 'text-muted-foreground'}`}>
               {formatCurrency(totalDue)}
             </div>
-            {totalCredit > 0 ? (
+            {totalCredit > 0 && (
               <p className="text-xs text-emerald-700 mt-1 font-medium">
                 + {formatCurrency(totalCredit)} overpaid/credit
               </p>
-            ) : totalDue === 0 ? (
+            )}
+            {totalDue === 0 && totalCredit === 0 && (
               <p className="text-xs text-muted-foreground mt-1">All cleared</p>
-            ) : null}
+            )}
           </CardContent>
         </Card>
 
@@ -378,73 +489,78 @@ function OverviewTab({
             <IndianRupee className="h-4 w-4 text-slate-400" />
           </CardHeader>
           <CardContent>
-            <div className="text-2xl font-bold">{formatCurrency(totalChallan)}</div>
+            <div className="text-2xl font-bold">{formatCurrency(workChallan)}</div>
             <p className="text-xs text-muted-foreground mt-1">Govt fees deducted</p>
           </CardContent>
         </Card>
       </div>
 
-      {/* Daily trend chart */}
+      {/* Profit breakdown chart */}
+      {breakdownData.some(d => d.profit > 0) && (
+        <Card>
+          <CardHeader className="pb-2">
+            <CardTitle className="text-sm">Profit by Source</CardTitle>
+          </CardHeader>
+          <CardContent>
+            <ResponsiveContainer width="100%" height={200}>
+              <BarChart
+                data={breakdownData}
+                layout="vertical"
+                margin={{ top: 0, right: 16, left: 16, bottom: 0 }}
+              >
+                <CartesianGrid strokeDasharray="3 3" stroke="hsl(var(--border))" horizontal={false} />
+                <XAxis type="number" tick={{ fontSize: 11 }} tickFormatter={v => `₹${v.toLocaleString('en-IN')}`} />
+                <YAxis type="category" dataKey="name" tick={{ fontSize: 12 }} width={72} />
+                <Tooltip formatter={(v: number) => [formatCurrency(v), 'Profit']} />
+                <Bar dataKey="profit" radius={[0, 4, 4, 0]}>
+                  {breakdownData.map(d => (
+                    <Cell key={d.name} fill={SOURCE_COLORS[d.name] ?? '#94a3b8'} />
+                  ))}
+                </Bar>
+              </BarChart>
+            </ResponsiveContainer>
+          </CardContent>
+        </Card>
+      )}
+
+      {/* Daily work profit trend */}
       <Card>
         <CardHeader className="pb-2">
           <CardTitle className="text-sm">Daily Work Profit</CardTitle>
         </CardHeader>
         <CardContent>
-          {!hasEntries ? (
-            <div className="flex flex-col items-center justify-center h-44 text-muted-foreground">
-              <TrendingUp className="h-8 w-8 mb-2 opacity-20" />
+          {trendData.length === 0 || !trendData.some(d => d.value !== 0) ? (
+            <div className="flex flex-col items-center justify-center h-36 text-muted-foreground">
+              <TrendingUp className="h-7 w-7 mb-2 opacity-20" />
               <p className="text-sm">No work entries in this period.</p>
             </div>
-          ) : trendData.length <= 1 ? (
-            <ResponsiveContainer width="100%" height={220}>
+          ) : trendData.length <= 2 ? (
+            <ResponsiveContainer width="100%" height={200}>
               <BarChart data={trendData} margin={{ top: 4, right: 8, left: -10, bottom: 0 }}>
                 <CartesianGrid strokeDasharray="3 3" stroke="hsl(var(--border))" />
                 <XAxis dataKey="date" tick={{ fontSize: 11 }} />
                 <YAxis tick={{ fontSize: 11 }} />
-                <Tooltip formatter={(v: number) => [formatCurrency(v)]} />
-                <Bar dataKey="profit" fill="#4f46e5" name="Profit" radius={[4, 4, 0, 0]} />
+                <Tooltip formatter={(v: number) => [formatCurrency(v), 'Profit']} />
+                <Bar dataKey="value" fill="#4f46e5" name="Profit" radius={[4, 4, 0, 0]} />
               </BarChart>
             </ResponsiveContainer>
           ) : (
-            <ResponsiveContainer width="100%" height={220}>
+            <ResponsiveContainer width="100%" height={200}>
               <LineChart data={trendData} margin={{ top: 4, right: 8, left: -10, bottom: 0 }}>
                 <CartesianGrid strokeDasharray="3 3" stroke="hsl(var(--border))" />
-                <XAxis
-                  dataKey="date"
-                  tick={{ fontSize: 11 }}
-                  interval="preserveStartEnd"
-                />
+                <XAxis dataKey="date" tick={{ fontSize: 11 }} interval="preserveStartEnd" />
                 <YAxis tick={{ fontSize: 11 }} />
-                <Tooltip
-                  formatter={(v: number, name: string) => [
-                    formatCurrency(v),
-                    name === 'profit' ? 'Profit' : 'Revenue',
-                  ]}
-                />
+                <Tooltip formatter={(v: number) => [formatCurrency(v), 'Profit']} />
                 <Line
                   type="monotone"
-                  dataKey="profit"
+                  dataKey="value"
                   stroke="#4f46e5"
                   strokeWidth={2}
                   dot={trendData.length <= 14}
-                  name="profit"
-                />
-                <Line
-                  type="monotone"
-                  dataKey="revenue"
-                  stroke="#94a3b8"
-                  strokeWidth={1.5}
-                  strokeDasharray="4 2"
-                  dot={false}
-                  name="revenue"
+                  name="Profit"
                 />
               </LineChart>
             </ResponsiveContainer>
-          )}
-          {hasEntries && trendData.length > 0 && (
-            <p className="text-xs text-muted-foreground mt-2 text-center">
-              Indigo = profit (after challan) · Grey dashed = revenue collected
-            </p>
           )}
         </CardContent>
       </Card>
@@ -457,23 +573,23 @@ function OverviewTab({
 function WorkChallanTab({ work }: { work: WorkEntry[] }) {
   const [search, setSearch] = useState('');
   const sort = useSortState('date');
+  const Th = makeTh(sort);
 
-  const active = work.filter(e => e.status !== 'Rejected');
+  const active   = work.filter(e => e.status !== 'Rejected');
   const rejected = work.filter(e => e.status === 'Rejected');
 
   const totalCollected = active.reduce((s, e) => s + e.paidAmount, 0);
-  const totalChallan = active.reduce((s, e) => s + getWorkChallan(e), 0);
-  const netProfit = totalCollected - totalChallan;
-  const totalRefund = rejected.reduce((s, e) => s + (e.refundAmount ?? 0), 0);
+  const totalChallan   = active.reduce((s, e) => s + getWorkChallan(e), 0);
+  const netProfit      = totalCollected - totalChallan;
+  const totalRefund    = rejected.reduce((s, e) => s + (e.refundAmount ?? 0), 0);
 
   const filtered = useMemo(() => {
     const q = search.toLowerCase();
-    return work.filter(
-      e =>
-        !search ||
-        e.customerName.toLowerCase().includes(q) ||
-        e.category.toLowerCase().includes(q) ||
-        (e.mobile ?? '').includes(q),
+    return work.filter(e =>
+      !search ||
+      e.customerName.toLowerCase().includes(q) ||
+      e.category.toLowerCase().includes(q) ||
+      (e.mobile ?? '').includes(q),
     );
   }, [work, search]);
 
@@ -487,102 +603,54 @@ function WorkChallanTab({ work }: { work: WorkEntry[] }) {
       case 'paid':     return e.paidAmount;
       case 'due':      return e.dueAmount;
       case 'status':   return e.status;
-      default:         return 0;
+      default: return 0;
     }
   }, []);
 
-  const sorted = useMemo(
-    () => sortRows(filtered, sort.col, sort.dir, getValue),
-    [filtered, sort.col, sort.dir, getValue],
-  );
+  const sorted = useMemo(() => sortRows(filtered, sort.col, sort.dir, getValue), [filtered, sort.col, sort.dir, getValue]);
 
   const exportCSV = () => {
     const header = ['Date', 'Customer', 'Mobile', 'Category', 'Total Amount', 'Challan', 'Paid', 'Due', 'Status'];
     const rows = sorted.map(e => [
       format(e.date.toDate(), 'dd/MM/yyyy'),
-      e.customerName,
-      e.mobile,
+      e.customerName, e.mobile,
       e.category === 'Other' && e.otherCategory ? e.otherCategory : e.category,
-      String(e.totalAmount),
-      String(getWorkChallan(e)),
-      String(e.paidAmount),
-      String(e.dueAmount),
-      e.status,
+      String(e.totalAmount), String(getWorkChallan(e)), String(e.paidAmount), String(e.dueAmount), e.status,
     ]);
     downloadCSV(`work-challan-${format(new Date(), 'yyyy-MM-dd')}.csv`, [header, ...rows]);
   };
 
-  const Th = ({
-    col,
-    label,
-    align = 'left',
-  }: {
-    col: string;
-    label: string;
-    align?: 'left' | 'right';
-  }) => (
-    <TableHead
-      className={`cursor-pointer select-none whitespace-nowrap ${align === 'right' ? 'text-right' : ''} hover:text-foreground transition-colors`}
-      onClick={() => sort.toggle(col)}
-    >
-      {label}
-      <SortIcon dir={sort.getDir(col)} />
-    </TableHead>
-  );
-
   return (
     <div className="space-y-5">
-      {/* Summary row */}
-      <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
-        {[
-          { label: 'Total Entries', value: String(active.length), cls: '' },
-          { label: 'Total Collected', value: formatCurrency(totalCollected), cls: 'text-emerald-700' },
-          { label: 'Total Challan', value: formatCurrency(totalChallan), cls: 'text-slate-600' },
-          { label: 'Net Profit', value: formatCurrency(netProfit), cls: 'text-primary font-bold' },
-        ].map(s => (
-          <Card key={s.label}>
-            <CardContent className="pt-4 pb-3">
-              <p className="text-xs text-muted-foreground uppercase tracking-wide mb-1">{s.label}</p>
-              <p className={`text-xl font-semibold ${s.cls}`}>{s.value}</p>
-            </CardContent>
-          </Card>
-        ))}
-      </div>
+      <StatCards items={[
+        { label: 'Total Entries',  value: String(active.length) },
+        { label: 'Total Collected', value: formatCurrency(totalCollected), cls: 'text-emerald-700' },
+        { label: 'Total Challan',  value: formatCurrency(totalChallan),   cls: 'text-slate-600' },
+        { label: 'Net Profit',     value: formatCurrency(netProfit),       cls: 'text-primary font-bold' },
+      ]} />
 
-      {/* Rejected callout */}
       {rejected.length > 0 && (
         <div className="flex items-start gap-3 rounded-lg border border-red-200 bg-red-50 px-4 py-3 text-sm">
           <X className="h-4 w-4 text-red-500 mt-0.5 shrink-0" />
           <div>
-            <span className="font-semibold text-red-700">Rejected/Refunded Entries: </span>
+            <span className="font-semibold text-red-700">Rejected/Refunded: </span>
             <span className="text-red-600">{rejected.length} {rejected.length === 1 ? 'entry' : 'entries'}</span>
-            {totalRefund > 0 && (
-              <span className="text-red-600"> · {formatCurrency(totalRefund)} refunded</span>
-            )}
-            <p className="text-xs text-red-500 mt-0.5">
-              Not counted in the profit figures above.
-            </p>
+            {totalRefund > 0 && <span className="text-red-600"> · {formatCurrency(totalRefund)} refunded</span>}
+            <p className="text-xs text-red-500 mt-0.5">Not counted in profit figures above.</p>
           </div>
         </div>
       )}
 
-      {/* Search + export */}
       <div className="flex flex-col sm:flex-row items-stretch sm:items-center gap-2 justify-between">
         <div className="relative flex-1 max-w-sm">
           <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
-          <Input
-            placeholder="Search by customer, category..."
-            value={search}
-            onChange={e => setSearch(e.target.value)}
-            className="pl-8 h-9"
-          />
+          <Input placeholder="Search customer, category…" value={search} onChange={e => setSearch(e.target.value)} className="pl-8 h-9" />
         </div>
         <Button variant="outline" size="sm" className="gap-1.5 h-9" onClick={exportCSV}>
           <Download className="h-4 w-4" /> Export CSV
         </Button>
       </div>
 
-      {/* Table */}
       <Card>
         <div className="overflow-x-auto">
           <Table>
@@ -591,7 +659,7 @@ function WorkChallanTab({ work }: { work: WorkEntry[] }) {
                 <Th col="date" label="Date" />
                 <Th col="customer" label="Customer" />
                 <Th col="category" label="Category" />
-                <Th col="total" label="Total Amt" align="right" />
+                <Th col="total" label="Total" align="right" />
                 <Th col="challan" label="Challan" align="right" />
                 <Th col="paid" label="Paid" align="right" />
                 <Th col="due" label="Due" align="right" />
@@ -600,63 +668,33 @@ function WorkChallanTab({ work }: { work: WorkEntry[] }) {
             </TableHeader>
             <TableBody>
               {sorted.length === 0 ? (
-                <TableRow>
-                  <TableCell colSpan={8} className="text-center py-12 text-muted-foreground">
-                    {search ? `No entries match "${search}".` : 'No entries in this period.'}
-                  </TableCell>
-                </TableRow>
-              ) : (
-                sorted.map(e => {
-                  const due = e.dueAmount;
-                  const cat =
-                    e.category === 'Other' && e.otherCategory ? e.otherCategory : e.category;
-                  return (
-                    <TableRow key={e.id} className="hover:bg-muted/30">
-                      <TableCell className="text-xs text-muted-foreground whitespace-nowrap">
-                        {format(e.date.toDate(), 'dd MMM yyyy')}
-                      </TableCell>
-                      <TableCell className="font-medium max-w-[160px] truncate">
-                        {e.customerName}
-                      </TableCell>
-                      <TableCell>
-                        <Badge variant="outline" className="text-xs font-normal whitespace-nowrap">
-                          {cat}
-                        </Badge>
-                      </TableCell>
-                      <TableCell className="text-right tabular-nums">
-                        {formatCurrency(e.totalAmount)}
-                      </TableCell>
-                      <TableCell className="text-right tabular-nums text-slate-500">
-                        {getWorkChallan(e) > 0 ? formatCurrency(getWorkChallan(e)) : '—'}
-                      </TableCell>
-                      <TableCell className="text-right tabular-nums text-emerald-700 font-medium">
-                        {formatCurrency(e.paidAmount)}
-                      </TableCell>
-                      <TableCell className="text-right tabular-nums">
-                        {due > 0 ? (
-                          <span className="text-amber-700 font-medium">{formatCurrency(due)}</span>
-                        ) : due < 0 ? (
-                          <span className="text-emerald-700 text-xs">
-                            +{formatCurrency(-due)} credit
-                          </span>
-                        ) : (
-                          <span className="text-muted-foreground">—</span>
-                        )}
-                      </TableCell>
-                      <TableCell>
-                        <StatusBadge status={e.status} />
-                      </TableCell>
-                    </TableRow>
-                  );
-                })
-              )}
+                <TableRow><TableCell colSpan={8} className="text-center py-12 text-muted-foreground">{search ? `No entries match "${search}".` : 'No entries in this period.'}</TableCell></TableRow>
+              ) : sorted.map(e => {
+                const due = e.dueAmount;
+                const cat = e.category === 'Other' && e.otherCategory ? e.otherCategory : e.category;
+                return (
+                  <TableRow key={e.id} className="hover:bg-muted/30">
+                    <TableCell className="text-xs text-muted-foreground whitespace-nowrap">{format(e.date.toDate(), 'dd MMM yyyy')}</TableCell>
+                    <TableCell className="font-medium max-w-[160px] truncate">{e.customerName}</TableCell>
+                    <TableCell><Badge variant="outline" className="text-xs font-normal whitespace-nowrap">{cat}</Badge></TableCell>
+                    <TableCell className="text-right tabular-nums">{formatCurrency(e.totalAmount)}</TableCell>
+                    <TableCell className="text-right tabular-nums text-slate-500">{getWorkChallan(e) > 0 ? formatCurrency(getWorkChallan(e)) : '—'}</TableCell>
+                    <TableCell className="text-right tabular-nums text-emerald-700 font-medium">{formatCurrency(e.paidAmount)}</TableCell>
+                    <TableCell className="text-right tabular-nums">
+                      {due > 0 ? <span className="text-amber-700 font-medium">{formatCurrency(due)}</span>
+                        : due < 0 ? <span className="text-emerald-700 text-xs">+{formatCurrency(-due)} credit</span>
+                        : <span className="text-muted-foreground">—</span>}
+                    </TableCell>
+                    <TableCell><StatusBadge status={e.status} /></TableCell>
+                  </TableRow>
+                );
+              })}
             </TableBody>
           </Table>
         </div>
         {sorted.length > 0 && (
           <div className="px-4 py-2 border-t text-xs text-muted-foreground">
-            {sorted.length} {sorted.length === 1 ? 'entry' : 'entries'}
-            {search ? ` matching "${search}"` : ''}
+            {sorted.length} {sorted.length === 1 ? 'entry' : 'entries'}{search ? ` matching "${search}"` : ''}
           </div>
         )}
       </Card>
@@ -666,32 +704,22 @@ function WorkChallanTab({ work }: { work: WorkEntry[] }) {
 
 // ── Tab: Category-wise ────────────────────────────────────────────────────────
 
-interface CategoryRow {
-  category: string;
-  count: number;
-  collected: number;
-  challan: number;
-  netProfit: number;
-}
+interface CategoryRow { category: string; count: number; collected: number; challan: number; netProfit: number; }
 
 function CategoryTab({ work }: { work: WorkEntry[] }) {
   const sort = useSortState('count');
+  const Th = makeTh(sort);
 
   const rows = useMemo<CategoryRow[]>(() => {
     const map: Record<string, CategoryRow> = {};
-    work
-      .filter(e => e.status !== 'Rejected')
-      .forEach(e => {
-        const cat =
-          e.category === 'Other' && e.otherCategory ? e.otherCategory : e.category;
-        if (!map[cat]) {
-          map[cat] = { category: cat, count: 0, collected: 0, challan: 0, netProfit: 0 };
-        }
-        map[cat].count++;
-        map[cat].collected += e.paidAmount;
-        map[cat].challan += getWorkChallan(e);
-        map[cat].netProfit += e.paidAmount - getWorkChallan(e);
-      });
+    work.filter(e => e.status !== 'Rejected').forEach(e => {
+      const cat = e.category === 'Other' && e.otherCategory ? e.otherCategory : e.category;
+      if (!map[cat]) map[cat] = { category: cat, count: 0, collected: 0, challan: 0, netProfit: 0 };
+      map[cat].count++;
+      map[cat].collected += e.paidAmount;
+      map[cat].challan   += getWorkChallan(e);
+      map[cat].netProfit += e.paidAmount - getWorkChallan(e);
+    });
     return Object.values(map);
   }, [work]);
 
@@ -706,63 +734,21 @@ function CategoryTab({ work }: { work: WorkEntry[] }) {
     }
   }, []);
 
-  const sorted = useMemo(
-    () => sortRows(rows, sort.col, sort.dir, getValue),
-    [rows, sort.col, sort.dir, getValue],
-  );
-
-  const totals = useMemo(
-    () =>
-      rows.reduce(
-        (acc, r) => ({
-          count: acc.count + r.count,
-          collected: acc.collected + r.collected,
-          challan: acc.challan + r.challan,
-          profit: acc.profit + r.netProfit,
-        }),
-        { count: 0, collected: 0, challan: 0, profit: 0 },
-      ),
-    [rows],
-  );
+  const sorted = useMemo(() => sortRows(rows, sort.col, sort.dir, getValue), [rows, sort.col, sort.dir, getValue]);
+  const totals = useMemo(() => rows.reduce((a, r) => ({ count: a.count + r.count, collected: a.collected + r.collected, challan: a.challan + r.challan, profit: a.profit + r.netProfit }), { count: 0, collected: 0, challan: 0, profit: 0 }), [rows]);
 
   const exportCSV = () => {
-    const header = ['Category', 'Entries', 'Collected (₹)', 'Challan (₹)', 'Net Profit (₹)'];
-    const dataRows = sorted.map(r => [
-      r.category,
-      String(r.count),
-      String(r.collected),
-      String(r.challan),
-      String(r.netProfit),
+    downloadCSV(`category-report-${format(new Date(), 'yyyy-MM-dd')}.csv`, [
+      ['Category', 'Entries', 'Collected (₹)', 'Challan (₹)', 'Net Profit (₹)'],
+      ...sorted.map(r => [r.category, String(r.count), String(r.collected), String(r.challan), String(r.netProfit)]),
     ]);
-    downloadCSV(`category-report-${format(new Date(), 'yyyy-MM-dd')}.csv`, [header, ...dataRows]);
   };
-
-  const Th = ({
-    col,
-    label,
-    align = 'left',
-  }: {
-    col: string;
-    label: string;
-    align?: 'left' | 'right';
-  }) => (
-    <TableHead
-      className={`cursor-pointer select-none whitespace-nowrap ${align === 'right' ? 'text-right' : ''} hover:text-foreground transition-colors`}
-      onClick={() => sort.toggle(col)}
-    >
-      {label}
-      <SortIcon dir={sort.getDir(col)} />
-    </TableHead>
-  );
 
   return (
     <div className="space-y-4">
       <div className="flex justify-end">
-        <Button variant="outline" size="sm" className="gap-1.5 h-9" onClick={exportCSV}>
-          <Download className="h-4 w-4" /> Export CSV
-        </Button>
+        <Button variant="outline" size="sm" className="gap-1.5 h-9" onClick={exportCSV}><Download className="h-4 w-4" /> Export CSV</Button>
       </div>
-
       <Card>
         <div className="overflow-x-auto">
           <Table>
@@ -777,49 +763,416 @@ function CategoryTab({ work }: { work: WorkEntry[] }) {
             </TableHeader>
             <TableBody>
               {sorted.length === 0 ? (
-                <TableRow>
-                  <TableCell colSpan={5} className="text-center py-12 text-muted-foreground">
-                    No entries in this period.
-                  </TableCell>
+                <TableRow><TableCell colSpan={5} className="text-center py-12 text-muted-foreground">No entries in this period.</TableCell></TableRow>
+              ) : sorted.map(r => (
+                <TableRow key={r.category} className="hover:bg-muted/30">
+                  <TableCell className="font-medium">{r.category}</TableCell>
+                  <TableCell className="text-right tabular-nums">{r.count}</TableCell>
+                  <TableCell className="text-right tabular-nums text-emerald-700 font-medium">{formatCurrency(r.collected)}</TableCell>
+                  <TableCell className="text-right tabular-nums text-slate-500">{r.challan > 0 ? formatCurrency(r.challan) : '—'}</TableCell>
+                  <TableCell className={`text-right tabular-nums font-semibold ${r.netProfit >= 0 ? 'text-primary' : 'text-red-600'}`}>{formatCurrency(r.netProfit)}</TableCell>
                 </TableRow>
-              ) : (
-                sorted.map(r => (
-                  <TableRow key={r.category} className="hover:bg-muted/30">
-                    <TableCell className="font-medium">{r.category}</TableCell>
-                    <TableCell className="text-right tabular-nums">{r.count}</TableCell>
-                    <TableCell className="text-right tabular-nums text-emerald-700 font-medium">
-                      {formatCurrency(r.collected)}
-                    </TableCell>
-                    <TableCell className="text-right tabular-nums text-slate-500">
-                      {r.challan > 0 ? formatCurrency(r.challan) : '—'}
-                    </TableCell>
-                    <TableCell
-                      className={`text-right tabular-nums font-semibold ${r.netProfit >= 0 ? 'text-primary' : 'text-red-600'}`}
-                    >
-                      {formatCurrency(r.netProfit)}
-                    </TableCell>
-                  </TableRow>
-                ))
-              )}
+              ))}
             </TableBody>
           </Table>
         </div>
-
-        {/* Totals footer */}
         {sorted.length > 0 && (
           <div className="px-4 py-3 border-t bg-muted/20 flex">
-            <div className="flex-1 text-sm font-semibold">
-              Total ({totals.count} {totals.count === 1 ? 'entry' : 'entries'})
-            </div>
-            <div className="text-right text-sm font-semibold text-emerald-700 w-28 pr-4">
-              {formatCurrency(totals.collected)}
-            </div>
-            <div className="text-right text-sm font-semibold text-slate-600 w-24 pr-4">
-              {formatCurrency(totals.challan)}
-            </div>
-            <div className="text-right text-sm font-semibold text-primary w-24">
-              {formatCurrency(totals.profit)}
-            </div>
+            <div className="flex-1 text-sm font-semibold">Total ({totals.count} entries)</div>
+            <div className="w-28 text-right text-sm font-semibold text-emerald-700 pr-4">{formatCurrency(totals.collected)}</div>
+            <div className="w-24 text-right text-sm font-semibold text-slate-600 pr-4">{formatCurrency(totals.challan)}</div>
+            <div className="w-24 text-right text-sm font-semibold text-primary">{formatCurrency(totals.profit)}</div>
+          </div>
+        )}
+      </Card>
+    </div>
+  );
+}
+
+// ── Tab: AEPS ─────────────────────────────────────────────────────────────────
+
+function AepsTab({ entries, dateRange }: { entries: AepsWithdrawal[]; dateRange: DateRangeState }) {
+  const [search, setSearch] = useState('');
+  const sort = useSortState('date');
+  const Th = makeTh(sort);
+
+  const paid   = entries.filter(e => resolveStatus(e.paymentStatus) === 'paid');
+  const totalAmount = paid.reduce((s, e) => s + e.amount, 0);
+  const totalProfit = paid.reduce((s, e) => s + e.profitMargin, 0);
+
+  const trendData = useMemo(() => buildDailyTrend(
+    paid.map(e => ({ ts: e.createdAt.toDate(), value: e.profitMargin })),
+    dateRange.from, dateRange.to,
+  ), [paid, dateRange]);
+
+  const filtered = useMemo(() => {
+    const q = search.toLowerCase();
+    return entries.filter(e => !search || e.customerName.toLowerCase().includes(q) || e.bankName.toLowerCase().includes(q));
+  }, [entries, search]);
+
+  const getValue = useCallback((e: AepsWithdrawal, col: string): string | number => {
+    switch (col) {
+      case 'date':   return e.createdAt.toMillis();
+      case 'customer': return e.customerName;
+      case 'bank':   return e.bankName;
+      case 'amount': return e.amount;
+      case 'profit': return e.profitMargin;
+      default: return 0;
+    }
+  }, []);
+
+  const sorted = useMemo(() => sortRows(filtered, sort.col, sort.dir, getValue), [filtered, sort.col, sort.dir, getValue]);
+
+  const exportCSV = () => {
+    downloadCSV(`aeps-report-${format(new Date(), 'yyyy-MM-dd')}.csv`, [
+      ['Date', 'Customer', 'Bank Name', 'Amount (₹)', 'Profit Margin (₹)', 'Status'],
+      ...sorted.map(e => [
+        format(e.createdAt.toDate(), 'dd/MM/yyyy'), e.customerName, e.bankName,
+        String(e.amount), String(e.profitMargin), resolveStatus(e.paymentStatus),
+      ]),
+    ]);
+  };
+
+  return (
+    <div className="space-y-5">
+      <StatCards items={[
+        { label: 'Total Withdrawals', value: String(entries.length) },
+        { label: 'Total Amount',      value: formatCurrency(totalAmount), cls: 'text-emerald-700' },
+        { label: 'Total Profit',      value: formatCurrency(totalProfit), cls: 'text-primary font-bold' },
+      ]} />
+
+      <Card>
+        <CardHeader className="pb-2"><CardTitle className="text-sm">Daily Profit Trend</CardTitle></CardHeader>
+        <CardContent>
+          <DailyTrendChart data={trendData} color="#10b981" label="Profit" />
+        </CardContent>
+      </Card>
+
+      <div className="flex flex-col sm:flex-row items-stretch sm:items-center gap-2 justify-between">
+        <div className="relative flex-1 max-w-sm">
+          <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
+          <Input placeholder="Search customer, bank…" value={search} onChange={e => setSearch(e.target.value)} className="pl-8 h-9" />
+        </div>
+        <Button variant="outline" size="sm" className="gap-1.5 h-9" onClick={exportCSV}><Download className="h-4 w-4" /> Export CSV</Button>
+      </div>
+
+      <Card>
+        <div className="overflow-x-auto">
+          <Table>
+            <TableHeader>
+              <TableRow>
+                <Th col="date" label="Date" />
+                <Th col="customer" label="Customer" />
+                <Th col="bank" label="Bank Name" />
+                <Th col="amount" label="Amount" align="right" />
+                <Th col="profit" label="Profit Margin" align="right" />
+              </TableRow>
+            </TableHeader>
+            <TableBody>
+              {sorted.length === 0 ? (
+                <TableRow><TableCell colSpan={5} className="text-center py-12 text-muted-foreground">{search ? `No entries match "${search}".` : 'No AEPS transactions in this period.'}</TableCell></TableRow>
+              ) : sorted.map(e => (
+                <TableRow key={e.id} className="hover:bg-muted/30">
+                  <TableCell className="text-xs text-muted-foreground whitespace-nowrap">{format(e.createdAt.toDate(), 'dd MMM yyyy')}</TableCell>
+                  <TableCell className="font-medium">{e.customerName}</TableCell>
+                  <TableCell className="text-muted-foreground">{e.bankName}</TableCell>
+                  <TableCell className="text-right tabular-nums font-medium">{formatCurrency(e.amount)}</TableCell>
+                  <TableCell className="text-right tabular-nums text-emerald-700 font-semibold">{formatCurrency(e.profitMargin)}</TableCell>
+                </TableRow>
+              ))}
+            </TableBody>
+          </Table>
+        </div>
+        {sorted.length > 0 && (
+          <div className="px-4 py-2 border-t text-xs text-muted-foreground">{sorted.length} transactions{search ? ` matching "${search}"` : ''}</div>
+        )}
+      </Card>
+    </div>
+  );
+}
+
+// ── Tab: Recharge ─────────────────────────────────────────────────────────────
+
+function RechargeTab({ entries, dateRange }: { entries: ElectricRecharge[]; dateRange: DateRangeState }) {
+  const [search, setSearch] = useState('');
+  const sort = useSortState('date');
+  const Th = makeTh(sort);
+
+  const paid         = entries.filter(e => resolveStatus(e.paymentStatus) === 'paid');
+  const totalAmount  = paid.reduce((s, e) => s + e.rechargeAmount, 0);
+  const totalProfit  = paid.reduce((s, e) => s + e.profitMargin, 0);
+
+  const trendData = useMemo(() => buildDailyTrend(
+    paid.map(e => ({ ts: e.createdAt.toDate(), value: e.profitMargin })),
+    dateRange.from, dateRange.to,
+  ), [paid, dateRange]);
+
+  const filtered = useMemo(() => {
+    const q = search.toLowerCase();
+    return entries.filter(e => !search || e.customerName.toLowerCase().includes(q) || e.consumerNumber.includes(q));
+  }, [entries, search]);
+
+  const getValue = useCallback((e: ElectricRecharge, col: string): string | number => {
+    switch (col) {
+      case 'date':     return e.createdAt.toMillis();
+      case 'customer': return e.customerName;
+      case 'consumer': return e.consumerNumber;
+      case 'amount':   return e.rechargeAmount;
+      case 'profit':   return e.profitMargin;
+      default: return 0;
+    }
+  }, []);
+
+  const sorted = useMemo(() => sortRows(filtered, sort.col, sort.dir, getValue), [filtered, sort.col, sort.dir, getValue]);
+
+  const exportCSV = () => {
+    downloadCSV(`recharge-report-${format(new Date(), 'yyyy-MM-dd')}.csv`, [
+      ['Date', 'Customer', 'Consumer Number', 'Recharge Amount (₹)', 'Profit Margin (₹)', 'Status'],
+      ...sorted.map(e => [
+        format(e.createdAt.toDate(), 'dd/MM/yyyy'), e.customerName, e.consumerNumber,
+        String(e.rechargeAmount), String(e.profitMargin), resolveStatus(e.paymentStatus),
+      ]),
+    ]);
+  };
+
+  return (
+    <div className="space-y-5">
+      <StatCards items={[
+        { label: 'Total Recharges',  value: String(entries.length) },
+        { label: 'Total Recharged',  value: formatCurrency(totalAmount), cls: 'text-emerald-700' },
+        { label: 'Total Profit',     value: formatCurrency(totalProfit), cls: 'text-primary font-bold' },
+      ]} />
+
+      <Card>
+        <CardHeader className="pb-2"><CardTitle className="text-sm">Daily Profit Trend</CardTitle></CardHeader>
+        <CardContent>
+          <DailyTrendChart data={trendData} color="#f59e0b" label="Profit" />
+        </CardContent>
+      </Card>
+
+      <div className="flex flex-col sm:flex-row items-stretch sm:items-center gap-2 justify-between">
+        <div className="relative flex-1 max-w-sm">
+          <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
+          <Input placeholder="Search customer, consumer no…" value={search} onChange={e => setSearch(e.target.value)} className="pl-8 h-9" />
+        </div>
+        <Button variant="outline" size="sm" className="gap-1.5 h-9" onClick={exportCSV}><Download className="h-4 w-4" /> Export CSV</Button>
+      </div>
+
+      <Card>
+        <div className="overflow-x-auto">
+          <Table>
+            <TableHeader>
+              <TableRow>
+                <Th col="date" label="Date" />
+                <Th col="customer" label="Customer" />
+                <Th col="consumer" label="Consumer No." />
+                <Th col="amount" label="Recharge Amt" align="right" />
+                <Th col="profit" label="Profit Margin" align="right" />
+              </TableRow>
+            </TableHeader>
+            <TableBody>
+              {sorted.length === 0 ? (
+                <TableRow><TableCell colSpan={5} className="text-center py-12 text-muted-foreground">{search ? `No entries match "${search}".` : 'No recharge transactions in this period.'}</TableCell></TableRow>
+              ) : sorted.map(e => (
+                <TableRow key={e.id} className="hover:bg-muted/30">
+                  <TableCell className="text-xs text-muted-foreground whitespace-nowrap">{format(e.createdAt.toDate(), 'dd MMM yyyy')}</TableCell>
+                  <TableCell className="font-medium">{e.customerName}</TableCell>
+                  <TableCell className="text-muted-foreground font-mono text-sm">{e.consumerNumber}</TableCell>
+                  <TableCell className="text-right tabular-nums font-medium">{formatCurrency(e.rechargeAmount)}</TableCell>
+                  <TableCell className="text-right tabular-nums text-emerald-700 font-semibold">{formatCurrency(e.profitMargin)}</TableCell>
+                </TableRow>
+              ))}
+            </TableBody>
+          </Table>
+        </div>
+        {sorted.length > 0 && (
+          <div className="px-4 py-2 border-t text-xs text-muted-foreground">{sorted.length} transactions{search ? ` matching "${search}"` : ''}</div>
+        )}
+      </Card>
+    </div>
+  );
+}
+
+// ── Tab: Money Transfer ───────────────────────────────────────────────────────
+
+function TransferTab({ entries, dateRange }: { entries: MoneyTransfer[]; dateRange: DateRangeState }) {
+  const [search, setSearch] = useState('');
+  const sort = useSortState('date');
+  const Th = makeTh(sort);
+
+  const paid        = entries.filter(e => resolveStatus(e.paymentStatus) === 'paid');
+  const totalAmount = paid.reduce((s, e) => s + e.amount, 0);
+  const totalProfit = paid.reduce((s, e) => s + e.profitMargin, 0);
+
+  const trendData = useMemo(() => buildDailyTrend(
+    paid.map(e => ({ ts: e.createdAt.toDate(), value: e.profitMargin })),
+    dateRange.from, dateRange.to,
+  ), [paid, dateRange]);
+
+  const filtered = useMemo(() => {
+    const q = search.toLowerCase();
+    return entries.filter(e => !search || e.name.toLowerCase().includes(q) || e.mobileOrAccount.includes(q));
+  }, [entries, search]);
+
+  const getValue = useCallback((e: MoneyTransfer, col: string): string | number => {
+    switch (col) {
+      case 'date':    return e.createdAt.toMillis();
+      case 'name':    return e.name;
+      case 'account': return e.mobileOrAccount;
+      case 'amount':  return e.amount;
+      case 'profit':  return e.profitMargin;
+      default: return 0;
+    }
+  }, []);
+
+  const sorted = useMemo(() => sortRows(filtered, sort.col, sort.dir, getValue), [filtered, sort.col, sort.dir, getValue]);
+
+  const exportCSV = () => {
+    downloadCSV(`transfer-report-${format(new Date(), 'yyyy-MM-dd')}.csv`, [
+      ['Date', 'Name', 'Mobile/Account', 'Amount (₹)', 'Profit Margin (₹)', 'Status'],
+      ...sorted.map(e => [
+        format(e.createdAt.toDate(), 'dd/MM/yyyy'), e.name, e.mobileOrAccount,
+        String(e.amount), String(e.profitMargin), resolveStatus(e.paymentStatus),
+      ]),
+    ]);
+  };
+
+  return (
+    <div className="space-y-5">
+      <StatCards items={[
+        { label: 'Total Transfers',  value: String(entries.length) },
+        { label: 'Total Transferred', value: formatCurrency(totalAmount), cls: 'text-emerald-700' },
+        { label: 'Total Profit',     value: formatCurrency(totalProfit), cls: 'text-primary font-bold' },
+      ]} />
+
+      <Card>
+        <CardHeader className="pb-2"><CardTitle className="text-sm">Daily Profit Trend</CardTitle></CardHeader>
+        <CardContent>
+          <DailyTrendChart data={trendData} color="#8b5cf6" label="Profit" />
+        </CardContent>
+      </Card>
+
+      <div className="flex flex-col sm:flex-row items-stretch sm:items-center gap-2 justify-between">
+        <div className="relative flex-1 max-w-sm">
+          <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
+          <Input placeholder="Search name, mobile/account…" value={search} onChange={e => setSearch(e.target.value)} className="pl-8 h-9" />
+        </div>
+        <Button variant="outline" size="sm" className="gap-1.5 h-9" onClick={exportCSV}><Download className="h-4 w-4" /> Export CSV</Button>
+      </div>
+
+      <Card>
+        <div className="overflow-x-auto">
+          <Table>
+            <TableHeader>
+              <TableRow>
+                <Th col="date" label="Date" />
+                <Th col="name" label="Name" />
+                <Th col="account" label="Mobile / Account" />
+                <Th col="amount" label="Amount" align="right" />
+                <Th col="profit" label="Profit Margin" align="right" />
+              </TableRow>
+            </TableHeader>
+            <TableBody>
+              {sorted.length === 0 ? (
+                <TableRow><TableCell colSpan={5} className="text-center py-12 text-muted-foreground">{search ? `No entries match "${search}".` : 'No transfers in this period.'}</TableCell></TableRow>
+              ) : sorted.map(e => (
+                <TableRow key={e.id} className="hover:bg-muted/30">
+                  <TableCell className="text-xs text-muted-foreground whitespace-nowrap">{format(e.createdAt.toDate(), 'dd MMM yyyy')}</TableCell>
+                  <TableCell className="font-medium">{e.name}</TableCell>
+                  <TableCell className="text-muted-foreground font-mono text-sm">{e.mobileOrAccount}</TableCell>
+                  <TableCell className="text-right tabular-nums font-medium">{formatCurrency(e.amount)}</TableCell>
+                  <TableCell className="text-right tabular-nums text-emerald-700 font-semibold">{formatCurrency(e.profitMargin)}</TableCell>
+                </TableRow>
+              ))}
+            </TableBody>
+          </Table>
+        </div>
+        {sorted.length > 0 && (
+          <div className="px-4 py-2 border-t text-xs text-muted-foreground">{sorted.length} transactions{search ? ` matching "${search}"` : ''}</div>
+        )}
+      </Card>
+    </div>
+  );
+}
+
+// ── Tab: Quick Action Work ────────────────────────────────────────────────────
+
+function QuickTab({ entries }: { entries: QuickActionEntry[] }) {
+  const sort = useSortState('count');
+  const Th = makeTh(sort);
+
+  const paid = entries.filter(e => resolveStatus(e.paymentStatus) === 'paid');
+
+  const rows = useMemo(() => {
+    const map: Record<string, { category: string; count: number; total: number }> = {};
+    paid.forEach(e => {
+      if (!map[e.category]) map[e.category] = { category: e.category, count: 0, total: 0 };
+      map[e.category].count++;
+      map[e.category].total += e.amount;
+    });
+    return Object.values(map);
+  }, [paid]);
+
+  const getValue = useCallback((r: { category: string; count: number; total: number }, col: string): string | number => {
+    switch (col) {
+      case 'category': return r.category;
+      case 'count':    return r.count;
+      case 'total':    return r.total;
+      default: return 0;
+    }
+  }, []);
+
+  const sorted = useMemo(() => sortRows(rows, sort.col, sort.dir, getValue), [rows, sort.col, sort.dir, getValue]);
+
+  const grandTotal = rows.reduce((s, r) => s + r.total, 0);
+  const grandCount = rows.reduce((s, r) => s + r.count, 0);
+
+  const exportCSV = () => {
+    downloadCSV(`quick-work-report-${format(new Date(), 'yyyy-MM-dd')}.csv`, [
+      ['Category', 'Count', 'Total Amount (₹)'],
+      ...sorted.map(r => [r.category, String(r.count), String(r.total)]),
+    ]);
+  };
+
+  return (
+    <div className="space-y-5">
+      <StatCards items={[
+        { label: 'Total Transactions', value: String(entries.length) },
+        { label: 'Paid Transactions',  value: String(paid.length) },
+        { label: 'Total Earned',       value: formatCurrency(grandTotal), cls: 'text-primary font-bold' },
+      ]} />
+
+      <div className="flex justify-end">
+        <Button variant="outline" size="sm" className="gap-1.5 h-9" onClick={exportCSV}><Download className="h-4 w-4" /> Export CSV</Button>
+      </div>
+
+      <Card>
+        <div className="overflow-x-auto">
+          <Table>
+            <TableHeader>
+              <TableRow>
+                <Th col="category" label="Category" />
+                <Th col="count" label="Count" align="right" />
+                <Th col="total" label="Total Amount" align="right" />
+              </TableRow>
+            </TableHeader>
+            <TableBody>
+              {sorted.length === 0 ? (
+                <TableRow><TableCell colSpan={3} className="text-center py-12 text-muted-foreground">No quick action work in this period.</TableCell></TableRow>
+              ) : sorted.map(r => (
+                <TableRow key={r.category} className="hover:bg-muted/30">
+                  <TableCell className="font-medium">{r.category}</TableCell>
+                  <TableCell className="text-right tabular-nums">{r.count}</TableCell>
+                  <TableCell className="text-right tabular-nums text-emerald-700 font-semibold">{formatCurrency(r.total)}</TableCell>
+                </TableRow>
+              ))}
+            </TableBody>
+          </Table>
+        </div>
+        {sorted.length > 0 && (
+          <div className="px-4 py-3 border-t bg-muted/20 flex justify-between text-sm font-semibold">
+            <span>Total ({grandCount} transactions)</span>
+            <span className="text-primary">{formatCurrency(grandTotal)}</span>
           </div>
         )}
       </Card>
@@ -829,19 +1182,26 @@ function CategoryTab({ work }: { work: WorkEntry[] }) {
 
 // ── Main Component ────────────────────────────────────────────────────────────
 
-// Tab definitions — extend here for Part 2 and Part 3
 const TABS: { key: TabKey; label: string }[] = [
-  { key: 'overview', label: 'Overview' },
-  { key: 'work', label: 'Work & Challan' },
-  { key: 'category', label: 'Category-wise' },
-  // Part 2: { key: 'financial', label: 'Financial Services' }
+  { key: 'overview',  label: 'Overview' },
+  { key: 'work',      label: 'Work & Challan' },
+  { key: 'category',  label: 'Category-wise' },
+  { key: 'aeps',      label: 'AEPS' },
+  { key: 'recharge',  label: 'Recharge' },
+  { key: 'transfer',  label: 'Money Transfer' },
+  { key: 'quick',     label: 'Quick Work' },
   // Part 3: { key: 'cashonline', label: 'Cash vs Online' }
 ];
 
 export default function ReportsPage() {
   const { isOwner } = useAuth();
   const [activeTab, setActiveTab] = useState<TabKey>('overview');
-  const [workEntries, setWorkEntries] = useState<WorkEntry[]>([]);
+
+  const [workEntries,     setWorkEntries]     = useState<WorkEntry[]>([]);
+  const [aepsEntries,     setAepsEntries]     = useState<AepsWithdrawal[]>([]);
+  const [rechargeEntries, setRechargeEntries] = useState<ElectricRecharge[]>([]);
+  const [transferEntries, setTransferEntries] = useState<MoneyTransfer[]>([]);
+  const [quickEntries,    setQuickEntries]    = useState<QuickActionEntry[]>([]);
   const [loading, setLoading] = useState(true);
 
   const [dateRange, setDateRange] = useState<DateRangeState>(() => {
@@ -850,99 +1210,86 @@ export default function ReportsPage() {
   });
 
   useEffect(() => {
-    const unsub = subscribeToWorkEntries(entries => {
-      setWorkEntries(entries);
-      setLoading(false);
-    });
-    return unsub;
+    let resolved = 0;
+    const done = () => { if (++resolved === 5) setLoading(false); };
+    const u1 = subscribeToWorkEntries(d => { setWorkEntries(d); done(); });
+    const u2 = subscribeToAepsWithdrawals(d => { setAepsEntries(d); done(); });
+    const u3 = subscribeToElectricRecharges(d => { setRechargeEntries(d); done(); });
+    const u4 = subscribeToMoneyTransfers(d => { setTransferEntries(d); done(); });
+    const u5 = subscribeToQuickActions(d => { setQuickEntries(d); done(); }, () => done());
+    return () => { u1(); u2(); u3(); u4(); u5(); };
   }, []);
 
-  // Filter to the selected date range
-  const filteredWork = useMemo(
-    () => workEntries.filter(e => inRange(e.date.toDate(), dateRange.from, dateRange.to)),
-    [workEntries, dateRange],
+  // Filter all collections to the selected date range
+  const fw = useMemo(() => workEntries    .filter(e => inRange(e.date.toDate(),      dateRange.from, dateRange.to)), [workEntries,     dateRange]);
+  const fa = useMemo(() => aepsEntries    .filter(e => inRange(e.createdAt.toDate(), dateRange.from, dateRange.to)), [aepsEntries,     dateRange]);
+  const fr = useMemo(() => rechargeEntries.filter(e => inRange(e.createdAt.toDate(), dateRange.from, dateRange.to)), [rechargeEntries, dateRange]);
+  const ft = useMemo(() => transferEntries.filter(e => inRange(e.createdAt.toDate(), dateRange.from, dateRange.to)), [transferEntries, dateRange]);
+  const fq = useMemo(() => quickEntries   .filter(e => inRange(e.createdAt.toDate(), dateRange.from, dateRange.to)), [quickEntries,    dateRange]);
+
+  if (!isOwner) return (
+    <div className="flex flex-col items-center justify-center py-24 text-center gap-4">
+      <div className="h-16 w-16 rounded-full bg-muted flex items-center justify-center">
+        <ShieldCheck className="h-8 w-8 text-muted-foreground" />
+      </div>
+      <h2 className="text-xl font-semibold">Access Restricted</h2>
+      <p className="text-muted-foreground max-w-xs">Reports are only visible to the Owner.</p>
+    </div>
   );
 
-  // ── Access guard ──────────────────────────────────────────────────────────
-  if (!isOwner) {
-    return (
-      <div className="flex flex-col items-center justify-center py-24 text-center gap-4">
-        <div className="h-16 w-16 rounded-full bg-muted flex items-center justify-center">
-          <ShieldCheck className="h-8 w-8 text-muted-foreground" />
-        </div>
-        <h2 className="text-xl font-semibold">Access Restricted</h2>
-        <p className="text-muted-foreground max-w-xs">
-          Reports are only visible to the Owner.
-        </p>
+  if (loading) return (
+    <div className="space-y-6 max-w-6xl">
+      <Skeleton className="h-8 w-48" />
+      <div className="flex gap-1 flex-wrap">
+        {TABS.map((_, i) => <Skeleton key={i} className="h-10 w-24 rounded" />)}
       </div>
-    );
-  }
-
-  if (loading) {
-    return (
-      <div className="space-y-6 max-w-6xl">
-        <Skeleton className="h-8 w-48" />
-        <div className="flex gap-2">
-          {[0, 1, 2].map(i => (
-            <Skeleton key={i} className="h-9 w-28 rounded-lg" />
-          ))}
-        </div>
-        <div className="flex gap-2 flex-wrap">
-          {[0, 1, 2, 3, 4].map(i => (
-            <Skeleton key={i} className="h-8 w-24 rounded-lg" />
-          ))}
-        </div>
-        <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
-          {[0, 1, 2, 3].map(i => (
-            <Skeleton key={i} className="h-28 rounded-xl" />
-          ))}
-        </div>
-        <Skeleton className="h-64 rounded-xl" />
+      <div className="flex gap-2 flex-wrap">
+        {[0,1,2,3,4].map(i => <Skeleton key={i} className="h-8 w-24 rounded-lg" />)}
       </div>
-    );
-  }
+      <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+        {[0,1,2,3].map(i => <Skeleton key={i} className="h-28 rounded-xl" />)}
+      </div>
+      <Skeleton className="h-64 rounded-xl" />
+    </div>
+  );
 
   return (
     <div className="space-y-6 max-w-6xl">
-      {/* Page header */}
       <div>
-        <h1
-          className="text-2xl font-bold"
-          style={{ fontFamily: 'var(--app-font-display)' }}
-        >
-          Reports
-        </h1>
-        <p className="text-muted-foreground text-sm mt-0.5">
-          Earnings, challan costs, and category analytics
-        </p>
+        <h1 className="text-2xl font-bold" style={{ fontFamily: 'var(--app-font-display)' }}>Reports</h1>
+        <p className="text-muted-foreground text-sm mt-0.5">Earnings, challan costs, and service analytics</p>
       </div>
 
-      {/* Tab navigation */}
-      <div className="flex items-center gap-0 border-b">
-        {TABS.map(tab => (
-          <button
-            key={tab.key}
-            onClick={() => setActiveTab(tab.key)}
-            className={`px-4 py-2.5 text-sm font-medium border-b-2 -mb-px transition-colors ${
-              activeTab === tab.key
-                ? 'border-primary text-primary'
-                : 'border-transparent text-muted-foreground hover:text-foreground'
-            }`}
-          >
-            {tab.label}
-          </button>
-        ))}
+      {/* Tab navigation — scrollable on mobile */}
+      <div className="overflow-x-auto -mx-4 px-4 sm:mx-0 sm:px-0">
+        <div className="flex items-center gap-0 border-b min-w-max">
+          {TABS.map(tab => (
+            <button
+              key={tab.key}
+              onClick={() => setActiveTab(tab.key)}
+              className={`px-4 py-2.5 text-sm font-medium border-b-2 -mb-px transition-colors whitespace-nowrap ${
+                activeTab === tab.key
+                  ? 'border-primary text-primary'
+                  : 'border-transparent text-muted-foreground hover:text-foreground'
+              }`}
+            >
+              {tab.label}
+            </button>
+          ))}
+        </div>
       </div>
 
-      {/* Date range filter — global, applies to all tabs */}
+      {/* Global date range filter */}
       <DateRangeFilter value={dateRange} onChange={setDateRange} />
 
       {/* Tab content */}
-      {activeTab === 'overview' && (
-        <OverviewTab work={filteredWork} dateRange={dateRange} />
-      )}
-      {activeTab === 'work' && <WorkChallanTab work={filteredWork} />}
-      {activeTab === 'category' && <CategoryTab work={filteredWork} />}
+      {activeTab === 'overview'  && <OverviewTab work={fw} aeps={fa} recharge={fr} transfer={ft} quick={fq} dateRange={dateRange} />}
+      {activeTab === 'work'      && <WorkChallanTab work={fw} />}
+      {activeTab === 'category'  && <CategoryTab work={fw} />}
+      {activeTab === 'aeps'      && <AepsTab entries={fa} dateRange={dateRange} />}
+      {activeTab === 'recharge'  && <RechargeTab entries={fr} dateRange={dateRange} />}
+      {activeTab === 'transfer'  && <TransferTab entries={ft} dateRange={dateRange} />}
+      {activeTab === 'quick'     && <QuickTab entries={fq} />}
     </div>
   );
 }
