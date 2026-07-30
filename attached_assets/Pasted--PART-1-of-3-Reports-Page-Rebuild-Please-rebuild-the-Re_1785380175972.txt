@@ -1,0 +1,38 @@
+# PART 1 of 3 — Reports Page Rebuild
+
+Please rebuild the Reports page in my CSC shop management app (AZAAN CSC Management) as a professional, tabbed reporting system. This is Part 1 of 3 — implement ONLY what's described below for now. I will provide Part 2 and Part 3 in follow-up messages to add more report tabs.
+
+## Data Sources (For Context)
+- `workEntries` collection: `totalAmount`, `challanAmount`, `payments` array (each with `amount`, `paymentMode`, `paidAt`, `addedBy`), `dueAmount`, `status`, `category`, `refundAmount` for rejected entries.
+
+## Page Structure — Start the Tabbed Layout
+Set up the Reports page with a tab/section navigation system (so more tabs can be added later in Part 2 and Part 3 without restructuring). For now, build these 3 tabs:
+
+### Tab 1: Overview
+- A consolidated "Total Profit" card for Work only right now (Work income collected minus challan costs, for the selected period) — this will be expanded to include other modules in Part 2, so structure the code so it's easy to add more profit sources later (e.g., a `profitSources` array/object you can extend).
+- Total Revenue Collected (from work entries) for the period.
+- Total Outstanding Due (from work entries) for the period — handle negative/overpaid `dueAmount` values by showing them as a separate "Total Overpaid/Credit" figure, not mixed into the due total.
+- A trend chart (line or bar) showing daily work profit over the selected date range.
+
+### Tab 2: Work & Challan Report
+- Total work entries, total amount collected, total challan spent, and net profit (collected minus challan) for the period.
+- A sortable/filterable table of individual work entries: Date, Customer, Category, Total Amount, Challan Amount, Paid Amount, Due Amount, Status.
+- Separate callout for Rejected/Refunded entries: count and total refund amount given, shown separately (not counted as profit loss in the main numbers).
+
+### Tab 3: Category-wise Report
+- A breakdown table grouped by Work Category (PAN Card, Aadhar, Voter ID, DL, Ration Card, etc.): number of entries, total amount collected, total challan spent, net profit — for the selected period.
+- Sortable by any column.
+
+## Global Features (Build These Now, Apply to All Tabs)
+1. Date range filter available on every tab — quick presets (Today, Yesterday, This Week, This Month, Last Month) plus a custom date range picker.
+2. CSV export button on each tab/table.
+3. Search/filter within tables where relevant (e.g., search by customer name).
+4. All monetary values formatted with ₹ and comma separators (e.g., ₹12,450).
+5. Visual design consistent with the rest of the app (cards, tables, charts matching existing colors/spacing/fonts).
+6. This page remains strictly Owner-only, consistent with the existing role-based access system.
+7. Handle legacy work entries without a `payments` array (treat their single `paidAmount` as total paid) and entries without a `paymentMode` field (default to "Cash") without breaking.
+
+## Important Notes
+- Structure the code so it's easy to add more tabs later (Part 2 will add AEPS/Recharge/Money Transfer/Quick Action Work reports, Part 3 will add a Cash vs Online report and final polish).
+- This can be a full rebuild of the Reports component — restructure cleanly rather than patching, but keep the same route/navigation link.
+- Test with real work entry data across a few date ranges to confirm accuracy before I send Part 2.
