@@ -1,0 +1,50 @@
+I'm getting this error when the Owner tries to create a new Staff account from the "Add Team Member" form in Settings:
+
+"Error creating account: Missing or insufficient permissions."
+
+This happens right when clicking "Create Staff Account". Please diagnose and fix this. Here are the most likely causes — please check both:
+
+Likely Cause 1: Writing the Firestore user document with the wrong auth context
+If the app uses a secondary/temporary Firebase app instance to call createUserWithEmailAndPassword (to avoid signing out the Owner), please check EXACTLY what happens after the new user is created:
+
+The new Auth user should be created via the secondary Firebase app instance.
+Immediately after, the secondary app instance should be signed out and cleaned up (deleted).
+The Firestore document at users/{newUserUid} (with fields like role, fullName, email, staffId, permission booleans, etc.) must then be written using the PRIMARY Firebase app's Firestore instance — the one still authenticated as the currently logged-in Owner — NOT using the secondary app's Firestore instance (which would be authenticated as the brand-new staff user, who has no permission to create their own elevated document).
+If the code is currently writing this document through the secondary app's Firestore reference (even briefly, before signing it out), that is very likely the exact cause of "Missing or insufficient permissions" — please fix the order of operations so the Firestore write always happens via the primary app instance, authenticated as the Owner, after the secondary app's auth user creation is fully done and cleaned up.
+
+Likely Cause 2: Firestore Security Rules for the users collection
+Please also review the current Firestore Security Rules for the users collection and confirm:
+
+A logged-in user whose own users/{their_uid} document has role == "owner" should be allowed to CREATE a new document at users/{any_new_uid} (for onboarding staff).
+Double check the rule correctly reads the CURRENT user's role from their own existing document (via `get(/databases/
+(
+d
+a
+t
+a
+b
+a
+s
+e
+)
+/
+d
+o
+c
+u
+m
+e
+n
+t
+s
+/
+u
+s
+e
+r
+s
+/
+(request.auth.uid)).data.role`) rather than incorrectly checking the role on the document being created (which wouldn't exist as "owner" yet, since it belongs to the new staff member).
+Confirm the rule doesn't require fields that the app isn't actually sending (mismatched field validation can also cause "permission denied" style errors in some rule configurations) — compare exactly what fields/types the "Create Staff Account" form sends versus what the rules expect for a new users document.
+After Fixing
+Please test the full flow end to end: Owner logs in, goes to Settings → Staff → Add Team Member, fills in Full Name, Email, Password, selects a Role (Staff or Manager), toggles "Allow access to AEPS, Recharge & Money Transfer" if needed, and clicks "Create Staff Account" — confirm the account is created successfully with no permission error, the Owner remains logged in throughout, and the new staff member appears in the "Team Members" list below.
