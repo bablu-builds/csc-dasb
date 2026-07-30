@@ -1,0 +1,24 @@
+# PART 3 of 3 — Reports Page Rebuild
+
+This is the final part, continuing from Part 1 (Overview, Work & Challan, Category-wise tabs) and Part 2 (AEPS, Recharge, Money Transfer, Quick Action Work tabs). Now add the last tab and do a final consistency/polish pass across the whole Reports page.
+
+## New Tab
+
+### Tab 8: Cash vs Online Report
+- Total amount collected via Cash vs Online, combined across all modules that track `paymentMode` (Work payments, AEPS, Recharge, Money Transfer), for the selected period.
+- Show as a simple comparison — a donut or bar chart plus a summary table — so the Owner can see cash-in-hand vs digital collections at a glance.
+- Default any records without a `paymentMode` field to "Cash" (for backward compatibility with older data).
+
+## Final Consistency & Polish Pass
+1. Go through all 8 tabs (Overview, Work & Challan, Category-wise, AEPS, Recharge, Money Transfer, Quick Action Work, Cash vs Online) and confirm:
+   - The date range filter works identically and correctly on every tab.
+   - CSV export works on every tab/table.
+   - All monetary values are formatted consistently with ₹ and comma separators everywhere.
+   - Visual design (cards, tables, charts, colors, spacing) is fully consistent across all tabs — no tab should look like it belongs to a different app.
+2. Confirm the whole Reports page remains strictly Owner-only (Staff cannot access it), consistent with the existing role-based access system.
+3. Double-check edge cases across all tabs: legacy work entries without a `payments` array, negative/overpaid `dueAmount` values shown as a separate "Overpaid/Credit" figure (not mixed into due totals), and any records missing a `paymentMode` field defaulting correctly to "Cash".
+4. Do a final test pass: pick a custom date range spanning data from all modules (Work, AEPS, Recharge, Money Transfer, Quick Action Work) and confirm every tab's numbers are accurate and consistent with each other (e.g., the Overview tab's combined profit total should match the sum of what each individual module's tab reports for the same period).
+
+## Important Notes
+- This completes the full Reports page rebuild — after this, the page should feel like one cohesive, professional reporting dashboard rather than 8 separately-built sections.
+- Do not change any underlying Firestore data structure — this is purely about reading and presenting existing data well.
