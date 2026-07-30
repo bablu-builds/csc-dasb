@@ -13,19 +13,20 @@ interface NavItem {
   label: string;
   icon: React.ElementType;
   isPrimary?: boolean;
-  /** Only show to owner */
   ownerOnly?: boolean;
-  /** Show to owner + manager */
   ownerOrManagerOnly?: boolean;
   financialOnly?: boolean;
+  requireCanManageWork?: boolean;
+  requireCanAccessQuickWork?: boolean;
+  requireCanViewDeletedItems?: boolean;
 }
 
 const mainNavItems: NavItem[] = [
   { href: '/dashboard', label: 'Dashboard', icon: LayoutDashboard },
-  { href: '/work/new', label: 'Add Work Entry', icon: PlusCircle, isPrimary: true },
+  { href: '/work/new', label: 'Add Work Entry', icon: PlusCircle, isPrimary: true, requireCanManageWork: true },
   { href: '/work', label: 'All Work', icon: List },
   { href: '/pending', label: 'Pending Work', icon: Clock },
-  { href: '/quick-work', label: 'Quick Action Work', icon: Printer },
+  { href: '/quick-work', label: 'Quick Action Work', icon: Printer, requireCanAccessQuickWork: true },
 ];
 
 const financialNavItems: NavItem[] = [
@@ -37,7 +38,7 @@ const financialNavItems: NavItem[] = [
 const adminNavItems: NavItem[] = [
   { href: '/reports', label: 'Reports', icon: BarChart3, ownerOrManagerOnly: true },
   { href: '/settings', label: 'Settings', icon: Settings },
-  { href: '/deleted', label: 'Deleted Items', icon: Trash2 },
+  { href: '/deleted', label: 'Deleted Items', icon: Trash2, requireCanViewDeletedItems: true },
 ];
 
 function NavLink({ item, isActive, onClick }: {
@@ -67,9 +68,10 @@ function NavLink({ item, isActive, onClick }: {
   );
 }
 
-function SidebarContent({ location, onNav, isOwner, isManager, canAccessFinancialServices, shopName, displayName, userEmail, logout }: {
+function SidebarContent({ location, onNav, isOwner, isManager, canAccessFinancialServices, canManageWork, canAccessQuickWork, canViewDeletedItems, shopName, displayName, userEmail, logout }: {
   location: string; onNav?: () => void;
   isOwner: boolean; isManager: boolean; canAccessFinancialServices: boolean;
+  canManageWork: boolean; canAccessQuickWork: boolean; canViewDeletedItems: boolean;
   shopName: string; displayName: string; userEmail: string; logout: () => void;
 }) {
   const initial = (displayName[0] || 'U').toUpperCase();
@@ -79,6 +81,15 @@ function SidebarContent({ location, onNav, isOwner, isManager, canAccessFinancia
     : isManager
     ? 'bg-violet-500/20 text-violet-300'
     : 'bg-sidebar-accent text-sidebar-foreground';
+
+  const shouldShowItem = (item: NavItem): boolean => {
+    if (item.ownerOnly && !isOwner) return false;
+    if (item.ownerOrManagerOnly && !isOwner && !isManager) return false;
+    if (item.requireCanManageWork && !canManageWork) return false;
+    if (item.requireCanAccessQuickWork && !canAccessQuickWork) return false;
+    if (item.requireCanViewDeletedItems && !canViewDeletedItems) return false;
+    return true;
+  };
 
   return (
     <div className="flex flex-col h-full bg-sidebar">
@@ -98,7 +109,7 @@ function SidebarContent({ location, onNav, isOwner, isManager, canAccessFinancia
       {/* Nav */}
       <nav className="flex-1 px-3 py-4 space-y-0.5 overflow-y-auto">
         {/* Main */}
-        {mainNavItems.map(item => (
+        {mainNavItems.filter(shouldShowItem).map(item => (
           <NavLink key={item.href} item={item} isActive={location === item.href} onClick={onNav} />
         ))}
 
@@ -122,15 +133,9 @@ function SidebarContent({ location, onNav, isOwner, isManager, canAccessFinancia
             Admin
           </span>
         </div>
-        {adminNavItems
-          .filter(item => {
-            if (item.ownerOnly) return isOwner;
-            if (item.ownerOrManagerOnly) return isOwner || isManager;
-            return true;
-          })
-          .map(item => (
-            <NavLink key={item.href} item={item} isActive={location === item.href} onClick={onNav} />
-          ))}
+        {adminNavItems.filter(shouldShowItem).map(item => (
+          <NavLink key={item.href} item={item} isActive={location === item.href} onClick={onNav} />
+        ))}
       </nav>
 
       {/* User Footer */}
@@ -160,7 +165,7 @@ function SidebarContent({ location, onNav, isOwner, isManager, canAccessFinancia
 }
 
 export function Layout({ children }: { children: React.ReactNode }) {
-  const { logout, isConfigured, isOwner, isManager, canAccessFinancialServices, displayName, user } = useAuth();
+  const { logout, isConfigured, isOwner, isManager, canAccessFinancialServices, canManageWork, canAccessQuickWork, canViewDeletedItems, displayName, user } = useAuth();
   const { shopSettings } = useSettings();
   const [location] = useLocation();
   const [drawerOpen, setDrawerOpen] = useState(false);
@@ -170,6 +175,9 @@ export function Layout({ children }: { children: React.ReactNode }) {
     isOwner,
     isManager,
     canAccessFinancialServices,
+    canManageWork,
+    canAccessQuickWork,
+    canViewDeletedItems,
     shopName: shopSettings.shopName,
     displayName,
     userEmail: user?.email || '',

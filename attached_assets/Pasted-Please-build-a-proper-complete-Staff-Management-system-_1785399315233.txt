@@ -1,0 +1,36 @@
+Please build a proper, complete Staff Management system in my CSC shop management app (AZAAN CSC Management), upgrading the current basic Owner/Staff setup into a full staff ID and permissions system.
+
+1. Staff ID (Unique Employee Code)
+When the Owner creates a new staff account, automatically generate a unique, human-readable Staff ID for them (e.g., STAFF001, STAFF002, incrementing automatically — or a short code based on their name + number, whichever is simpler to implement reliably). Store this as a staffId field on their users document.
+Display this Staff ID clearly everywhere the staff member is referenced: the Staff Management list, their profile, and anywhere their name appears in reports (e.g., "Rahul (STAFF002)").
+Also add a phone (mobile number, optional) and fullName field to the staff account, collected when the Owner creates the account, so staff are identified by name (not just email) throughout the app.
+2. Full Staff Management Page (Settings → Staff)
+Rebuild the Staff Management section to include:
+
+Staff List — a table/list of all staff showing: Staff ID, Full Name, Email, Phone, Status (Active/Inactive), Date Added, and quick action buttons (Edit, Deactivate/Reactivate).
+Add New Staff form with: Full Name, Email, Phone, Password (Owner sets it directly, as already implemented), and the permission toggles described in Section 3 below.
+Edit Staff — allow the Owner to update a staff member's Full Name, Phone, and permissions at any time (email should not be editable once created, since it's tied to their login).
+Deactivate/Reactivate — instead of only deleting staff accounts, add a way to deactivate a staff member (disable their ability to log in) without deleting their historical data or the work entries they've added (so past records like "Added by: Rahul" still display correctly even if Rahul is later deactivated). A deactivated staff member should see a clear "Your account has been deactivated, please contact the shop owner" message if they try to log in. Reactivating restores their login access.
+Reset Password — allow the Owner to set a new password for an existing staff member directly from this page (for cases where staff forget their password), using the same safe technique already used for account creation (secondary Firebase app instance, so the Owner's own session is never interrupted).
+3. Granular Work-Related Permissions Per Staff
+Replace the single canAccessFinancialServices toggle with a clearer set of individual permission toggles the Owner can control per staff member when adding or editing them:
+
+Manage Work Entries (add/edit CSC work entries — Aadhar, PAN, certificates, etc.) — most staff should have this on by default.
+Access AEPS, Recharge & Money Transfer — same as the existing financial services permission.
+Access Quick Action Work (Printout, Lamination, Xerox, etc.)
+View Deleted Items (view/restore recycle bin) — separate from managing work, since not all staff should necessarily see deleted history.
+Each of these should be a simple on/off toggle per staff member, stored as boolean fields on their users document (e.g., canManageWork, canAccessFinancialServices, canAccessQuickWork, `canViewDeletedItems`). Navigation links and page access should be hidden/blocked based on these individual permissions, exactly like the existing pattern for financial services access (hidden from nav if not permitted, and blocked with a friendly message if accessed directly via URL). Enforce all of this at the Firestore Security Rules level too, not just in the UI.
+
+The Owner always has all permissions regardless of these toggles.
+
+4. Staff Work Summary (For Owner)
+On each staff member's row/profile in the Staff Management page (or a small expandable detail view), show a quick summary for the Owner only:
+
+Total number of work entries this staff member has added (all-time, based on the addedBy field already tracked on work entries).
+Total number of entries they've added that are still Pending vs Completed.
+This gives the Owner a quick way to see how active/productive each staff member has been, without needing to go to the full Reports page.
+
+Important Notes
+Do not break the existing Owner login or any current staff accounts — existing staff without a staffId yet should have one auto-generated for them the next time the Staff Management page loads (a simple one-time backfill), without disrupting their access.
+Keep the UI clean and simple — this is still meant to be easy for a non-technical shop owner to use, even though it now has more options.
+Test thoroughly: create a new staff member with a generated Staff ID and specific permissions, confirm they only see what they're permitted to, deactivate them and confirm they're blocked from login, then reactivate and confirm access returns, and reset their password and confirm they can log in with the new one.

@@ -16,7 +16,20 @@ export interface UserProfile {
   role: 'owner' | 'manager' | 'staff';
   createdAt: Timestamp;
   invitedBy?: string;
-  canAccessFinancialServices?: boolean;
+
+  // Staff identity
+  staffId?: string;   // e.g. "STAFF001" — auto-generated, unique
+  phone?: string;     // optional mobile number
+
+  // Account status
+  isActive?: boolean;       // false = deactivated; undefined/missing = active
+  deactivatedAt?: Timestamp;
+
+  // Granular permissions (owner + manager always have all)
+  canManageWork?: boolean;              // Add/edit CSC work entries (default true for backward compat)
+  canAccessFinancialServices?: boolean; // AEPS, Recharge, Money Transfer (default false)
+  canAccessQuickWork?: boolean;         // Quick Action Work (default true for backward compat)
+  canViewDeletedItems?: boolean;        // View/restore recycle bin (default true for backward compat)
 }
 
 /** Fetch a user's profile document. Returns null if not found. */
@@ -74,6 +87,7 @@ export const bootstrapUserProfile = async (
     displayName: displayName || email.split('@')[0],
     role: 'owner',
     createdAt: Timestamp.now(),
+    isActive: true,
   };
   await setDoc(doc(db, 'users', uid), profile);
   return { uid, ...profile };
@@ -82,7 +96,6 @@ export const bootstrapUserProfile = async (
 /** Subscribe to all non-owner members (role = 'staff' or 'manager'). */
 export const subscribeToStaff = (callback: (staff: UserProfile[]) => void) => {
   if (!db) return () => {};
-  // Use 'in' without orderBy to avoid composite index; sort client-side
   const q = query(collection(db, 'users'), where('role', 'in', ['staff', 'manager']));
   return onSnapshot(q, (snap) => {
     const staff: UserProfile[] = [];
@@ -96,6 +109,34 @@ export const subscribeToStaff = (callback: (staff: UserProfile[]) => void) => {
 };
 
 /**
+ * Generate the next available staff ID (e.g. "STAFF003").
+ * Reads all user docs, finds the highest existing STAFF number, increments.
+ */
+export const generateNextStaffId = async (): Promise<string> => {
+  if (!db) return 'STAFF001';
+  const snap = await getDocs(collection(db, 'users'));
+  let maxNum = 0;
+  snap.forEach(d => {
+    const data = d.data();
+    if (data.staffId && typeof data.staffId === 'string') {
+      const match = (data.staffId as string).match(/^STAFF(\d+)$/);
+      if (match) {
+        const n = parseInt(match[1], 10);
+        if (n > maxNum) maxNum = n;
+      }
+    }
+  });
+  return `STAFF${String(maxNum + 1).padStart(3, '0')}`;
+};
+
+export interface StaffPermissions {
+  canManageWork?: boolean;
+  canAccessFinancialServices?: boolean;
+  canAccessQuickWork?: boolean;
+  canViewDeletedItems?: boolean;
+}
+
+/**
  * Create a staff/manager Firebase Auth account + Firestore profile without interrupting the owner's session.
  * Uses a secondary (temporary) Firebase app instance so the owner stays signed in.
  */
@@ -104,28 +145,134 @@ export const createStaffAccount = async (
   email: string,
   password: string,
   ownerEmail: string,
-  canAccessFinancialServices = false,
+  permissions: StaffPermissions = {},
+  phone?: string,
   role: 'manager' | 'staff' = 'staff',
 ): Promise<void> => {
   if (!db) throw new Error('Firebase not configured');
+  const staffId = await generateNextStaffId();
   const tempAppName = `staff-creation-${Date.now()}`;
   const secondaryApp = initializeApp(firebaseConfig, tempAppName);
   const secondaryAuth = getAuth(secondaryApp);
   try {
     const cred = await createUserWithEmailAndPassword(secondaryAuth, email, password);
-    await setDoc(doc(db, 'users', cred.user.uid), {
+    const isManager = role === 'manager';
+    const profileData: Record<string, unknown> = {
       email,
       displayName: name,
       role,
+      staffId,
       createdAt: Timestamp.now(),
       invitedBy: ownerEmail,
-      // Managers always have financial access; only store flag for staff
-      canAccessFinancialServices: role === 'manager' ? true : canAccessFinancialServices,
-    });
+      isActive: true,
+      // Permissions — managers get everything; staff use supplied values
+      canManageWork: isManager ? true : (permissions.canManageWork ?? true),
+      canAccessFinancialServices: isManager ? true : (permissions.canAccessFinancialServices ?? false),
+      canAccessQuickWork: isManager ? true : (permissions.canAccessQuickWork ?? false),
+      canViewDeletedItems: isManager ? true : (permissions.canViewDeletedItems ?? false),
+    };
+    if (phone && phone.trim()) profileData.phone = phone.trim();
+    await setDoc(doc(db, 'users', cred.user.uid), profileData);
   } finally {
     await firebaseSignOut(secondaryAuth).catch(() => {});
     await deleteApp(secondaryApp).catch(() => {});
   }
+};
+
+/** Update editable staff fields (name, phone, permissions). */
+export const updateStaffProfile = async (
+  uid: string,
+  data: {
+    displayName?: string;
+    phone?: string;
+    canManageWork?: boolean;
+    canAccessFinancialServices?: boolean;
+    canAccessQuickWork?: boolean;
+    canViewDeletedItems?: boolean;
+  },
+): Promise<void> => {
+  if (!db) throw new Error('Firebase not configured');
+  const updates: Record<string, unknown> = {};
+  if (data.displayName !== undefined) updates.displayName = data.displayName;
+  if (data.phone !== undefined) updates.phone = data.phone;
+  if (data.canManageWork !== undefined) updates.canManageWork = data.canManageWork;
+  if (data.canAccessFinancialServices !== undefined) updates.canAccessFinancialServices = data.canAccessFinancialServices;
+  if (data.canAccessQuickWork !== undefined) updates.canAccessQuickWork = data.canAccessQuickWork;
+  if (data.canViewDeletedItems !== undefined) updates.canViewDeletedItems = data.canViewDeletedItems;
+  await updateDoc(doc(db, 'users', uid), updates);
+};
+
+/** Deactivate a staff member — keeps Firestore doc + historical data intact, blocks login. */
+export const deactivateStaff = async (uid: string): Promise<void> => {
+  if (!db) throw new Error('Firebase not configured');
+  await updateDoc(doc(db, 'users', uid), { isActive: false, deactivatedAt: Timestamp.now() });
+};
+
+/** Reactivate a previously deactivated staff member. */
+export const reactivateStaff = async (uid: string): Promise<void> => {
+  if (!db) throw new Error('Firebase not configured');
+  await updateDoc(doc(db, 'users', uid), { isActive: true, deactivatedAt: null });
+};
+
+/**
+ * One-time backfill: generate staffIds for any staff/manager docs that don't have one yet.
+ * Safe to call multiple times — skips docs that already have a staffId.
+ */
+export const backfillStaffIds = async (): Promise<void> => {
+  if (!db) return;
+  const snap = await getDocs(collection(db, 'users'));
+  let maxNum = 0;
+  const docsNeedingId: string[] = [];
+
+  snap.forEach(d => {
+    const data = d.data();
+    if (data.staffId && typeof data.staffId === 'string') {
+      const match = (data.staffId as string).match(/^STAFF(\d+)$/);
+      if (match) maxNum = Math.max(maxNum, parseInt(match[1], 10));
+    } else if (data.role !== 'owner') {
+      docsNeedingId.push(d.id);
+    }
+  });
+
+  if (docsNeedingId.length === 0) return;
+
+  const batch = writeBatch(db);
+  docsNeedingId.forEach(id => {
+    maxNum++;
+    batch.update(doc(db, 'users', id), {
+      staffId: `STAFF${String(maxNum).padStart(3, '0')}`,
+    });
+  });
+  await batch.commit();
+};
+
+/** Get work entry counts for a staff member (by their display name and email). */
+export const getStaffWorkStats = async (
+  displayName: string,
+  email: string,
+): Promise<{ total: number; pending: number; completed: number }> => {
+  if (!db) return { total: 0, pending: 0, completed: 0 };
+  const identifiers = [...new Set([displayName, email].filter(Boolean))];
+  const seenIds = new Set<string>();
+  const entries: Array<{ id: string; status: string; isDeleted?: boolean }> = [];
+
+  await Promise.all(identifiers.map(async (identifier) => {
+    const q = query(collection(db, 'workEntries'), where('addedBy', '==', identifier));
+    const snap = await getDocs(q);
+    snap.forEach(d => {
+      if (!seenIds.has(d.id)) {
+        seenIds.add(d.id);
+        const data = d.data();
+        if (!data.isDeleted) entries.push({ id: d.id, status: data.status, isDeleted: data.isDeleted });
+      }
+    });
+  }));
+
+  return {
+    total: entries.length,
+    pending: entries.filter(e => e.status === 'Pending').length,
+    completed: entries.filter(e => e.status === 'Completed').length,
+  };
 };
 
 /** Update a staff/manager member's role. Only owner may call this. */
@@ -140,7 +287,7 @@ export const updateStaffPermissions = async (uid: string, canAccessFinancialServ
   await updateDoc(doc(db, 'users', uid), { canAccessFinancialServices });
 };
 
-/** Revoke a staff member's access by removing their Firestore profile. */
+/** Permanently revoke a staff member's access by removing their Firestore profile. */
 export const revokeStaffAccess = async (uid: string): Promise<void> => {
   if (!db) throw new Error('Firebase not configured');
   await deleteDoc(doc(db, 'users', uid));
@@ -214,9 +361,6 @@ export interface DealAdjustment {
 /**
  * Record a deal adjustment and keep the parent WorkEntry's denormalized
  * fields (netAdjustmentAmount, netAdjustmentChallan, dueAmount) in sync.
- *
- * Uses two sequential writes (sub-collection + parent update). Safe in both
- * real Firestore and the in-memory mock.
  */
 export const addAdjustment = async (
   entryId: string,
@@ -226,7 +370,6 @@ export const addAdjustment = async (
   if (!db) throw new Error('Firebase not configured');
   const now = Timestamp.now();
 
-  // 1. Write to flat workAdjustments collection (works in mock + real Firestore)
   await addDoc(collection(db, 'workAdjustments'), {
     entryId,
     amountChange: data.amountChange,
@@ -236,7 +379,6 @@ export const addAdjustment = async (
     createdAt: now,
   });
 
-  // 2. Update denormalized fields + recalculate dueAmount on parent entry
   const newNetAmount = (currentEntry.netAdjustmentAmount ?? 0) + data.amountChange;
   const newNetChallan = (currentEntry.netAdjustmentChallan ?? 0) + data.challanChange;
   const finalTotal = currentEntry.totalAmount + newNetAmount;
@@ -307,7 +449,6 @@ export const createWorkEntry = async (
     ? stripUndefined({ rejectionReason, refundAmount } as Record<string, unknown>)
     : {};
 
-  // Only create initial payment record for Cash/Online (not Due/None)
   const mode = data.paymentMode ?? 'Cash';
   const initialPayments: PaymentRecord[] = (data.paidAmount > 0 && (mode === 'Cash' || mode === 'Online'))
     ? [{ amount: data.paidAmount, paidAt: now, addedBy: data.addedBy ?? 'Unknown', paymentMode: mode as SettlementMode }]
@@ -325,8 +466,6 @@ export const createWorkEntry = async (
 export const updateWorkEntry = async (
   id: string,
   data: Partial<Omit<WorkEntry, 'id' | 'dueAmount' | 'createdAt' | 'completedAt' | 'rejectedAt'>>,
-  /** Pass the current Firestore paidAmount when NOT sending paidAmount in data,
-   *  so dueAmount can still be recalculated correctly when totalAmount changes. */
   currentPaidAmount?: number
 ) => {
   if (!db) throw new Error("Firebase not configured");
@@ -338,7 +477,6 @@ export const updateWorkEntry = async (
 
   const updates: Record<string, unknown> = { ...stripUndefined(rest as Record<string, unknown>), ...rejectionFields };
 
-  // Use the explicitly-passed paidAmount (new entries) or the currentPaidAmount from Firestore (edit form)
   const effectivePaidAmount = data.paidAmount ?? currentPaidAmount;
 
   if (data.status === 'Rejected') {
@@ -372,7 +510,6 @@ export const restoreWorkEntry = async (id: string) => {
 
 /**
  * Record an additional payment against a work entry.
- * Appends to the `payments` array and keeps `paidAmount` in sync.
  */
 export const addPaymentToEntry = async (
   id: string,
@@ -382,7 +519,6 @@ export const addPaymentToEntry = async (
 ): Promise<void> => {
   if (!db) throw new Error("Firebase not configured");
   const newPaidAmount = currentPaidAmount + payment.amount;
-  // Allow negative dueAmount to represent overpayment — do NOT clamp at 0
   const newDueAmount = totalAmount - newPaidAmount;
   const paymentRecord: PaymentRecord = {
     amount: payment.amount,
@@ -520,11 +656,8 @@ export interface AepsWithdrawal {
   mobile?: string;
   amount: number;
   profitMargin: number;
-  /** Full 4-option payment mode selected at creation time. */
   paymentMode?: PaymentMode;
-  /** Derived from paymentMode; 'paid' for legacy entries without this field. */
   paymentStatus?: PaymentStatus;
-  /** Set when a 'Due' entry is settled — which mode was used. */
   settledVia?: SettlementMode;
   settledAt?: Timestamp;
   settledBy?: string;
@@ -687,7 +820,6 @@ export interface PaymentHistoryRecord {
   entryType: PaymentHistoryEntryType;
   entryId: string;
   amount: number;
-  /** The settlement method (Cash/Online — always a SettlementMode, never Due/None) */
   mode: SettlementMode;
   originalMode: 'Due';
   settledAt: Timestamp;
@@ -704,13 +836,6 @@ const COLLECTION_MAP: Record<PaymentHistoryEntryType, string> = {
   work: 'workEntries',
 };
 
-/**
- * Settle a pending (Due) entry atomically:
- * 1. Updates the entry: paymentStatus='paid', settledVia, settledAt, settledBy
- * 2. Creates a record in `paymentHistory`
- *
- * Safe for both real Firestore and the in-memory mock.
- */
 export const settlePendingEntry = async (
   entryType: PaymentHistoryEntryType,
   entryId: string,
@@ -725,7 +850,6 @@ export const settlePendingEntry = async (
   if (!db) throw new Error('Firebase not configured');
   const now = Timestamp.now();
 
-  // 1. Update the entry itself
   const colName = COLLECTION_MAP[entryType];
   await updateDoc(doc(db, colName, entryId), {
     paymentStatus: 'paid' as PaymentStatus,
@@ -734,7 +858,6 @@ export const settlePendingEntry = async (
     settledBy,
   });
 
-  // 2. Create paymentHistory record
   const record: Omit<PaymentHistoryRecord, 'id'> = {
     entryType,
     entryId,
