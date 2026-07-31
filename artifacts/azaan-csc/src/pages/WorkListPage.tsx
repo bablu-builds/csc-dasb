@@ -1,11 +1,17 @@
 import { useState, useEffect, useMemo } from 'react';
 import { subscribeToWorkEntries, deleteWorkEntry, WorkEntry } from '@/lib/firestore';
 import { useSettings } from '@/contexts/SettingsContext';
-import { format, formatDistanceStrict } from 'date-fns';
+import {
+  format, formatDistanceStrict,
+  startOfDay, endOfDay,
+  startOfWeek, endOfWeek,
+  startOfMonth, endOfMonth,
+  isWithinInterval,
+} from 'date-fns';
 import { Link } from 'wouter';
 import {
   Search, MoreHorizontal, Edit, Trash2, History, Clock, CheckCircle2, XCircle,
-  ArrowUpDown, ArrowUp, ArrowDown, PlusCircle,
+  ArrowUpDown, ArrowUp, ArrowDown, PlusCircle, CalendarRange, UserCircle2, X,
 } from 'lucide-react';
 import { Input } from '@/components/ui/input';
 import { Button } from '@/components/ui/button';
@@ -26,10 +32,10 @@ import {
   Dialog, DialogContent, DialogHeader, DialogTitle,
 } from '@/components/ui/dialog';
 import { formatCurrency } from '@/lib/format';
-import { UserCircle2 } from 'lucide-react';
 
 type SortField = 'date' | 'totalAmount' | 'dueAmount' | 'status' | 'customerName';
 type SortDir = 'asc' | 'desc';
+type DateFilter = 'all' | 'today' | 'week' | 'month' | 'custom';
 
 function StatusBadge({ status }: { status: WorkEntry['status'] }) {
   if (status === 'Completed') return (
@@ -64,6 +70,7 @@ function TableSkeleton() {
           <td className="px-4 py-3"><Skeleton className="h-4 w-20" /></td>
           <td className="px-4 py-3"><Skeleton className="h-4 w-32 mb-1" /><Skeleton className="h-3 w-24" /></td>
           <td className="px-4 py-3"><Skeleton className="h-5 w-24 rounded-full" /></td>
+          <td className="px-4 py-3"><Skeleton className="h-4 w-20" /></td>
           <td className="px-4 py-3 text-right"><Skeleton className="h-4 w-16 ml-auto" /></td>
           <td className="px-4 py-3 text-right"><Skeleton className="h-4 w-12 ml-auto" /></td>
           <td className="px-4 py-3 text-center"><Skeleton className="h-5 w-20 mx-auto rounded-full" /></td>
@@ -74,12 +81,29 @@ function TableSkeleton() {
   );
 }
 
+/** Returns the interval for the chosen quick filter, or null for 'all' / when custom dates are incomplete. */
+function getDateInterval(filter: DateFilter, customFrom: string, customTo: string): { start: Date; end: Date } | null {
+  const now = new Date();
+  if (filter === 'today') return { start: startOfDay(now), end: endOfDay(now) };
+  if (filter === 'week')  return { start: startOfWeek(now, { weekStartsOn: 1 }), end: endOfWeek(now, { weekStartsOn: 1 }) };
+  if (filter === 'month') return { start: startOfMonth(now), end: endOfMonth(now) };
+  if (filter === 'custom' && customFrom && customTo) {
+    const s = startOfDay(new Date(customFrom));
+    const e = endOfDay(new Date(customTo));
+    if (!isNaN(s.getTime()) && !isNaN(e.getTime()) && s <= e) return { start: s, end: e };
+  }
+  return null;
+}
+
 export default function WorkListPage() {
   const [entries, setEntries] = useState<WorkEntry[]>([]);
   const [loading, setLoading] = useState(true);
   const [searchTerm, setSearchTerm] = useState('');
   const [statusFilter, setStatusFilter] = useState('All');
   const [categoryFilter, setCategoryFilter] = useState('All');
+  const [dateFilter, setDateFilter] = useState<DateFilter>('all');
+  const [customFrom, setCustomFrom] = useState('');
+  const [customTo, setCustomTo] = useState('');
   const [sortField, setSortField] = useState<SortField>('date');
   const [sortDir, setSortDir] = useState<SortDir>('desc');
   const { categories } = useSettings();
@@ -112,13 +136,19 @@ export default function WorkListPage() {
     else { setSortField(field); setSortDir('desc'); }
   };
 
+  const dateInterval = useMemo(
+    () => getDateInterval(dateFilter, customFrom, customTo),
+    [dateFilter, customFrom, customTo],
+  );
+
   const filteredAndSorted = useMemo(() => {
     const filtered = entries.filter(e => {
       const q = searchTerm.toLowerCase();
       const matchSearch = !q || e.customerName.toLowerCase().includes(q) || e.mobile.includes(q) || e.category.toLowerCase().includes(q);
       const matchStatus = statusFilter === 'All' || e.status === statusFilter;
       const matchCat = categoryFilter === 'All' || e.category === categoryFilter;
-      return matchSearch && matchStatus && matchCat;
+      const matchDate = !dateInterval || isWithinInterval(e.date.toDate(), dateInterval);
+      return matchSearch && matchStatus && matchCat && matchDate;
     });
     return [...filtered].sort((a, b) => {
       let cmp = 0;
@@ -129,9 +159,20 @@ export default function WorkListPage() {
       else if (sortField === 'customerName') cmp = a.customerName.localeCompare(b.customerName);
       return sortDir === 'asc' ? cmp : -cmp;
     });
-  }, [entries, searchTerm, statusFilter, categoryFilter, sortField, sortDir]);
+  }, [entries, searchTerm, statusFilter, categoryFilter, dateInterval, sortField, sortDir]);
 
   const mobileHistoryEntries = selectedMobile ? entries.filter(e => e.mobile === selectedMobile) : [];
+
+  const hasActiveFilters = searchTerm || statusFilter !== 'All' || categoryFilter !== 'All' || dateFilter !== 'all';
+
+  const clearAllFilters = () => {
+    setSearchTerm('');
+    setStatusFilter('All');
+    setCategoryFilter('All');
+    setDateFilter('all');
+    setCustomFrom('');
+    setCustomTo('');
+  };
 
   const ThHeader = ({ field, label, className = '' }: { field: SortField; label: string; className?: string }) => (
     <th className={`px-4 py-3 font-medium text-muted-foreground text-xs uppercase tracking-wide cursor-pointer select-none hover:text-foreground transition-colors ${className}`}
@@ -159,36 +200,91 @@ export default function WorkListPage() {
 
       <div className="bg-card border rounded-xl shadow-card">
         {/* Filters */}
-        <div className="p-4 border-b flex flex-col md:flex-row gap-3 bg-muted/10">
-          <div className="relative flex-1">
-            <Search className="absolute left-3.5 top-2.5 h-4 w-4 text-muted-foreground" />
-            <Input placeholder="Search name, mobile, or category..."
-              value={searchTerm} onChange={(e) => setSearchTerm(e.target.value)}
-              className="pl-10 h-10 bg-background" />
+        <div className="p-4 border-b space-y-3 bg-muted/10">
+          {/* Row 1: Search + Status + Category */}
+          <div className="flex flex-col md:flex-row gap-3">
+            <div className="relative flex-1">
+              <Search className="absolute left-3.5 top-2.5 h-4 w-4 text-muted-foreground" />
+              <Input placeholder="Search name, mobile, or category..."
+                value={searchTerm} onChange={(e) => setSearchTerm(e.target.value)}
+                className="pl-10 h-10 bg-background" />
+            </div>
+            <div className="flex gap-3 flex-wrap">
+              <Select value={statusFilter} onValueChange={setStatusFilter}>
+                <SelectTrigger className="w-[140px] h-10 bg-background">
+                  <SelectValue placeholder="Status" />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="All">All Status</SelectItem>
+                  <SelectItem value="Pending">🟡 Pending</SelectItem>
+                  <SelectItem value="Completed">🟢 Completed</SelectItem>
+                  <SelectItem value="Rejected">🔴 Rejected</SelectItem>
+                </SelectContent>
+              </Select>
+              <Select value={categoryFilter} onValueChange={setCategoryFilter}>
+                <SelectTrigger className="w-[180px] h-10 bg-background">
+                  <SelectValue placeholder="Category" />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="All">All Categories</SelectItem>
+                  {categories.map(c => (
+                    <SelectItem key={c.id} value={c.name}>{c.name}</SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
           </div>
-          <div className="flex gap-3">
-            <Select value={statusFilter} onValueChange={setStatusFilter}>
-              <SelectTrigger className="w-[140px] h-10 bg-background">
-                <SelectValue placeholder="Status" />
+
+          {/* Row 2: Date filter */}
+          <div className="flex flex-col sm:flex-row items-start sm:items-center gap-3">
+            <div className="flex items-center gap-2 text-xs text-muted-foreground shrink-0">
+              <CalendarRange className="h-4 w-4" />
+              <span className="font-medium uppercase tracking-wide">Date</span>
+            </div>
+            <Select value={dateFilter} onValueChange={(v) => { setDateFilter(v as DateFilter); setCustomFrom(''); setCustomTo(''); }}>
+              <SelectTrigger className="w-[160px] h-9 bg-background text-sm">
+                <SelectValue />
               </SelectTrigger>
               <SelectContent>
-                <SelectItem value="All">All Status</SelectItem>
-                <SelectItem value="Pending">🟡 Pending</SelectItem>
-                <SelectItem value="Completed">🟢 Completed</SelectItem>
-                <SelectItem value="Rejected">🔴 Rejected</SelectItem>
+                <SelectItem value="all">All Time</SelectItem>
+                <SelectItem value="today">Today</SelectItem>
+                <SelectItem value="week">This Week</SelectItem>
+                <SelectItem value="month">This Month</SelectItem>
+                <SelectItem value="custom">Custom Range</SelectItem>
               </SelectContent>
             </Select>
-            <Select value={categoryFilter} onValueChange={setCategoryFilter}>
-              <SelectTrigger className="w-[180px] h-10 bg-background">
-                <SelectValue placeholder="Category" />
-              </SelectTrigger>
-              <SelectContent>
-                <SelectItem value="All">All Categories</SelectItem>
-                {categories.map(c => (
-                  <SelectItem key={c.id} value={c.name}>{c.name}</SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
+
+            {dateFilter === 'custom' && (
+              <div className="flex items-center gap-2 flex-wrap">
+                <Input
+                  type="date"
+                  className="w-36 h-9 bg-background text-sm"
+                  value={customFrom}
+                  onChange={e => setCustomFrom(e.target.value)}
+                  placeholder="From"
+                />
+                <span className="text-muted-foreground text-sm">–</span>
+                <Input
+                  type="date"
+                  className="w-36 h-9 bg-background text-sm"
+                  value={customTo}
+                  min={customFrom}
+                  onChange={e => setCustomTo(e.target.value)}
+                  placeholder="To"
+                />
+              </div>
+            )}
+
+            {hasActiveFilters && (
+              <Button
+                variant="ghost"
+                size="sm"
+                onClick={clearAllFilters}
+                className="h-8 px-2 text-xs text-muted-foreground hover:text-foreground gap-1 ml-auto"
+              >
+                <X className="h-3.5 w-3.5" /> Clear filters
+              </Button>
+            )}
           </div>
         </div>
 
@@ -200,6 +296,7 @@ export default function WorkListPage() {
                 <ThHeader field="date" label="Date" />
                 <ThHeader field="customerName" label="Customer" />
                 <th className="px-4 py-3 font-medium text-muted-foreground text-xs uppercase tracking-wide">Category</th>
+                <th className="px-4 py-3 font-medium text-muted-foreground text-xs uppercase tracking-wide">Added By</th>
                 <ThHeader field="totalAmount" label="Total" className="text-right" />
                 <ThHeader field="dueAmount" label="Due" className="text-right" />
                 <ThHeader field="status" label="Status" className="text-center" />
@@ -211,7 +308,7 @@ export default function WorkListPage() {
                 <TableSkeleton />
               ) : filteredAndSorted.length === 0 ? (
                 <tr>
-                  <td colSpan={7} className="px-4 py-16 text-center">
+                  <td colSpan={8} className="px-4 py-16 text-center">
                     <div className="flex flex-col items-center text-muted-foreground">
                       <div className="h-12 w-12 rounded-full bg-muted flex items-center justify-center mb-3">
                         <Search className="h-5 w-5 opacity-40" />
@@ -243,6 +340,14 @@ export default function WorkListPage() {
                       <Badge variant="secondary" className="font-normal text-xs">
                         {entry.category === 'Other' && entry.otherCategory ? entry.otherCategory : entry.category}
                       </Badge>
+                    </td>
+                    <td className="px-4 py-3">
+                      <div className="flex items-center gap-1.5 text-xs text-muted-foreground">
+                        <UserCircle2 className="h-3.5 w-3.5 shrink-0 text-muted-foreground/60" />
+                        <span className="font-medium text-foreground truncate max-w-[100px]">
+                          {entry.addedBy || '—'}
+                        </span>
+                      </div>
                     </td>
                     <td className="px-4 py-3 text-right">
                       {(() => {
