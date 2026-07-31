@@ -986,8 +986,10 @@ function CashOnlineTab({
     const workActive = work.filter(e => e.status !== 'Rejected');
     const workTotals = calc(workActive.map(e => ({ mode: e.paymentMode, amount: e.paidAmount })));
 
+    // AEPS: only the profitMargin is shop income — the withdrawal amount is the
+    // customer's own money paid out in cash and must NOT count as shop revenue.
     const aepsPaid = aeps.filter(e => resolveStatus(e.paymentStatus) === 'paid');
-    const aepsTotals = calc(aepsPaid.map(e => ({ mode: e.paymentMode, amount: e.amount })));
+    const aepsTotals = calc(aepsPaid.map(e => ({ mode: e.paymentMode, amount: e.profitMargin })));
 
     const rechargePaid = recharge.filter(e => resolveStatus(e.paymentStatus) === 'paid');
     const rechargeTotals = calc(rechargePaid.map(e => ({ mode: e.paymentMode, amount: e.rechargeAmount })));
