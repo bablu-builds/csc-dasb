@@ -10,6 +10,16 @@ import { useRef, useState } from 'react';
 import { Eye, Download, Trash2, Plus, Loader2, FileText, Upload } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+} from '@/components/ui/alert-dialog';
 import { Timestamp } from 'firebase/firestore';
 import { format } from 'date-fns';
 import {
@@ -41,73 +51,78 @@ function FileRow({
   onDelete: () => void;
   deleting: boolean;
 }) {
-  const [confirmDelete, setConfirmDelete] = useState(false);
+  const [dialogOpen, setDialogOpen] = useState(false);
 
   return (
-    <div className="flex items-center gap-2 py-2.5 border-b last:border-b-0">
-      <FileText className="h-4 w-4 text-muted-foreground shrink-0" />
-      <div className="flex-1 min-w-0">
-        <p className="text-sm font-medium truncate">{file.name}</p>
-        {file.uploadedAt && (
-          <p className="text-xs text-muted-foreground">{formatTs(file.uploadedAt)}{file.addedBy ? ` · ${file.addedBy}` : ''}</p>
-        )}
-      </div>
+    <>
+      <div className="flex items-center gap-2 py-2.5 border-b last:border-b-0">
+        <FileText className="h-4 w-4 text-muted-foreground shrink-0" />
+        <div className="flex-1 min-w-0">
+          <p className="text-sm font-medium truncate">{file.name}</p>
+          {file.uploadedAt && (
+            <p className="text-xs text-muted-foreground">
+              {formatTs(file.uploadedAt)}{file.addedBy ? ` · ${file.addedBy}` : ''}
+            </p>
+          )}
+        </div>
 
-      {/* actions */}
-      <div className="flex items-center gap-1 shrink-0">
-        <a
-          href={file.fileUrl}
-          target="_blank"
-          rel="noopener noreferrer"
-          title="View"
-          className="inline-flex items-center justify-center h-8 w-8 rounded-md text-muted-foreground hover:text-foreground hover:bg-muted transition-colors"
-        >
-          <Eye className="h-4 w-4" />
-        </a>
-        <a
-          href={file.downloadUrl}
-          download
-          target="_blank"
-          rel="noopener noreferrer"
-          title="Download"
-          className="inline-flex items-center justify-center h-8 w-8 rounded-md text-muted-foreground hover:text-foreground hover:bg-muted transition-colors"
-        >
-          <Download className="h-4 w-4" />
-        </a>
-
-        {confirmDelete ? (
-          <div className="flex items-center gap-1">
-            <button
-              type="button"
-              onClick={() => setConfirmDelete(false)}
-              className="text-xs text-muted-foreground hover:text-foreground px-1.5"
-              disabled={deleting}
-            >
-              Cancel
-            </button>
-            <Button
-              type="button"
-              size="sm"
-              variant="destructive"
-              className="h-7 text-xs px-2"
-              onClick={onDelete}
-              disabled={deleting}
-            >
-              {deleting ? <Loader2 className="h-3 w-3 animate-spin" /> : 'Delete'}
-            </Button>
-          </div>
-        ) : (
+        {/* actions */}
+        <div className="flex items-center gap-1 shrink-0">
+          <a
+            href={file.fileUrl}
+            target="_blank"
+            rel="noopener noreferrer"
+            title="View"
+            className="inline-flex items-center justify-center h-8 w-8 rounded-md text-muted-foreground hover:text-foreground hover:bg-muted transition-colors"
+          >
+            <Eye className="h-4 w-4" />
+          </a>
+          <a
+            href={file.downloadUrl}
+            download
+            target="_blank"
+            rel="noopener noreferrer"
+            title="Download"
+            className="inline-flex items-center justify-center h-8 w-8 rounded-md text-muted-foreground hover:text-foreground hover:bg-muted transition-colors"
+          >
+            <Download className="h-4 w-4" />
+          </a>
           <button
             type="button"
-            title="Remove"
-            onClick={() => setConfirmDelete(true)}
-            className="inline-flex items-center justify-center h-8 w-8 rounded-md text-muted-foreground hover:text-destructive hover:bg-destructive/10 transition-colors"
+            title="Delete"
+            disabled={deleting}
+            onClick={() => setDialogOpen(true)}
+            className="inline-flex items-center justify-center h-8 w-8 rounded-md text-muted-foreground hover:text-destructive hover:bg-destructive/10 transition-colors disabled:opacity-40 disabled:cursor-not-allowed"
           >
-            <Trash2 className="h-4 w-4" />
+            {deleting
+              ? <Loader2 className="h-4 w-4 animate-spin" />
+              : <Trash2 className="h-4 w-4" />
+            }
           </button>
-        )}
+        </div>
       </div>
-    </div>
+
+      {/* Confirmation dialog */}
+      <AlertDialog open={dialogOpen} onOpenChange={setDialogOpen}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Delete "{file.name}"?</AlertDialogTitle>
+            <AlertDialogDescription>
+              This will remove the entry from the list. The file will remain on Cloudinary but will no longer be linked to this work entry.
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel>Cancel</AlertDialogCancel>
+            <AlertDialogAction
+              className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
+              onClick={() => { setDialogOpen(false); onDelete(); }}
+            >
+              Delete
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
+    </>
   );
 }
 
