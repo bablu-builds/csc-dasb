@@ -7,7 +7,7 @@ import {
   subscribeToQuickActions, QuickActionEntry,
 } from '@/lib/firestore';
 import { useAuth } from '@/contexts/AuthContext';
-import { isToday, isThisMonth, differenceInDays, subDays, format } from 'date-fns';
+import { isToday, isThisMonth, differenceInCalendarDays, subDays, format } from 'date-fns';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Skeleton } from '@/components/ui/skeleton';
 import {
@@ -216,7 +216,7 @@ export default function DashboardPage() {
   // Pending reminders (3+ days old, or has due amount)
   const reminderEntries = workEntries
     .filter(e => e.status === 'Pending')
-    .map(e => ({ ...e, daysPending: differenceInDays(today, e.date.toDate()) }))
+    .map(e => ({ ...e, daysPending: differenceInCalendarDays(today, e.date.toDate()) }))
     .filter(e => e.daysPending >= 3 || e.dueAmount > 0)
     .sort((a, b) => b.daysPending - a.daysPending);
 
