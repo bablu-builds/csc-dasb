@@ -17,7 +17,7 @@ import {
 } from '@/components/ui/select';
 import {
   Printer, IndianRupee, Hash, CalendarRange, Search,
-  PlusCircle, ChevronUp, Loader2, X, Zap,
+  PlusCircle, ChevronUp, Loader2, X, Zap, AlertCircle,
 } from 'lucide-react';
 import { PaymentModeSelector } from '@/components/PaymentModeSelector';
 import { PaymentModeBadge } from '@/components/PaymentModeBadge';
@@ -49,6 +49,7 @@ export default function QuickWorkPage() {
 
   const [entries, setEntries] = useState<QuickActionEntry[]>([]);
   const [loading, setLoading] = useState(true);
+  const [firestoreError, setFirestoreError] = useState<string | null>(null);
 
   const [showForm, setShowForm] = useState(false);
   const [category, setCategory] = useState<QuickActionCategory>('Printout');
@@ -64,10 +65,10 @@ export default function QuickWorkPage() {
   const [endDate, setEndDate] = useState('');
 
   useEffect(() => {
-    const unsub = subscribeToQuickActions((data) => {
-      setEntries(data);
-      setLoading(false);
-    });
+    const unsub = subscribeToQuickActions(
+      (data) => { setEntries(data); setLoading(false); },
+      (err) => { setLoading(false); setFirestoreError(err.message); },
+    );
     return () => unsub();
   }, []);
 
@@ -158,6 +159,13 @@ export default function QuickWorkPage() {
           {showForm ? <><ChevronUp className="h-4 w-4 mr-2" />Hide Form</> : <><PlusCircle className="h-4 w-4 mr-2" />Add Quick Entry</>}
         </Button>
       </div>
+
+      {firestoreError && (
+        <div className="flex items-center gap-2 rounded-lg border border-destructive/40 bg-destructive/10 px-4 py-3 text-sm text-destructive">
+          <AlertCircle className="h-4 w-4 shrink-0" />
+          <span><strong>Could not load entries:</strong> {firestoreError}. Check Firestore rules.</span>
+        </div>
+      )}
 
       {loading ? (
         <div className="grid grid-cols-2 sm:grid-cols-5 gap-4">

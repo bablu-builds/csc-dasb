@@ -6,3 +6,4 @@
 - [Challan Field](challan-field.md) — WorkEntry.challanAmount (optional, govt fee); shown in forms and used in profit calculations in Reports and Dashboard
 - [Payment Mode Upgrade](payment-mode-upgrade.md) — 4-mode system (Cash/Online/Due/None) across all 5 entry types; resolveStatus() for legacy-safe defaults; settlePendingEntry for atomic due settlement
 - [Firestore rules deployment](firestore-rules.md) — Rules live in firestore.rules; must be deployed via Firebase CLI or pasted into Firebase Console manually
+- [Staff Management](staff-management.md) — staffId (STAFF001…), isActive soft-disable, 4 permission booleans, PermissionRoute in App.tsx; password reset via /api/admin/reset-staff-password needs FIREBASE_SERVICE_ACCOUNT_KEY secret

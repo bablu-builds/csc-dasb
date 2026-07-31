@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react';
-import { useAuth } from '@/contexts/AuthContext';
+import { useAuth, consumeDeactivatedFlag } from '@/contexts/AuthContext';
 import { Link, useLocation } from 'wouter';
 import {
   signInWithEmailAndPassword, isSignInWithEmailLink, signInWithEmailLink,
@@ -10,7 +10,7 @@ import { useToast } from '@/hooks/use-toast';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
-import { Store, Loader2, Mail, ShieldCheck } from 'lucide-react';
+import { Store, Loader2, Mail, ShieldCheck, AlertTriangle } from 'lucide-react';
 import { useSettings } from '@/contexts/SettingsContext';
 import { doc, setDoc, getDoc } from 'firebase/firestore';
 import { db } from '@/lib/firebase';
@@ -24,6 +24,7 @@ export default function LoginPage() {
   const [loading, setLoading] = useState(false);
   const [resetSent, setResetSent] = useState(false);
   const [sendingReset, setSendingReset] = useState(false);
+  const [isDeactivated, setIsDeactivated] = useState(false);
   const { isConfigured, user, loading: authLoading } = useAuth();
   const { shopSettings } = useSettings();
   const [, setLocation] = useLocation();
@@ -35,9 +36,13 @@ export default function LoginPage() {
   const [emailLinkLoading, setEmailLinkLoading] = useState(false);
   const [needsEmailConfirm, setNeedsEmailConfirm] = useState(false);
 
-  // Redirect once auth has finished initializing and user is confirmed logged-in.
-  // Using useEffect prevents calling setLocation during render (a React anti-pattern
-  // that can cause infinite re-renders and unexpected flashes).
+  // Check for deactivated flag on mount
+  useEffect(() => {
+    if (consumeDeactivatedFlag()) {
+      setIsDeactivated(true);
+    }
+  }, []);
+
   useEffect(() => {
     if (!authLoading && user) {
       setLocation('/dashboard');
@@ -64,17 +69,14 @@ export default function LoginPage() {
     if (!auth || !db) return;
     setEmailLinkLoading(true);
     try {
-      // Ensure session persistence is set before committing credentials
       await authReady;
       const result = await signInWithEmailLink(auth, signinEmail, window.location.href);
       window.localStorage.removeItem(EMAIL_LINK_KEY);
 
-      // Create staff profile if it doesn't exist yet
       const uid = result.user.uid;
       const profileRef = doc(db, 'users', uid);
       const existing = await getDoc(profileRef);
       if (!existing.exists()) {
-        // Check for a pending invite to get invitedBy
         const inviteRef = doc(db, 'pendingInvites', signinEmail.replace(/[.]/g, ','));
         const invite = await getDoc(inviteRef).catch(() => null);
         await setDoc(profileRef, {
@@ -82,9 +84,13 @@ export default function LoginPage() {
           displayName: signinEmail.split('@')[0],
           role: 'staff',
           createdAt: Timestamp.now(),
+          isActive: true,
+          canManageWork: true,
+          canAccessFinancialServices: false,
+          canAccessQuickWork: false,
+          canViewDeletedItems: false,
           ...(invite?.exists() ? { invitedBy: invite.data()?.invitedBy } : {}),
         });
-        // Clean up the invite
         if (invite?.exists()) {
           const { deleteDoc } = await import('firebase/firestore');
           await deleteDoc(inviteRef).catch(() => {});
@@ -108,9 +114,9 @@ export default function LoginPage() {
   const handleLogin = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!auth) return;
+    setIsDeactivated(false);
     setLoading(true);
     try {
-      // Ensure session persistence is set before committing credentials
       await authReady;
       await signInWithEmailAndPassword(auth, email, password);
       setLocation('/dashboard');
@@ -138,11 +144,6 @@ export default function LoginPage() {
     }
   };
 
-  // ── Auth initializing — show spinner so the login form never flashes ────────
-  // Firebase restores an existing session asynchronously. While it's doing so,
-  // `user` is null even though the user IS logged in. Without this guard the
-  // login form renders for a brief moment before the redirect happens.
-
   if (authLoading) {
     return (
       <div className="min-h-[100dvh] flex items-center justify-center bg-background">
@@ -151,11 +152,7 @@ export default function LoginPage() {
     );
   }
 
-  // If auth is resolved and user is confirmed logged-in, the useEffect above
-  // will navigate to /dashboard. Return null to avoid rendering the form.
   if (user) return null;
-
-  // ── Email-link completion UI ──────────────────────────────────────────────
 
   if (isEmailLink && emailLinkLoading) {
     return (
@@ -191,24 +188,19 @@ export default function LoginPage() {
                 placeholder="staff@example.com"
                 value={emailLinkEmail}
                 onChange={e => setEmailLinkEmail(e.target.value)}
-                required
-                autoFocus
+                required autoFocus
               />
             </div>
-            <Button type="submit" className="w-full">
-              Continue Sign-in
-            </Button>
+            <Button type="submit" className="w-full">Continue Sign-in</Button>
           </form>
         </div>
       </div>
     );
   }
 
-  // ── Normal login UI ───────────────────────────────────────────────────────
-
   return (
     <div className="min-h-[100dvh] flex bg-background">
-      {/* Left panel — branding (hidden on small screens) */}
+      {/* Left panel — branding */}
       <div className="hidden lg:flex lg:w-[45%] flex-col justify-between p-12 relative overflow-hidden"
         style={{ background: 'linear-gradient(145deg, #080f1f 0%, #0d1b3e 50%, #1a2a5e 100%)' }}>
         <div className="absolute inset-0 opacity-5">
@@ -224,7 +216,6 @@ export default function LoginPage() {
             />
           ))}
         </div>
-
         <div className="relative">
           <div className="flex items-center gap-3">
             <div className="h-10 w-10 rounded-xl bg-white/10 flex items-center justify-center border border-white/20">
@@ -233,7 +224,6 @@ export default function LoginPage() {
             <span className="text-white/80 text-sm font-medium">CSC Management Portal</span>
           </div>
         </div>
-
         <div className="relative space-y-6">
           <div className="inline-flex items-center gap-2 px-3 py-1.5 rounded-full bg-white/10 border border-white/20 text-white/70 text-xs font-medium">
             <ShieldCheck className="h-3.5 w-3.5" />
@@ -246,10 +236,7 @@ export default function LoginPage() {
             Your complete CSC shop management solution — track work, manage customers, and monitor earnings in one place.
           </p>
         </div>
-
-        <div className="relative text-white/40 text-xs">
-          Protected by Firebase Authentication
-        </div>
+        <div className="relative text-white/40 text-xs">Protected by Firebase Authentication</div>
       </div>
 
       {/* Right panel — login form */}
@@ -257,6 +244,17 @@ export default function LoginPage() {
         {!isConfigured && (
           <div className="max-w-sm w-full bg-amber-50 border border-amber-200 text-amber-900 p-4 rounded-xl mb-6 text-sm">
             <strong>Setup Required</strong> — Firebase secrets not yet configured.
+          </div>
+        )}
+
+        {/* Deactivated account banner */}
+        {isDeactivated && (
+          <div className="max-w-sm w-full bg-rose-50 border border-rose-200 text-rose-800 p-4 rounded-xl mb-6 text-sm flex items-start gap-3">
+            <AlertTriangle className="h-5 w-5 shrink-0 text-rose-500 mt-0.5" />
+            <div>
+              <p className="font-semibold">Account Deactivated</p>
+              <p className="mt-0.5 text-rose-700">Your account has been deactivated. Please contact the shop owner to regain access.</p>
+            </div>
           </div>
         )}
 
@@ -280,34 +278,24 @@ export default function LoginPage() {
             <div className="space-y-2">
               <Label htmlFor="email">Email Address</Label>
               <Input
-                id="email"
-                type="email"
-                placeholder="staff@example.com"
-                value={email}
-                onChange={e => setEmail(e.target.value)}
-                required
-                disabled={!isConfigured || loading}
+                id="email" type="email" placeholder="staff@example.com"
+                value={email} onChange={e => setEmail(e.target.value)}
+                required disabled={!isConfigured || loading}
                 data-testid="input-email"
               />
             </div>
-
             <div className="space-y-2">
               <Label htmlFor="password">Password</Label>
               <Input
-                id="password"
-                type="password"
-                value={password}
-                onChange={e => setPassword(e.target.value)}
-                required
-                disabled={!isConfigured || loading}
+                id="password" type="password"
+                value={password} onChange={e => setPassword(e.target.value)}
+                required disabled={!isConfigured || loading}
                 data-testid="input-password"
               />
             </div>
-
             <div className="flex items-center justify-between text-sm">
               <button
-                type="button"
-                onClick={handleForgotPassword}
+                type="button" onClick={handleForgotPassword}
                 disabled={sendingReset || !isConfigured}
                 className="text-muted-foreground hover:text-primary transition-colors disabled:opacity-50 text-xs"
               >
@@ -317,7 +305,6 @@ export default function LoginPage() {
               </button>
               {resetSent && <span className="text-green-600 text-xs">Reset email sent ✓</span>}
             </div>
-
             <Button type="submit" className="w-full h-11 text-sm font-semibold" disabled={!isConfigured || loading} data-testid="button-login">
               {loading ? <><Loader2 className="h-4 w-4 animate-spin mr-2" />Signing in...</> : 'Sign In'}
             </Button>

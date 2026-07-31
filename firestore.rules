@@ -76,6 +76,8 @@ service cloud.firestore {
       // A user can create their own profile (owner bootstrap or email-link first sign-in)
       allow create: if isAuth() && request.auth.uid == uid
                     && request.resource.data.role in ['owner', 'manager', 'staff'];
+      // Owner can create profiles for other users (staff onboarding via secondary app)
+      allow create: if isOwner();
       // Only owner can update/delete other user profiles (staff/manager management)
       allow update, delete: if isOwner();
       // A user can update their own profile (e.g. display name) but NOT change role
@@ -106,14 +108,14 @@ service cloud.firestore {
       allow read, write: if canAccessFinancial();
     }
 
-    // ── Quick Action Work ─────────────────────────────────────────────────────
+    // ── Quick Action Work — all authenticated roles can read and write ─────────
     match /quickActionWork/{id} {
-      allow read, write: if canAccessFinancial();
+      allow read, write: if isAnyRole();
     }
 
-    // ── Payment History ───────────────────────────────────────────────────────
+    // ── Payment History — all authenticated roles can read and write ──────────
     match /paymentHistory/{id} {
-      allow read, write: if canAccessFinancial();
+      allow read, write: if isAnyRole();
     }
   }
 }

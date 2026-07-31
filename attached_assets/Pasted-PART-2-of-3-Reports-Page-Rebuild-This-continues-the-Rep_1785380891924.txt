@@ -1,0 +1,30 @@
+PART 2 of 3 — Reports Page Rebuild
+
+This continues the Reports page rebuild from Part 1 (which added the Overview, Work & Challan, and Category-wise tabs). Now add these additional tabs to the same tabbed Reports page, using the same date filter, CSV export, and design patterns already established in Part 1.
+
+Data Sources (For Context)
+aepsWithdrawals: amount, profitMargin, customerName, bankName, paymentMode if present.
+electricRecharges: rechargeAmount, profitMargin, customerName, consumerNumber, paymentMode if present.
+moneyTransfers: amount, profitMargin, name, mobileOrAccount, paymentMode if present.
+quickActionWork: amount, category, customerName.
+New Tabs to Add
+Tab 4: AEPS Report
+Total withdrawals, total withdrawal amount, total profit margin earned, for the selected period.
+A simple daily trend view over the selected range.
+A table of individual transactions: Date, Customer Name, Bank Name, Amount, Profit Margin.
+Tab 5: Recharge Report
+Total recharges, total recharge amount, total profit margin earned, for the selected period.
+A table of individual transactions: Date, Customer Name, Consumer Number, Recharge Amount, Profit Margin.
+Tab 6: Money Transfer Report
+Total transfers, total transfer amount, total profit margin earned, for the selected period.
+A table of individual transactions: Date, Name, Mobile/Account Number, Amount, Profit Margin.
+Tab 7: Quick Action Work Report
+Breakdown by category (Printout, Lamination, Xerox, PVC, Print, Photo Print, Other): count and total amount for each, for the selected period.
+Update the Overview Tab (from Part 1)
+
+Now that AEPS, Recharge, and Money Transfer profit data is available, update the Overview tab's "Total Profit" card to combine ALL sources: (Work income minus challan) + AEPS profit margins + Recharge profit margins + Money Transfer profit margins, for the selected period. Add a source-by-source breakdown chart/table on the Overview tab showing how much profit came from each of: Work, AEPS, Recharge, Money Transfer.
+
+Notes
+Follow the same design, date filter, and CSV export patterns already built in Part 1 — these new tabs should feel identical in style.
+Handle transactions without a paymentMode field (default to "Cash") without breaking, since Part 3 will use this field.
+Test each new tab with real data before I send Part 3 (which will add the Cash vs Online report and final polish).

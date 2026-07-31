@@ -12,7 +12,11 @@ interface AuthContextType {
   role: UserRole | null;
   isOwner: boolean;
   isManager: boolean;
+  // Permissions — always true for owner/manager; staff-specific flags below
   canAccessFinancialServices: boolean;
+  canManageWork: boolean;
+  canAccessQuickWork: boolean;
+  canViewDeletedItems: boolean;
   displayName: string;
   loading: boolean;
   profileLoading: boolean;
@@ -27,12 +31,18 @@ const AuthContext = createContext<AuthContextType>({
   isOwner: false,
   isManager: false,
   canAccessFinancialServices: false,
+  canManageWork: true,
+  canAccessQuickWork: true,
+  canViewDeletedItems: true,
   displayName: '',
   loading: true,
   profileLoading: true,
   logout: async () => {},
   isConfigured,
 });
+
+/** SessionStorage key set before sign-out so LoginPage can show a deactivation message. */
+const DEACTIVATED_KEY = 'azaan_account_deactivated';
 
 export function AuthProvider({ children }: { children: ReactNode }) {
   const [user, setUser] = useState<User | null>(null);
@@ -41,8 +51,6 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const [profileLoading, setProfileLoading] = useState(true);
   const { toast } = useToast();
 
-  // Tracks which UID we've already attempted bootstrap for, so we never
-  // call bootstrapUserProfile more than once per login session.
   const bootstrapAttemptedRef = useRef<string | null>(null);
 
   useEffect(() => {
@@ -52,15 +60,12 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       return;
     }
 
-    // Holds the unsubscribe function for the active profile listener so we can
-    // clean it up when the auth user changes or the component unmounts.
     let unsubscribeProfile: (() => void) | null = null;
 
     const unsubscribeAuth = onAuthStateChanged(auth, (u) => {
       setUser(u);
       setLoading(false);
 
-      // Tear down the previous user's profile listener.
       if (unsubscribeProfile) {
         unsubscribeProfile();
         unsubscribeProfile = null;
@@ -76,19 +81,19 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       setProfileLoading(true);
       bootstrapAttemptedRef.current = null;
 
-      // Real-time listener on users/{uid} — fires immediately with the current
-      // value from Firestore (bypasses local cache for the first snapshot) and
-      // then on every subsequent change. This means:
-      //   • Manual role edits in the Firebase Console propagate within seconds.
-      //   • No stale cache issues on logout/login.
       unsubscribeProfile = subscribeToUserProfile(u.uid, async (profile) => {
         if (profile) {
-          // Document exists — use whatever role is in Firestore right now.
+          // Deactivated account — sign out immediately with a flag for LoginPage
+          if (profile.isActive === false) {
+            sessionStorage.setItem(DEACTIVATED_KEY, '1');
+            await firebaseSignOut(auth!).catch(() => {});
+            setUserProfile(null);
+            setProfileLoading(false);
+            return;
+          }
           setUserProfile(profile);
           setProfileLoading(false);
         } else {
-          // Document does not exist yet. Attempt bootstrap exactly once per
-          // login (tracked by uid) so we don't loop if Firestore is slow.
           if (bootstrapAttemptedRef.current !== u.uid) {
             bootstrapAttemptedRef.current = u.uid;
             try {
@@ -97,12 +102,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
                 u.email ?? '',
                 u.displayName || u.email?.split('@')[0] || 'Owner',
               );
-              if (bootstrapped) {
-                // bootstrapUserProfile wrote the doc → onSnapshot will fire
-                // again automatically and set userProfile via the branch above.
-              } else {
-                // Users already exist but this account has no profile doc →
-                // unauthorized (LoginPage handles sign-out / messaging).
+              if (!bootstrapped) {
                 setUserProfile(null);
                 setProfileLoading(false);
               }
@@ -112,8 +112,6 @@ export function AuthProvider({ children }: { children: ReactNode }) {
               setProfileLoading(false);
             }
           } else {
-            // Bootstrap already attempted for this UID — profile genuinely
-            // doesn't exist (e.g. staff whose doc was revoked).
             setUserProfile(null);
             setProfileLoading(false);
           }
@@ -141,13 +139,21 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const role = userProfile?.role ?? null;
   const isOwner = role === 'owner';
   const isManager = role === 'manager';
-  // Managers always have financial access; staff need explicit permission
+
+  // Permissions — owner and manager always have everything
+  // Staff: fall back to true for canManageWork / canAccessQuickWork / canViewDeletedItems
+  // (backward compat — existing staff without the field retain their previous access)
   const canAccessFinancialServices = isOwner || isManager || (userProfile?.canAccessFinancialServices === true);
+  const canManageWork = isOwner || isManager || (userProfile?.canManageWork !== false);
+  const canAccessQuickWork = isOwner || isManager || (userProfile?.canAccessQuickWork !== false);
+  const canViewDeletedItems = isOwner || isManager || (userProfile?.canViewDeletedItems !== false);
+
   const displayName = userProfile?.displayName || user?.displayName || user?.email?.split('@')[0] || 'Staff';
 
   return (
     <AuthContext.Provider value={{
-      user, userProfile, role, isOwner, isManager, canAccessFinancialServices,
+      user, userProfile, role, isOwner, isManager,
+      canAccessFinancialServices, canManageWork, canAccessQuickWork, canViewDeletedItems,
       displayName, loading, profileLoading, logout, isConfigured,
     }}>
       {children}
@@ -156,3 +162,14 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 }
 
 export const useAuth = () => useContext(AuthContext);
+
+/** Read and clear the deactivated flag from sessionStorage. */
+export const consumeDeactivatedFlag = (): boolean => {
+  if (typeof sessionStorage === 'undefined') return false;
+  const val = sessionStorage.getItem('azaan_account_deactivated');
+  if (val) {
+    sessionStorage.removeItem('azaan_account_deactivated');
+    return true;
+  }
+  return false;
+};
