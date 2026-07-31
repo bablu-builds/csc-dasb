@@ -996,8 +996,10 @@ function CashOnlineTab({
     const rechargePaid = recharge.filter(e => resolveStatus(e.paymentStatus) === 'paid');
     const rechargeTotals = calc(rechargePaid.map(e => ({ mode: e.paymentMode, amount: e.profitMargin })));
 
+    // Money Transfer: only the profitMargin is shop income — the transfer amount
+    // is the customer's funds being sent out and not revenue earned by the shop.
     const transferPaid = transfer.filter(e => resolveStatus(e.paymentStatus) === 'paid');
-    const transferTotals = calc(transferPaid.map(e => ({ mode: e.paymentMode, amount: e.amount })));
+    const transferTotals = calc(transferPaid.map(e => ({ mode: e.paymentMode, amount: e.profitMargin })));
 
     const quickPaid = quick.filter(e => resolveStatus(e.paymentStatus) === 'paid');
     const quickTotals = calc(quickPaid.map(e => ({ mode: e.paymentMode, amount: e.amount })));
