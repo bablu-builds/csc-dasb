@@ -1,9 +1,10 @@
 import { useState, useEffect } from 'react';
 import { useLocation, useParams } from 'wouter';
 import {
-  updateWorkEntry, subscribeToWorkEntries, WorkEntry,
+  updateWorkEntry, subscribeToWorkEntries, WorkEntry, AttachedFile,
   addPaymentToEntry, addAdjustment, subscribeToAdjustments, DealAdjustment,
 } from '@/lib/firestore';
+import { DocumentUploadSection } from '@/components/DocumentUploadSection';
 import { useAuth } from '@/contexts/AuthContext';
 import { useToast } from '@/hooks/use-toast';
 import { WorkEntryForm, WorkEntryFormData } from '@/components/WorkEntryForm';
@@ -73,6 +74,18 @@ export default function EditWorkPage() {
   const [adjReason, setAdjReason] = useState('');
   const [addingAdj, setAddingAdj] = useState(false);
   const [adjOverpayWarn, setAdjOverpayWarn] = useState(false);
+
+  // Document / Receiving local state (mirrors Firestore, updated optimistically)
+  const [localDocuments, setLocalDocuments] = useState<AttachedFile[]>([]);
+  const [localReceivings, setLocalReceivings] = useState<AttachedFile[]>([]);
+
+  // Sync local lists whenever the live entry updates from Firestore
+  useEffect(() => {
+    if (entry) {
+      setLocalDocuments(entry.documents ?? []);
+      setLocalReceivings(entry.receivings ?? []);
+    }
+  }, [entry]);
 
   useEffect(() => {
     if (!id) return;
@@ -475,6 +488,17 @@ export default function EditWorkPage() {
           netAdjustmentChallan={netAdjChallan}
         />
       </div>
+
+      {/* ── DOCUMENT / RECEIVING ─────────────────────────────────────────────── */}
+      {id && (
+        <DocumentUploadSection
+          entryId={id}
+          documents={localDocuments}
+          receivings={localReceivings}
+          onDocumentsChange={setLocalDocuments}
+          onReceivingsChange={setLocalReceivings}
+        />
+      )}
 
       {/* ── ADD PAYMENT DIALOG ───────────────────────────────────────────────── */}
       <Dialog open={paymentOpen} onOpenChange={(open) => {

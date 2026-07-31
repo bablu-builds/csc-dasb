@@ -303,6 +303,15 @@ export interface PaymentRecord {
   paymentMode?: SettlementMode;
 }
 
+/** A single uploaded document or receiving slip attached to a work entry. */
+export interface AttachedFile {
+  name: string;
+  fileUrl: string;
+  downloadUrl: string;
+  uploadedAt: Timestamp;
+  addedBy?: string;
+}
+
 export interface WorkEntry {
   id?: string;
   customerName: string;
@@ -340,6 +349,10 @@ export interface WorkEntry {
    * Updated atomically by addAdjustment(). NEVER modify directly.
    */
   netAdjustmentChallan?: number;
+  /** Customer documents (Aadhar, photos, etc.) uploaded via Cloudinary. */
+  documents?: AttachedFile[];
+  /** Receiving slips uploaded via Cloudinary. */
+  receivings?: AttachedFile[];
 }
 
 // ─── DEAL ADJUSTMENTS ────────────────────────────────────────────────────────
@@ -919,4 +932,61 @@ export const subscribeToPaymentHistory = (
     console.error('[Firestore] paymentHistory error:', err.message);
     onError?.(err);
   });
+};
+
+// ─── DOCUMENT / RECEIVING ATTACHMENTS ────────────────────────────────────────
+
+/**
+ * Append a document entry to the `documents` array of a work entry.
+ */
+export const addDocumentToEntry = async (
+  entryId: string,
+  file: Omit<AttachedFile, 'uploadedAt'>,
+): Promise<void> => {
+  if (!db) throw new Error('Firebase not configured');
+  const record: AttachedFile = { ...file, uploadedAt: Timestamp.now() };
+  await updateDoc(doc(db, 'workEntries', entryId), {
+    documents: arrayUnion(record),
+  });
+};
+
+/**
+ * Append a receiving entry to the `receivings` array of a work entry.
+ */
+export const addReceivingToEntry = async (
+  entryId: string,
+  file: Omit<AttachedFile, 'uploadedAt'>,
+): Promise<void> => {
+  if (!db) throw new Error('Firebase not configured');
+  const record: AttachedFile = { ...file, uploadedAt: Timestamp.now() };
+  await updateDoc(doc(db, 'workEntries', entryId), {
+    receivings: arrayUnion(record),
+  });
+};
+
+/**
+ * Remove a document entry from the `documents` array by index.
+ * Reads the current array, splices the item, and writes back the full array.
+ */
+export const removeDocumentFromEntry = async (
+  entryId: string,
+  index: number,
+  currentDocuments: AttachedFile[],
+): Promise<void> => {
+  if (!db) throw new Error('Firebase not configured');
+  const updated = currentDocuments.filter((_, i) => i !== index);
+  await updateDoc(doc(db, 'workEntries', entryId), { documents: updated });
+};
+
+/**
+ * Remove a receiving entry from the `receivings` array by index.
+ */
+export const removeReceivingFromEntry = async (
+  entryId: string,
+  index: number,
+  currentReceivings: AttachedFile[],
+): Promise<void> => {
+  if (!db) throw new Error('Firebase not configured');
+  const updated = currentReceivings.filter((_, i) => i !== index);
+  await updateDoc(doc(db, 'workEntries', entryId), { receivings: updated });
 };
