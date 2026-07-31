@@ -1,6 +1,6 @@
 import { useState, useEffect } from 'react';
 import { subscribeToWorkEntries, WorkEntry } from '@/lib/firestore';
-import { format, differenceInDays } from 'date-fns';
+import { format } from 'date-fns';
 import { Link, useLocation } from 'wouter';
 import { Search, Clock, Phone, CheckCircle2, BarChart2 } from 'lucide-react';
 import { Input } from '@/components/ui/input';
@@ -12,6 +12,7 @@ import {
   Select, SelectContent, SelectItem, SelectTrigger, SelectValue,
 } from '@/components/ui/select';
 import { formatCurrency } from '@/lib/format';
+import { calendarDaysAgo } from '@/lib/utils';
 
 function PendingSkeleton() {
   return (
@@ -56,7 +57,7 @@ export default function PendingWorkPage() {
   ).sort((a, b) => b[1] - a[1]);
 
   const filteredEntries = entries
-    .map(e => ({ ...e, daysPending: differenceInDays(today, e.date.toDate()) }))
+    .map(e => ({ ...e, daysPending: calendarDaysAgo(e.date) }))
     .filter(e => {
       const q = searchTerm.toLowerCase();
       const matchesSearch = !q || e.customerName.toLowerCase().includes(q) || e.mobile.includes(q);
