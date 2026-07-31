@@ -239,7 +239,7 @@ export const backfillStaffIds = async (): Promise<void> => {
   const batch = writeBatch(db);
   docsNeedingId.forEach(id => {
     maxNum++;
-    batch.update(doc(db, 'users', id), {
+    batch.update(doc(db!, 'users', id), {
       staffId: `STAFF${String(maxNum).padStart(3, '0')}`,
     });
   });
@@ -257,7 +257,7 @@ export const getStaffWorkStats = async (
   const entries: Array<{ id: string; status: string; isDeleted?: boolean }> = [];
 
   await Promise.all(identifiers.map(async (identifier) => {
-    const q = query(collection(db, 'workEntries'), where('addedBy', '==', identifier));
+    const q = query(collection(db!, 'workEntries'), where('addedBy', '==', identifier));
     const snap = await getDocs(q);
     snap.forEach(d => {
       if (!seenIds.has(d.id)) {
@@ -412,6 +412,7 @@ export const subscribeToAdjustments = (
 export interface Category {
   id: string;
   name: string;
+  order?: number;
 }
 
 export interface ShopSettings {
@@ -578,9 +579,9 @@ export const initCategoriesIfEmpty = async () => {
   if (sentinel.exists()) return;
 
   const batch = writeBatch(firestoreDb);
-  defaultCategories.forEach(name => {
+  defaultCategories.forEach((name, order) => {
     const ref = doc(collection(firestoreDb, 'categories'));
-    batch.set(ref, { name });
+    batch.set(ref, { name, order });
   });
   batch.set(sentinelRef, { seededAt: Timestamp.now() });
   try {
@@ -600,30 +601,49 @@ function deduplicateCategories(cats: Category[]): Category[] {
   });
 }
 
+function sortCategories(cats: Category[]): Category[] {
+  return cats.sort((a, b) => {
+    const ao = a.order ?? Number.MAX_SAFE_INTEGER;
+    const bo = b.order ?? Number.MAX_SAFE_INTEGER;
+    if (ao !== bo) return ao - bo;
+    return a.name.localeCompare(b.name);
+  });
+}
+
 export const getCategories = async (): Promise<Category[]> => {
   if (!db) return [];
-  const q = query(collection(db, 'categories'), orderBy('name', 'asc'));
-  const snap = await getDocs(q);
+  const snap = await getDocs(collection(db, 'categories'));
   const cats: Category[] = [];
   snap.forEach(d => cats.push({ id: d.id, ...d.data() } as Category));
-  return deduplicateCategories(cats);
+  return sortCategories(deduplicateCategories(cats));
 };
 
 export const subscribeToCategories = (callback: (categories: Category[]) => void) => {
   if (!db) return () => {};
-  const q = query(collection(db, 'categories'), orderBy('name', 'asc'));
-  return onSnapshot(q, (snap) => {
+  return onSnapshot(collection(db, 'categories'), (snap) => {
     const cats: Category[] = [];
     snap.forEach(d => cats.push({ id: d.id, ...d.data() } as Category));
-    callback(deduplicateCategories(cats));
+    callback(sortCategories(deduplicateCategories(cats)));
   }, (err) => {
     console.error('[Firestore] Categories listener error:', err.code, err.message);
   });
 };
 
-export const addCategory = async (name: string) => {
+export const addCategory = async (name: string, order?: number) => {
   if (!db) throw new Error("Firebase not configured");
-  return addDoc(collection(db, 'categories'), { name });
+  const data: { name: string; order?: number } = { name };
+  if (order !== undefined) data.order = order;
+  return addDoc(collection(db, 'categories'), data);
+};
+
+/** Batch-update the `order` field on each category document to persist a new sort order. */
+export const reorderCategories = async (updates: { id: string; order: number }[]) => {
+  if (!db) throw new Error("Firebase not configured");
+  const batch = writeBatch(db);
+  updates.forEach(({ id, order }) => {
+    batch.update(doc(db!, 'categories', id), { order });
+  });
+  await batch.commit();
 };
 
 export const deleteCategory = async (id: string) => {

@@ -9,8 +9,18 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/com
 import {
   Loader2, Plus, Trash2, Users, ShieldCheck, UserX, UserPlus, Eye, EyeOff,
   Database, Phone, ChevronDown, ChevronUp, Pencil, CheckCircle2, XCircle,
-  RotateCcw, Lock,
+  RotateCcw, Lock, GripVertical,
 } from 'lucide-react';
+import {
+  DndContext, closestCenter, PointerSensor, TouchSensor,
+  useSensor, useSensors, DragEndEvent,
+} from '@dnd-kit/core';
+import {
+  arrayMove, SortableContext, useSortable,
+  verticalListSortingStrategy,
+} from '@dnd-kit/sortable';
+import { CSS } from '@dnd-kit/utilities';
+import { Category } from '@/lib/firestore';
 import { Badge } from '@/components/ui/badge';
 import { useToast } from '@/hooks/use-toast';
 import {
@@ -29,6 +39,39 @@ import {
 } from '@/components/ui/dialog';
 import { Switch } from '@/components/ui/switch';
 import FirebaseControlTab from '@/components/FirebaseControlTab';
+
+// ─── Sortable category row ────────────────────────────────────────────────────
+
+function SortableCategoryRow({ cat, onRemove }: { cat: Category; onRemove: () => void }) {
+  const { attributes, listeners, setNodeRef, transform, transition, isDragging } = useSortable({ id: cat.id });
+  return (
+    <div
+      ref={setNodeRef}
+      style={{ transform: CSS.Transform.toString(transform), transition, opacity: isDragging ? 0.4 : 1 }}
+      className="px-3 py-2.5 flex justify-between items-center hover:bg-muted/20 transition-colors bg-background"
+    >
+      <div className="flex items-center gap-2 min-w-0">
+        <button
+          type="button"
+          className="cursor-grab active:cursor-grabbing touch-none p-1 text-muted-foreground hover:text-foreground shrink-0 rounded"
+          {...attributes}
+          {...listeners}
+          aria-label="Drag to reorder"
+        >
+          <GripVertical className="h-4 w-4" />
+        </button>
+        <span className="font-medium text-sm truncate">{cat.name}</span>
+      </div>
+      <Button
+        variant="ghost" size="icon"
+        className="h-8 w-8 rounded-lg text-destructive hover:text-destructive hover:bg-destructive/10 shrink-0"
+        onClick={onRemove}
+      >
+        <Trash2 className="h-4 w-4" />
+      </Button>
+    </div>
+  );
+}
 
 // ─── Permission toggles helper ───────────────────────────────────────────────
 
@@ -535,7 +578,22 @@ function StaffCard({
 // ─── Main Settings Page ───────────────────────────────────────────────────────
 
 export default function SettingsPage() {
-  const { shopSettings, saveShopSettings, categories, createCategory, removeCategory } = useSettings();
+  const { shopSettings, saveShopSettings, categories, createCategory, removeCategory, reorderCategories } = useSettings();
+
+  const sensors = useSensors(
+    useSensor(PointerSensor, { activationConstraint: { distance: 5 } }),
+    useSensor(TouchSensor, { activationConstraint: { delay: 150, tolerance: 5 } }),
+  );
+
+  const handleDragEnd = async (event: DragEndEvent) => {
+    const { active, over } = event;
+    if (!over || active.id === over.id) return;
+    const oldIndex = categories.findIndex(c => c.id === active.id);
+    const newIndex = categories.findIndex(c => c.id === over.id);
+    if (oldIndex === -1 || newIndex === -1) return;
+    const reordered = arrayMove(categories, oldIndex, newIndex);
+    await reorderCategories(reordered.map(c => c.id));
+  };
   const { role, userProfile } = useAuth();
   const isOwner = role === 'owner';
 
@@ -757,25 +815,20 @@ export default function SettingsPage() {
                   Add
                 </Button>
               </form>
-              <div className="border rounded-xl divide-y overflow-hidden">
+              <div className="border rounded-xl overflow-hidden divide-y">
                 {categories.length === 0 ? (
                   <div className="p-6 text-center text-muted-foreground text-sm">No categories found</div>
                 ) : (
-                  categories.map(cat => (
-                    <div key={cat.id} className="px-4 py-3 flex justify-between items-center hover:bg-muted/20 transition-colors">
-                      <div className="flex items-center gap-2">
-                        <div className="h-1.5 w-1.5 rounded-full bg-primary" />
-                        <span className="font-medium text-sm">{cat.name}</span>
-                      </div>
-                      <Button variant="ghost" size="icon" className="h-8 w-8 rounded-lg text-destructive hover:text-destructive hover:bg-destructive/10"
-                        onClick={() => removeCategory(cat.id)}>
-                        <Trash2 className="h-4 w-4" />
-                      </Button>
-                    </div>
-                  ))
+                  <DndContext sensors={sensors} collisionDetection={closestCenter} onDragEnd={handleDragEnd}>
+                    <SortableContext items={categories.map(c => c.id)} strategy={verticalListSortingStrategy}>
+                      {categories.map(cat => (
+                        <SortableCategoryRow key={cat.id} cat={cat} onRemove={() => removeCategory(cat.id)} />
+                      ))}
+                    </SortableContext>
+                  </DndContext>
                 )}
               </div>
-              <p className="text-xs text-muted-foreground mt-3">{categories.length} categories configured</p>
+              <p className="text-xs text-muted-foreground mt-3">{categories.length} categories · drag to reorder</p>
             </CardContent>
           </Card>
         </TabsContent>

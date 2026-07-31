@@ -1,5 +1,5 @@
 import { createContext, useContext, useEffect, useState, ReactNode } from 'react';
-import { ShopSettings, getShopSettings, initCategoriesIfEmpty, getCategories, Category, subscribeToCategories, updateShopSettings, addCategory, deleteCategory, deleteCategoriesByName } from '@/lib/firestore';
+import { ShopSettings, getShopSettings, initCategoriesIfEmpty, getCategories, Category, subscribeToCategories, updateShopSettings, addCategory, deleteCategory, deleteCategoriesByName, reorderCategories as firestoreReorderCategories } from '@/lib/firestore';
 import { useAuth } from '@/contexts/AuthContext';
 import { useToast } from '@/hooks/use-toast';
 
@@ -10,6 +10,7 @@ interface SettingsContextType {
   saveShopSettings: (settings: ShopSettings) => Promise<void>;
   createCategory: (name: string) => Promise<void>;
   removeCategory: (id: string) => Promise<void>;
+  reorderCategories: (orderedIds: string[]) => Promise<void>;
 }
 
 const defaultSettings = { shopName: "AZAAN COMMUNICATION TOUR AND TRAVEL", address: "", phone: "" };
@@ -21,6 +22,7 @@ const SettingsContext = createContext<SettingsContextType>({
   saveShopSettings: async () => {},
   createCategory: async () => {},
   removeCategory: async () => {},
+  reorderCategories: async () => {},
 });
 
 export function SettingsProvider({ children }: { children: ReactNode }) {
@@ -80,15 +82,25 @@ export function SettingsProvider({ children }: { children: ReactNode }) {
       return;
     }
     try {
-      await addCategory(name);
+      // Place new categories at the end of the current list.
+      const maxOrder = categories.reduce((m, c) => Math.max(m, c.order ?? 0), -1);
+      await addCategory(name, maxOrder + 1);
       // Do NOT optimistically update local state here.
       // The onSnapshot listener (subscribeToCategories) is the single source of
       // truth — it fires immediately when Firestore's local cache is updated
       // (before the server round-trip even completes), so the UI updates fast
-      // enough without a manual push. Pushing manually AND letting the listener
-      // fire is what caused the duplicate: the listener fires first, then the
-      // optimistic push adds the item a second time.
+      // enough without a manual push.
       toast({ title: "Category Added" });
+    } catch (err: any) {
+      toast({ variant: "destructive", title: "Error", description: err.message });
+      throw err;
+    }
+  };
+
+  const reorderCategories = async (orderedIds: string[]) => {
+    try {
+      const updates = orderedIds.map((id, order) => ({ id, order }));
+      await firestoreReorderCategories(updates);
     } catch (err: any) {
       toast({ variant: "destructive", title: "Error", description: err.message });
       throw err;
@@ -119,7 +131,7 @@ export function SettingsProvider({ children }: { children: ReactNode }) {
   };
 
   return (
-    <SettingsContext.Provider value={{ shopSettings, categories, loading, saveShopSettings, createCategory, removeCategory }}>
+    <SettingsContext.Provider value={{ shopSettings, categories, loading, saveShopSettings, createCategory, removeCategory, reorderCategories }}>
       {children}
     </SettingsContext.Provider>
   );

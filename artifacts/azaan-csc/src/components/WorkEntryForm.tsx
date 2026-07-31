@@ -1,9 +1,10 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useMemo } from 'react';
 import { useForm } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
 import * as z from 'zod';
 import { useSettings } from '@/contexts/SettingsContext';
 import { Timestamp } from 'firebase/firestore';
+import { addCategory } from '@/lib/firestore';
 import { format } from 'date-fns';
 
 import {
@@ -15,9 +16,12 @@ import { Textarea } from '@/components/ui/textarea';
 import {
   Select, SelectContent, SelectItem, SelectTrigger, SelectValue,
 } from '@/components/ui/select';
-import { CalendarIcon, Loader2, IndianRupee, XCircle, Receipt } from 'lucide-react';
+import { CalendarIcon, Loader2, IndianRupee, XCircle, Receipt, Check, ChevronsUpDown } from 'lucide-react';
 import { Calendar } from '@/components/ui/calendar';
 import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover';
+import {
+  Command, CommandEmpty, CommandGroup, CommandInput, CommandItem, CommandList,
+} from '@/components/ui/command';
 import { cn } from '@/lib/utils';
 import { PaymentModeSelector } from '@/components/PaymentModeSelector';
 import { PaymentMode } from '@/lib/payments';
@@ -85,6 +89,8 @@ export function WorkEntryForm({
   netAdjustmentChallan = 0,
 }: WorkEntryFormProps) {
   const { categories } = useSettings();
+  const [catOpen, setCatOpen] = useState(false);
+  const [catSearch, setCatSearch] = useState('');
 
   const form = useForm<WorkEntryFormData>({
     resolver: zodResolver(formSchema),
@@ -159,8 +165,35 @@ export function WorkEntryForm({
   const showPaymentFields = paymentMode !== 'None' || isEditing;
   const isTotalLocked = !isEditing && paymentMode === 'None';
 
+  const filteredCats = useMemo(() => {
+    if (!catSearch.trim()) return categories;
+    const q = catSearch.toLowerCase();
+    return categories.filter(c => c.name.toLowerCase().includes(q));
+  }, [categories, catSearch]);
+
   const handleSubmit = async (values: WorkEntryFormData) => {
-    await onSubmit({ ...values, date: Timestamp.fromDate(values.date) });
+    let finalCategory = values.category;
+    const finalOtherCategory = values.otherCategory;
+
+    if (values.category === 'Other' && values.otherCategory?.trim()) {
+      const typedName = values.otherCategory.trim();
+      // Use existing category (case-insensitive) or create a new one
+      const existing = categories.find(c => c.name.toLowerCase() === typedName.toLowerCase());
+      if (existing) {
+        finalCategory = existing.name;
+      } else {
+        const maxOrder = categories.reduce((m, c) => Math.max(m, c.order ?? 0), -1);
+        await addCategory(typedName, maxOrder + 1);
+        finalCategory = typedName;
+      }
+    }
+
+    await onSubmit({
+      ...values,
+      category: finalCategory,
+      otherCategory: finalOtherCategory,
+      date: Timestamp.fromDate(values.date),
+    });
   };
 
   const inputClass = "h-10 bg-background border-border focus:ring-2 focus:ring-primary/20 transition-all";
@@ -194,18 +227,49 @@ export function WorkEntryForm({
             <FormField control={form.control} name="category" render={({ field }) => (
               <FormItem>
                 <FormLabel className="text-sm font-medium">Work Category <span className="text-destructive">*</span></FormLabel>
-                <Select onValueChange={(val) => { field.onChange(val); if (val !== 'Other') form.setValue('otherCategory', ''); }} defaultValue={field.value}>
-                  <FormControl>
-                    <SelectTrigger className={inputClass}>
-                      <SelectValue placeholder="Select category" />
-                    </SelectTrigger>
-                  </FormControl>
-                  <SelectContent>
-                    {categories.map((cat) => (
-                      <SelectItem key={cat.id} value={cat.name}>{cat.name}</SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
+                <Popover open={catOpen} onOpenChange={(open) => { setCatOpen(open); if (!open) setCatSearch(''); }}>
+                  <PopoverTrigger asChild>
+                    <FormControl>
+                      <Button
+                        variant="outline"
+                        role="combobox"
+                        className={cn(inputClass, "w-full justify-between font-normal px-3", !field.value && "text-muted-foreground")}
+                      >
+                        <span className="truncate">{field.value || "Select category"}</span>
+                        <ChevronsUpDown className="ml-2 h-4 w-4 shrink-0 opacity-50" />
+                      </Button>
+                    </FormControl>
+                  </PopoverTrigger>
+                  <PopoverContent className="p-0 w-72" align="start">
+                    <Command shouldFilter={false}>
+                      <CommandInput
+                        placeholder="Search category…"
+                        value={catSearch}
+                        onValueChange={setCatSearch}
+                      />
+                      <CommandList>
+                        <CommandEmpty>No category found.</CommandEmpty>
+                        <CommandGroup>
+                          {filteredCats.map(cat => (
+                            <CommandItem
+                              key={cat.id}
+                              value={cat.id}
+                              onSelect={() => {
+                                field.onChange(cat.name);
+                                if (cat.name !== 'Other') form.setValue('otherCategory', '');
+                                setCatOpen(false);
+                                setCatSearch('');
+                              }}
+                            >
+                              <Check className={cn("mr-2 h-4 w-4 shrink-0", field.value === cat.name ? "opacity-100" : "opacity-0")} />
+                              {cat.name}
+                            </CommandItem>
+                          ))}
+                        </CommandGroup>
+                      </CommandList>
+                    </Command>
+                  </PopoverContent>
+                </Popover>
                 <FormMessage />
               </FormItem>
             )} />
