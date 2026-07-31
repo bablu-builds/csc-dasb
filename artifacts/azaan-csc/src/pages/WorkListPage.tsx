@@ -1,5 +1,6 @@
 import { useState, useEffect, useMemo } from 'react';
-import { subscribeToWorkEntries, deleteWorkEntry, WorkEntry } from '@/lib/firestore';
+import { subscribeToWorkEntries, deleteWorkEntry, WorkEntry, subscribeToStaff, UserProfile } from '@/lib/firestore';
+import { useAuth } from '@/contexts/AuthContext';
 import { useSettings } from '@/contexts/SettingsContext';
 import {
   format, formatDistanceStrict,
@@ -96,6 +97,7 @@ function getDateInterval(filter: DateFilter, customFrom: string, customTo: strin
 }
 
 export default function WorkListPage() {
+  const { userProfile } = useAuth();
   const [entries, setEntries] = useState<WorkEntry[]>([]);
   const [loading, setLoading] = useState(true);
   const [searchTerm, setSearchTerm] = useState('');
@@ -104,6 +106,8 @@ export default function WorkListPage() {
   const [dateFilter, setDateFilter] = useState<DateFilter>('all');
   const [customFrom, setCustomFrom] = useState('');
   const [customTo, setCustomTo] = useState('');
+  const [staffFilter, setStaffFilter] = useState('');   // '' = All Staff
+  const [staffList, setStaffList] = useState<UserProfile[]>([]);
   const [sortField, setSortField] = useState<SortField>('date');
   const [sortDir, setSortDir] = useState<SortDir>('desc');
   const { categories } = useSettings();
@@ -116,6 +120,12 @@ export default function WorkListPage() {
       setEntries(data);
       setLoading(false);
     });
+    return () => unsub();
+  }, []);
+
+  // Subscribe to all staff/manager accounts for the dropdown
+  useEffect(() => {
+    const unsub = subscribeToStaff(setStaffList);
     return () => unsub();
   }, []);
 
@@ -148,7 +158,8 @@ export default function WorkListPage() {
       const matchStatus = statusFilter === 'All' || e.status === statusFilter;
       const matchCat = categoryFilter === 'All' || e.category === categoryFilter;
       const matchDate = !dateInterval || isWithinInterval(e.date.toDate(), dateInterval);
-      return matchSearch && matchStatus && matchCat && matchDate;
+      const matchStaff = !staffFilter || (e.addedBy ?? '') === staffFilter;
+      return matchSearch && matchStatus && matchCat && matchDate && matchStaff;
     });
     return [...filtered].sort((a, b) => {
       let cmp = 0;
@@ -159,11 +170,11 @@ export default function WorkListPage() {
       else if (sortField === 'customerName') cmp = a.customerName.localeCompare(b.customerName);
       return sortDir === 'asc' ? cmp : -cmp;
     });
-  }, [entries, searchTerm, statusFilter, categoryFilter, dateInterval, sortField, sortDir]);
+  }, [entries, searchTerm, statusFilter, categoryFilter, dateInterval, staffFilter, sortField, sortDir]);
 
   const mobileHistoryEntries = selectedMobile ? entries.filter(e => e.mobile === selectedMobile) : [];
 
-  const hasActiveFilters = searchTerm || statusFilter !== 'All' || categoryFilter !== 'All' || dateFilter !== 'all';
+  const hasActiveFilters = searchTerm || statusFilter !== 'All' || categoryFilter !== 'All' || dateFilter !== 'all' || staffFilter !== '';
 
   const clearAllFilters = () => {
     setSearchTerm('');
@@ -172,7 +183,23 @@ export default function WorkListPage() {
     setDateFilter('all');
     setCustomFrom('');
     setCustomTo('');
+    setStaffFilter('');
   };
+
+  // Build staff dropdown list: owner first, then all staff/managers sorted by name
+  const ownerName = userProfile?.displayName || userProfile?.email || '';
+  const staffOptions = useMemo(() => {
+    const options: { value: string; label: string }[] = [];
+    if (ownerName) options.push({ value: ownerName, label: `${ownerName} (Owner)` });
+    staffList.forEach(s => {
+      const name = s.displayName || s.email || '';
+      if (name && name !== ownerName) {
+        const roleLabel = s.role === 'manager' ? 'Manager' : 'Staff';
+        options.push({ value: name, label: `${name} (${roleLabel})` });
+      }
+    });
+    return options;
+  }, [ownerName, staffList]);
 
   const ThHeader = ({ field, label, className = '' }: { field: SortField; label: string; className?: string }) => (
     <th className={`px-4 py-3 font-medium text-muted-foreground text-xs uppercase tracking-wide cursor-pointer select-none hover:text-foreground transition-colors ${className}`}
@@ -229,6 +256,17 @@ export default function WorkListPage() {
                   <SelectItem value="All">All Categories</SelectItem>
                   {categories.map(c => (
                     <SelectItem key={c.id} value={c.name}>{c.name}</SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+              <Select value={staffFilter} onValueChange={setStaffFilter}>
+                <SelectTrigger className="w-[180px] h-10 bg-background">
+                  <SelectValue placeholder="All Staff" />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="">All Staff</SelectItem>
+                  {staffOptions.map(o => (
+                    <SelectItem key={o.value} value={o.value}>{o.label}</SelectItem>
                   ))}
                 </SelectContent>
               </Select>
