@@ -991,8 +991,10 @@ function CashOnlineTab({
     const aepsPaid = aeps.filter(e => resolveStatus(e.paymentStatus) === 'paid');
     const aepsTotals = calc(aepsPaid.map(e => ({ mode: e.paymentMode, amount: e.profitMargin })));
 
+    // Recharge: only the profitMargin is shop income — the recharge amount itself
+    // is the customer's top-up value, not money earned by the shop.
     const rechargePaid = recharge.filter(e => resolveStatus(e.paymentStatus) === 'paid');
-    const rechargeTotals = calc(rechargePaid.map(e => ({ mode: e.paymentMode, amount: e.rechargeAmount })));
+    const rechargeTotals = calc(rechargePaid.map(e => ({ mode: e.paymentMode, amount: e.profitMargin })));
 
     const transferPaid = transfer.filter(e => resolveStatus(e.paymentStatus) === 'paid');
     const transferTotals = calc(transferPaid.map(e => ({ mode: e.paymentMode, amount: e.amount })));
