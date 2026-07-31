@@ -631,6 +631,18 @@ export const deleteCategory = async (id: string) => {
   return deleteDoc(doc(db, 'categories', id));
 };
 
+/**
+ * Delete every Firestore document in 'categories' whose name matches
+ * (exact, case-sensitive). Used to clean up hidden duplicates so that
+ * deleting a visible category removes ALL docs with that name.
+ */
+export const deleteCategoriesByName = async (name: string) => {
+  if (!db) throw new Error("Firebase not configured");
+  const q = query(collection(db, 'categories'), where('name', '==', name));
+  const snap = await getDocs(q);
+  await Promise.all(snap.docs.map(d => deleteDoc(d.ref)));
+};
+
 // ─── SETTINGS ────────────────────────────────────────────────────────────────
 
 export const getShopSettings = async (): Promise<ShopSettings> => {
