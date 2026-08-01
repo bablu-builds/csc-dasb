@@ -23,6 +23,7 @@ import DeletedItemsPage from '@/pages/DeletedItemsPage';
 import AepsWithdrawalPage from '@/pages/AepsWithdrawalPage';
 import ElectricRechargePage from '@/pages/ElectricRechargePage';
 import MoneyTransferPage from '@/pages/MoneyTransferPage';
+import FlightBookingPage from '@/pages/FlightBookingPage';
 import QuickWorkPage from '@/pages/QuickWorkPage';
 
 const queryClient = new QueryClient();
@@ -85,6 +86,12 @@ function AuthenticatedApp() {
           <Route path="/money-transfer">
             <PermissionRoute allowed={canAccessFinancialServices} message="You don't have permission to access Money Transfer. Contact the owner.">
               <MoneyTransferPage />
+            </PermissionRoute>
+          </Route>
+
+          <Route path="/flight-booking">
+            <PermissionRoute allowed={canAccessFinancialServices} message="You don't have permission to access Flight Booking. Contact the owner.">
+              <FlightBookingPage />
             </PermissionRoute>
           </Route>
 

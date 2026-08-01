@@ -917,6 +917,39 @@ export const settlePendingEntry = async (
   await addDoc(collection(db, 'paymentHistory'), record);
 };
 
+// ─── FLIGHT BOOKINGS ─────────────────────────────────────────────────────────
+
+export interface FlightBooking {
+  id?: string;
+  flightFrom: string;
+  flightTo: string;
+  boardingDate: string; // 'YYYY-MM-DD'
+  customerName: string;
+  actualFare: number;
+  amountCharged: number;
+  profitMargin: number; // auto-calculated: amountCharged - actualFare
+  createdAt: Timestamp;
+  addedBy: string;
+}
+
+export const createFlightBooking = async (data: Omit<FlightBooking, 'id' | 'createdAt'>): Promise<void> => {
+  if (!db) throw new Error('Firebase not configured');
+  await addDoc(collection(db, 'flightBookings'), {
+    ...stripUndefined(data as Record<string, unknown>),
+    createdAt: Timestamp.now(),
+  });
+};
+
+export const subscribeToFlightBookings = (callback: (entries: FlightBooking[]) => void) => {
+  if (!db) { callback([]); return () => {}; }
+  const q = query(collection(db, 'flightBookings'), orderBy('createdAt', 'desc'));
+  return onSnapshot(q, (snap) => {
+    const entries: FlightBooking[] = [];
+    snap.forEach(d => entries.push({ id: d.id, ...d.data() } as FlightBooking));
+    callback(entries);
+  }, (err) => { console.error('[Firestore] flightBookings error:', err.code, err.message); callback([]); });
+};
+
 /** Subscribe to all payment history records, newest first. */
 export const subscribeToPaymentHistory = (
   callback: (records: PaymentHistoryRecord[]) => void,

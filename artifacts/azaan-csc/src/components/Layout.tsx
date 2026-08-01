@@ -4,7 +4,7 @@ import { useSettings } from '@/contexts/SettingsContext';
 import {
   LayoutDashboard, PlusCircle, List, Clock, BarChart3, Settings,
   LogOut, Menu, Store, X, Trash2, Zap, ArrowRightLeft, ChevronRight,
-  User2, Fingerprint, Printer,
+  User2, Fingerprint, Printer, PlaneTakeoff,
 } from 'lucide-react';
 import { useState } from 'react';
 
@@ -33,6 +33,7 @@ const financialNavItems: NavItem[] = [
   { href: '/aeps', label: 'AEPS Withdrawal', icon: Fingerprint, financialOnly: true },
   { href: '/electric-recharge', label: 'Electric Recharge', icon: Zap, financialOnly: true },
   { href: '/money-transfer', label: 'Money Transfer', icon: ArrowRightLeft, financialOnly: true },
+  { href: '/flight-booking', label: 'Flight Booking', icon: PlaneTakeoff, financialOnly: true },
 ];
 
 const adminNavItems: NavItem[] = [

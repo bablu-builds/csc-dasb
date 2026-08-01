@@ -108,6 +108,11 @@ service cloud.firestore {
       allow read, write: if canAccessFinancial();
     }
 
+    // ── Flight Bookings ───────────────────────────────────────────────────────
+    match /flightBookings/{id} {
+      allow read, write: if canAccessFinancial();
+    }
+
     // ── Quick Action Work — all authenticated roles can read and write ─────────
     match /quickActionWork/{id} {
       allow read, write: if isAnyRole();

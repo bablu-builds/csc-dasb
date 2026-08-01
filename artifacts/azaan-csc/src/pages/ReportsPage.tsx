@@ -5,6 +5,7 @@ import {
   ElectricRecharge, subscribeToElectricRecharges,
   MoneyTransfer, subscribeToMoneyTransfers,
   QuickActionEntry, subscribeToQuickActions,
+  FlightBooking, subscribeToFlightBookings,
 } from '@/lib/firestore';
 import { useAuth } from '@/contexts/AuthContext';
 import {
@@ -41,7 +42,7 @@ import type { DateRange } from 'react-day-picker';
 
 type PresetKey = 'today' | 'yesterday' | 'thisWeek' | 'thisMonth' | 'lastMonth' | 'custom';
 type SortDir   = 'asc' | 'desc' | null;
-type TabKey    = 'overview' | 'work' | 'category' | 'aeps' | 'recharge' | 'transfer' | 'quick' | 'cashonline';
+type TabKey    = 'overview' | 'work' | 'category' | 'aeps' | 'recharge' | 'transfer' | 'quick' | 'flight' | 'cashonline';
 
 interface DateRangeState { from: Date; to: Date; preset: PresetKey; }
 
@@ -266,11 +267,12 @@ function DateRangeFilter({ value, onChange }: { value: DateRangeState; onChange:
 // ─────────────────────────────────────────────────────────────────────────────
 
 const SOURCE_COLORS: Record<string, string> = {
-  Work:       '#4f46e5',
-  AEPS:       '#10b981',
-  Recharge:   '#f59e0b',
-  Transfer:   '#8b5cf6',
-  'Quick Work': '#06b6d4',
+  Work:             '#4f46e5',
+  AEPS:             '#10b981',
+  Recharge:         '#f59e0b',
+  Transfer:         '#8b5cf6',
+  'Quick Work':     '#06b6d4',
+  'Flight Booking': '#f43f5e',
 };
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -278,10 +280,10 @@ const SOURCE_COLORS: Record<string, string> = {
 // ─────────────────────────────────────────────────────────────────────────────
 
 function OverviewTab({
-  work, aeps, recharge, transfer, quick, dateRange,
+  work, aeps, recharge, transfer, quick, flight, dateRange,
 }: {
   work: WorkEntry[]; aeps: AepsWithdrawal[]; recharge: ElectricRecharge[];
-  transfer: MoneyTransfer[]; quick: QuickActionEntry[]; dateRange: DateRangeState;
+  transfer: MoneyTransfer[]; quick: QuickActionEntry[]; flight: FlightBooking[]; dateRange: DateRangeState;
 }) {
   const activeWork     = work.filter(e => e.status !== 'Rejected');
   const workCollected  = activeWork.reduce((s, e) => s + e.paidAmount, 0);
@@ -297,16 +299,18 @@ function OverviewTab({
   const rechargeProfit = rechargePaid.reduce((s, e) => s + e.profitMargin, 0);
   const transferProfit = transferPaid.reduce((s, e) => s + e.profitMargin, 0);
   const quickEarned    = quickPaid.reduce((s, e) => s + e.amount, 0);
+  const flightProfit   = flight.reduce((s, e) => s + e.profitMargin, 0);
 
   const totalDue    = activeWork.reduce((s, e) => s + Math.max(0, e.dueAmount), 0);
   const totalCredit = activeWork.reduce((s, e) => s + (e.dueAmount < 0 ? -e.dueAmount : 0), 0);
 
   const profitSources = [
     { label: 'Work',       profit: workProfit,     sub: `${formatCurrency(workCollected)} − ${formatCurrency(workChallan)} challan` },
-    ...(aepsProfit     > 0 ? [{ label: 'AEPS',       profit: aepsProfit,     sub: `${aepsPaid.length} transactions` }]     : []),
-    ...(rechargeProfit > 0 ? [{ label: 'Recharge',   profit: rechargeProfit, sub: `${rechargePaid.length} transactions` }] : []),
-    ...(transferProfit > 0 ? [{ label: 'Transfer',   profit: transferProfit, sub: `${transferPaid.length} transactions` }] : []),
-    ...(quickEarned    > 0 ? [{ label: 'Quick Work', profit: quickEarned,    sub: `${quickPaid.length} transactions` }]     : []),
+    ...(aepsProfit     > 0 ? [{ label: 'AEPS',             profit: aepsProfit,     sub: `${aepsPaid.length} transactions` }]    : []),
+    ...(rechargeProfit > 0 ? [{ label: 'Recharge',         profit: rechargeProfit, sub: `${rechargePaid.length} transactions` }] : []),
+    ...(transferProfit > 0 ? [{ label: 'Transfer',         profit: transferProfit, sub: `${transferPaid.length} transactions` }] : []),
+    ...(quickEarned    > 0 ? [{ label: 'Quick Work',       profit: quickEarned,    sub: `${quickPaid.length} transactions` }]    : []),
+    ...(flight.length  > 0 ? [{ label: 'Flight Booking',   profit: flightProfit,   sub: `${flight.length} bookings` }]          : []),
   ];
   const totalProfit = profitSources.reduce((s, src) => s + src.profit, 0);
 
@@ -965,11 +969,123 @@ interface CashOnlineRow {
 
 const PIE_COLORS = { Cash: '#10b981', Online: '#3b82f6' };
 
+// ─────────────────────────────────────────────────────────────────────────────
+// Tab: Flight Booking
+// ─────────────────────────────────────────────────────────────────────────────
+
+function FlightTab({ entries, dateRange }: { entries: FlightBooking[]; dateRange: DateRangeState }) {
+  const [search, setSearch] = useState('');
+  const sort = useSortState('date');
+  const Th = makeTh(sort);
+
+  const totalBookings = entries.length;
+  const totalCharged  = entries.reduce((s, e) => s + e.amountCharged, 0);
+  const totalProfit   = entries.reduce((s, e) => s + e.profitMargin, 0);
+
+  const trendData = useMemo(() => buildDailyTrend(
+    entries.map(e => ({ ts: e.createdAt.toDate(), value: e.profitMargin })),
+    dateRange.from, dateRange.to,
+  ), [entries, dateRange]);
+
+  const filtered = useMemo(() => {
+    const q = search.toLowerCase();
+    return entries.filter(e =>
+      !search ||
+      e.customerName.toLowerCase().includes(q) ||
+      e.flightFrom.toLowerCase().includes(q) ||
+      e.flightTo.toLowerCase().includes(q),
+    );
+  }, [entries, search]);
+
+  const getValue = useCallback((e: FlightBooking, col: string): string | number => {
+    switch (col) {
+      case 'date':     return e.createdAt.toMillis();
+      case 'customer': return e.customerName;
+      case 'from':     return e.flightFrom;
+      case 'to':       return e.flightTo;
+      case 'boarding': return e.boardingDate;
+      case 'fare':     return e.actualFare;
+      case 'charged':  return e.amountCharged;
+      case 'profit':   return e.profitMargin;
+      default:         return 0;
+    }
+  }, []);
+
+  const sorted = useMemo(() => sortRows(filtered, sort.col, sort.dir, getValue), [filtered, sort.col, sort.dir, getValue]);
+
+  const exportCSV = () => {
+    downloadCSV(`flight-booking-report-${format(new Date(), 'yyyy-MM-dd')}.csv`, [
+      ['Date', 'Customer', 'Flight From', 'Flight To', 'Boarding Date', 'Actual Fare (₹)', 'Amount Charged (₹)', 'Profit (₹)', 'Added By'],
+      ...sorted.map(e => [
+        format(e.createdAt.toDate(), 'dd/MM/yyyy HH:mm'),
+        e.customerName, e.flightFrom, e.flightTo, e.boardingDate,
+        String(e.actualFare), String(e.amountCharged), String(e.profitMargin), e.addedBy,
+      ]),
+    ]);
+  };
+
+  return (
+    <div className="space-y-5">
+      <StatCards items={[
+        { label: 'Total Bookings',          value: String(totalBookings) },
+        { label: 'Total Amount Charged',    value: formatCurrency(totalCharged),  cls: 'text-emerald-700' },
+        { label: 'Total Profit',            value: formatCurrency(totalProfit),   cls: 'text-primary font-bold' },
+      ]} />
+      <Card>
+        <CardHeader className="pb-2"><CardTitle className="text-sm">Daily Profit Trend</CardTitle></CardHeader>
+        <CardContent><DailyTrendChart data={trendData} color="#f43f5e" label="Profit" /></CardContent>
+      </Card>
+      <div className="flex flex-col sm:flex-row items-stretch sm:items-center gap-2 justify-between">
+        <div className="relative flex-1 max-w-sm">
+          <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
+          <Input placeholder="Search customer, route…" value={search} onChange={e => setSearch(e.target.value)} className="pl-8 h-9" />
+        </div>
+        <Button variant="outline" size="sm" className="gap-1.5 h-9" onClick={exportCSV}><Download className="h-4 w-4" /> Export CSV</Button>
+      </div>
+      <Card>
+        <div className="overflow-x-auto">
+          <Table>
+            <TableHeader><TableRow>
+              <Th col="date"     label="Date" />
+              <Th col="customer" label="Customer" />
+              <Th col="from"     label="From" />
+              <Th col="to"       label="To" />
+              <Th col="boarding" label="Boarding Date" />
+              <Th col="fare"     label="Actual Fare"  align="right" />
+              <Th col="charged"  label="Amt Charged"  align="right" />
+              <Th col="profit"   label="Profit"       align="right" />
+            </TableRow></TableHeader>
+            <TableBody>
+              {sorted.length === 0
+                ? <TableRow><TableCell colSpan={8} className="text-center py-12 text-muted-foreground">{search ? `No entries match "${search}".` : 'No flight bookings in this period.'}</TableCell></TableRow>
+                : sorted.map(e => (
+                  <TableRow key={e.id} className="hover:bg-muted/30">
+                    <TableCell className="text-xs text-muted-foreground whitespace-nowrap">{format(e.createdAt.toDate(), 'dd MMM yyyy')}</TableCell>
+                    <TableCell className="font-medium">{e.customerName}</TableCell>
+                    <TableCell className="text-muted-foreground">{e.flightFrom}</TableCell>
+                    <TableCell className="text-muted-foreground">{e.flightTo}</TableCell>
+                    <TableCell className="text-muted-foreground whitespace-nowrap">
+                      {e.boardingDate ? format(new Date(e.boardingDate + 'T00:00:00'), 'dd MMM yyyy') : '—'}
+                    </TableCell>
+                    <TableCell className="text-right tabular-nums font-medium">{formatCurrency(e.actualFare)}</TableCell>
+                    <TableCell className="text-right tabular-nums font-medium">{formatCurrency(e.amountCharged)}</TableCell>
+                    <TableCell className="text-right tabular-nums text-emerald-700 font-semibold">{formatCurrency(e.profitMargin)}</TableCell>
+                  </TableRow>
+                ))}
+            </TableBody>
+          </Table>
+        </div>
+        {sorted.length > 0 && <div className="px-4 py-2 border-t text-xs text-muted-foreground">{sorted.length} booking{sorted.length !== 1 ? 's' : ''}{search ? ` matching "${search}"` : ''}</div>}
+      </Card>
+    </div>
+  );
+}
+
 function CashOnlineTab({
-  work, aeps, recharge, transfer, quick,
+  work, aeps, recharge, transfer, quick, flight,
 }: {
   work: WorkEntry[]; aeps: AepsWithdrawal[]; recharge: ElectricRecharge[];
-  transfer: MoneyTransfer[]; quick: QuickActionEntry[];
+  transfer: MoneyTransfer[]; quick: QuickActionEntry[]; flight: FlightBooking[];
 }) {
   // For each module: group collected amounts into Cash vs Online
   // Anything without paymentMode, or with 'Due'/'None', defaults to Cash
@@ -1004,14 +1120,19 @@ function CashOnlineTab({
     const quickPaid = quick.filter(e => resolveStatus(e.paymentStatus) === 'paid');
     const quickTotals = calc(quickPaid.map(e => ({ mode: e.paymentMode, amount: e.amount })));
 
+    // Flight Booking: only the profit is shop income — the actual fare passes
+    // through to the airline. All flight profits default to Cash (no paymentMode stored).
+    const flightTotals = calc(flight.map(e => ({ mode: undefined as string | undefined, amount: e.profitMargin })));
+
     return [
-      { module: 'Work',         ...workTotals,     total: workTotals.cash + workTotals.online },
-      { module: 'AEPS',         ...aepsTotals,     total: aepsTotals.cash + aepsTotals.online },
-      { module: 'Recharge',     ...rechargeTotals, total: rechargeTotals.cash + rechargeTotals.online },
+      { module: 'Work',           ...workTotals,     total: workTotals.cash + workTotals.online },
+      { module: 'AEPS',           ...aepsTotals,     total: aepsTotals.cash + aepsTotals.online },
+      { module: 'Recharge',       ...rechargeTotals, total: rechargeTotals.cash + rechargeTotals.online },
       { module: 'Money Transfer', ...transferTotals, total: transferTotals.cash + transferTotals.online },
-      { module: 'Quick Work',   ...quickTotals,    total: quickTotals.cash + quickTotals.online },
-    ].filter(r => r.total > 0);
-  }, [work, aeps, recharge, transfer, quick]);
+      { module: 'Quick Work',     ...quickTotals,    total: quickTotals.cash + quickTotals.online },
+      { module: 'Flight Booking', ...flightTotals,   total: flightTotals.cash + flightTotals.online },
+    ].filter(r => r.cash !== 0 || r.online !== 0 || r.total !== 0);
+  }, [work, aeps, recharge, transfer, quick, flight]);
 
   const grandCash   = rows.reduce((s, r) => s + r.cash, 0);
   const grandOnline = rows.reduce((s, r) => s + r.online, 0);
@@ -1187,6 +1308,7 @@ const TABS: { key: TabKey; label: string }[] = [
   { key: 'recharge',   label: 'Recharge' },
   { key: 'transfer',   label: 'Money Transfer' },
   { key: 'quick',      label: 'Quick Work' },
+  { key: 'flight',     label: 'Flight Booking' },
   { key: 'cashonline', label: 'Cash vs Online' },
 ];
 
@@ -1199,6 +1321,7 @@ export default function ReportsPage() {
   const [rechargeEntries, setRechargeEntries] = useState<ElectricRecharge[]>([]);
   const [transferEntries, setTransferEntries] = useState<MoneyTransfer[]>([]);
   const [quickEntries,    setQuickEntries]    = useState<QuickActionEntry[]>([]);
+  const [flightEntries,   setFlightEntries]   = useState<FlightBooking[]>([]);
   const [loading, setLoading] = useState(true);
 
   const [dateRange, setDateRange] = useState<DateRangeState>(() => {
@@ -1208,13 +1331,14 @@ export default function ReportsPage() {
 
   useEffect(() => {
     let resolved = 0;
-    const done = () => { if (++resolved === 5) setLoading(false); };
+    const done = () => { if (++resolved === 6) setLoading(false); };
     const u1 = subscribeToWorkEntries(d => { setWorkEntries(d); done(); });
     const u2 = subscribeToAepsWithdrawals(d => { setAepsEntries(d); done(); });
     const u3 = subscribeToElectricRecharges(d => { setRechargeEntries(d); done(); });
     const u4 = subscribeToMoneyTransfers(d => { setTransferEntries(d); done(); });
     const u5 = subscribeToQuickActions(d => { setQuickEntries(d); done(); }, () => done());
-    return () => { u1(); u2(); u3(); u4(); u5(); };
+    const u6 = subscribeToFlightBookings(d => { setFlightEntries(d); done(); });
+    return () => { u1(); u2(); u3(); u4(); u5(); u6(); };
   }, []);
 
   // Filter every collection to the selected date range
@@ -1223,6 +1347,7 @@ export default function ReportsPage() {
   const fr = useMemo(() => rechargeEntries.filter(e => inRange(e.createdAt.toDate(), dateRange.from, dateRange.to)), [rechargeEntries, dateRange]);
   const ft = useMemo(() => transferEntries.filter(e => inRange(e.createdAt.toDate(), dateRange.from, dateRange.to)), [transferEntries, dateRange]);
   const fq = useMemo(() => quickEntries   .filter(e => inRange(e.createdAt.toDate(), dateRange.from, dateRange.to)), [quickEntries,    dateRange]);
+  const ff = useMemo(() => flightEntries  .filter(e => inRange(e.createdAt.toDate(), dateRange.from, dateRange.to)), [flightEntries,   dateRange]);
 
   // ── Access guard ────────────────────────────────────────────────────────────
   if (!isOwner) return (
@@ -1276,14 +1401,15 @@ export default function ReportsPage() {
       <DateRangeFilter value={dateRange} onChange={setDateRange} />
 
       {/* Tab content */}
-      {activeTab === 'overview'   && <OverviewTab    work={fw} aeps={fa} recharge={fr} transfer={ft} quick={fq} dateRange={dateRange} />}
+      {activeTab === 'overview'   && <OverviewTab    work={fw} aeps={fa} recharge={fr} transfer={ft} quick={fq} flight={ff} dateRange={dateRange} />}
       {activeTab === 'work'       && <WorkChallanTab work={fw} />}
       {activeTab === 'category'   && <CategoryTab   work={fw} />}
       {activeTab === 'aeps'       && <AepsTab        entries={fa} dateRange={dateRange} />}
       {activeTab === 'recharge'   && <RechargeTab    entries={fr} dateRange={dateRange} />}
       {activeTab === 'transfer'   && <TransferTab    entries={ft} dateRange={dateRange} />}
       {activeTab === 'quick'      && <QuickTab       entries={fq} />}
-      {activeTab === 'cashonline' && <CashOnlineTab  work={fw} aeps={fa} recharge={fr} transfer={ft} quick={fq} />}
+      {activeTab === 'flight'     && <FlightTab      entries={ff} dateRange={dateRange} />}
+      {activeTab === 'cashonline' && <CashOnlineTab  work={fw} aeps={fa} recharge={fr} transfer={ft} quick={fq} flight={ff} />}
     </div>
   );
 }
