@@ -50,9 +50,15 @@ service cloud.firestore {
       allow read, write: if isAnyRole();
     }
 
+    function canManageCategories() {
+      return isOwner()
+        || isManager()
+        || (isStaff() && get(userDoc()).data.canManageCategories == true);
+    }
+
     match /categories/{catId} {
       allow read: if isAnyRole();
-      allow write: if isOwnerOrManager();
+      allow write: if canManageCategories();
     }
 
     match /settings/{docId} {

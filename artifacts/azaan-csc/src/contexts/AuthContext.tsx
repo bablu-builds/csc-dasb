@@ -17,6 +17,7 @@ interface AuthContextType {
   canManageWork: boolean;
   canAccessQuickWork: boolean;
   canViewDeletedItems: boolean;
+  canManageCategories: boolean;
   displayName: string;
   loading: boolean;
   profileLoading: boolean;
@@ -34,6 +35,7 @@ const AuthContext = createContext<AuthContextType>({
   canManageWork: true,
   canAccessQuickWork: true,
   canViewDeletedItems: true,
+  canManageCategories: false,
   displayName: '',
   loading: true,
   profileLoading: true,
@@ -147,13 +149,14 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const canManageWork = isOwner || isManager || (userProfile?.canManageWork !== false);
   const canAccessQuickWork = isOwner || isManager || (userProfile?.canAccessQuickWork !== false);
   const canViewDeletedItems = isOwner || isManager || (userProfile?.canViewDeletedItems !== false);
+  const canManageCategories = isOwner || isManager || (userProfile?.canManageCategories === true);
 
   const displayName = userProfile?.displayName || user?.displayName || user?.email?.split('@')[0] || 'Staff';
 
   return (
     <AuthContext.Provider value={{
       user, userProfile, role, isOwner, isManager,
-      canAccessFinancialServices, canManageWork, canAccessQuickWork, canViewDeletedItems,
+      canAccessFinancialServices, canManageWork, canAccessQuickWork, canViewDeletedItems, canManageCategories,
       displayName, loading, profileLoading, logout, isConfigured,
     }}>
       {children}

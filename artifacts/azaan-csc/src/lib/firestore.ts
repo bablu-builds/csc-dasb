@@ -30,6 +30,7 @@ export interface UserProfile {
   canAccessFinancialServices?: boolean; // AEPS, Recharge, Money Transfer (default false)
   canAccessQuickWork?: boolean;         // Quick Action Work (default true for backward compat)
   canViewDeletedItems?: boolean;        // View/restore recycle bin (default true for backward compat)
+  canManageCategories?: boolean;        // Add/delete/reorder categories (default false)
 }
 
 /** Fetch a user's profile document. Returns null if not found. */
@@ -134,6 +135,7 @@ export interface StaffPermissions {
   canAccessFinancialServices?: boolean;
   canAccessQuickWork?: boolean;
   canViewDeletedItems?: boolean;
+  canManageCategories?: boolean;
 }
 
 /**
@@ -170,6 +172,7 @@ export const createStaffAccount = async (
       canAccessFinancialServices: isManager ? true : (permissions.canAccessFinancialServices ?? false),
       canAccessQuickWork: isManager ? true : (permissions.canAccessQuickWork ?? false),
       canViewDeletedItems: isManager ? true : (permissions.canViewDeletedItems ?? false),
+      canManageCategories: isManager ? true : (permissions.canManageCategories ?? false),
     };
     if (phone && phone.trim()) profileData.phone = phone.trim();
     await setDoc(doc(db, 'users', cred.user.uid), profileData);
@@ -189,6 +192,7 @@ export const updateStaffProfile = async (
     canAccessFinancialServices?: boolean;
     canAccessQuickWork?: boolean;
     canViewDeletedItems?: boolean;
+    canManageCategories?: boolean;
   },
 ): Promise<void> => {
   if (!db) throw new Error('Firebase not configured');
@@ -199,6 +203,7 @@ export const updateStaffProfile = async (
   if (data.canAccessFinancialServices !== undefined) updates.canAccessFinancialServices = data.canAccessFinancialServices;
   if (data.canAccessQuickWork !== undefined) updates.canAccessQuickWork = data.canAccessQuickWork;
   if (data.canViewDeletedItems !== undefined) updates.canViewDeletedItems = data.canViewDeletedItems;
+  if (data.canManageCategories !== undefined) updates.canManageCategories = data.canManageCategories;
   await updateDoc(doc(db, 'users', uid), updates);
 };
 

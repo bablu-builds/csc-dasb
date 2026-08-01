@@ -80,6 +80,7 @@ interface PermToggles {
   canAccessFinancialServices: boolean;
   canAccessQuickWork: boolean;
   canViewDeletedItems: boolean;
+  canManageCategories: boolean;
 }
 
 function PermissionToggle({
@@ -183,6 +184,7 @@ function EditStaffDialog({
     canAccessFinancialServices: staff.canAccessFinancialServices === true,
     canAccessQuickWork: staff.canAccessQuickWork !== false,
     canViewDeletedItems: staff.canViewDeletedItems !== false,
+    canManageCategories: staff.canManageCategories === true,
   });
   const [saving, setSaving] = useState(false);
   const isManager = staff.role === 'manager';
@@ -195,6 +197,7 @@ function EditStaffDialog({
       canAccessFinancialServices: staff.canAccessFinancialServices === true,
       canAccessQuickWork: staff.canAccessQuickWork !== false,
       canViewDeletedItems: staff.canViewDeletedItems !== false,
+      canManageCategories: staff.canManageCategories === true,
     });
   }, [staff]);
 
@@ -271,6 +274,12 @@ function EditStaffDialog({
                   description="Access the recycle bin and restore deleted entries"
                   checked={perms.canViewDeletedItems}
                   onChange={v => setPerms(p => ({ ...p, canViewDeletedItems: v }))}
+                />
+                <PermissionToggle id={`edit-manage-categories-${staff.uid}`}
+                  label="Manage Categories"
+                  description="Add, delete, and reorder work categories"
+                  checked={perms.canManageCategories}
+                  onChange={v => setPerms(p => ({ ...p, canManageCategories: v }))}
                 />
               </div>
             </div>
@@ -429,6 +438,7 @@ function StaffCard({
     { label: 'Financial', active: staff.canAccessFinancialServices === true },
     { label: 'Quick Work', active: staff.canAccessQuickWork !== false },
     { label: 'Deleted Items', active: staff.canViewDeletedItems !== false },
+    { label: 'Categories', active: staff.canManageCategories === true },
   ];
 
   return (
@@ -594,7 +604,7 @@ export default function SettingsPage() {
     const reordered = arrayMove(categories, oldIndex, newIndex);
     await reorderCategories(reordered.map(c => c.id));
   };
-  const { role, userProfile } = useAuth();
+  const { role, userProfile, canManageCategories } = useAuth();
   const isOwner = role === 'owner';
 
   const [isSavingInfo, setIsSavingInfo] = useState(false);
@@ -626,6 +636,7 @@ export default function SettingsPage() {
     canAccessFinancialServices: false,
     canAccessQuickWork: false,
     canViewDeletedItems: false,
+    canManageCategories: false,
   });
 
   useEffect(() => {
@@ -674,6 +685,7 @@ export default function SettingsPage() {
         canAccessFinancialServices: newStaffPerms.canAccessFinancialServices,
         canAccessQuickWork: newStaffPerms.canAccessQuickWork,
         canViewDeletedItems: newStaffPerms.canViewDeletedItems,
+        canManageCategories: newStaffPerms.canManageCategories,
       } : {};
 
       await createStaffAccount(
@@ -694,7 +706,7 @@ export default function SettingsPage() {
       setStaffPhone('');
       setStaffPassword('');
       setNewStaffRole('staff');
-      setNewStaffPerms({ canManageWork: true, canAccessFinancialServices: false, canAccessQuickWork: false, canViewDeletedItems: false });
+      setNewStaffPerms({ canManageWork: true, canAccessFinancialServices: false, canAccessQuickWork: false, canViewDeletedItems: false, canManageCategories: false });
       toast({ title: `${newStaffRole === 'manager' ? 'Manager' : 'Staff'} account created`, description: `${staffName.trim()} can now log in.` });
     } catch (err: any) {
       const msg = err.code === 'auth/email-already-in-use'
@@ -807,28 +819,47 @@ export default function SettingsPage() {
               <CardDescription>Manage the options in the "Work Category" dropdown.</CardDescription>
             </CardHeader>
             <CardContent>
-              <form onSubmit={handleAddCategory} className="flex gap-2 mb-5">
-                <Input className={`${inp} flex-1 max-w-sm`} placeholder="New category name..."
-                  value={newCat} onChange={e => setNewCat(e.target.value)} />
-                <Button type="submit" disabled={isAddingCat || !newCat.trim()} className="gap-1.5">
-                  {isAddingCat ? <Loader2 className="h-4 w-4 animate-spin" /> : <Plus className="h-4 w-4" />}
-                  Add
-                </Button>
-              </form>
-              <div className="border rounded-xl overflow-hidden divide-y">
-                {categories.length === 0 ? (
-                  <div className="p-6 text-center text-muted-foreground text-sm">No categories found</div>
-                ) : (
-                  <DndContext sensors={sensors} collisionDetection={closestCenter} onDragEnd={handleDragEnd}>
-                    <SortableContext items={categories.map(c => c.id)} strategy={verticalListSortingStrategy}>
-                      {categories.map(cat => (
-                        <SortableCategoryRow key={cat.id} cat={cat} onRemove={() => removeCategory(cat.id)} />
-                      ))}
-                    </SortableContext>
-                  </DndContext>
-                )}
-              </div>
-              <p className="text-xs text-muted-foreground mt-3">{categories.length} categories · drag to reorder</p>
+              {canManageCategories ? (
+                <>
+                  <form onSubmit={handleAddCategory} className="flex gap-2 mb-5">
+                    <Input className={`${inp} flex-1 max-w-sm`} placeholder="New category name..."
+                      value={newCat} onChange={e => setNewCat(e.target.value)} />
+                    <Button type="submit" disabled={isAddingCat || !newCat.trim()} className="gap-1.5">
+                      {isAddingCat ? <Loader2 className="h-4 w-4 animate-spin" /> : <Plus className="h-4 w-4" />}
+                      Add
+                    </Button>
+                  </form>
+                  <div className="border rounded-xl overflow-hidden divide-y">
+                    {categories.length === 0 ? (
+                      <div className="p-6 text-center text-muted-foreground text-sm">No categories found</div>
+                    ) : (
+                      <DndContext sensors={sensors} collisionDetection={closestCenter} onDragEnd={handleDragEnd}>
+                        <SortableContext items={categories.map(c => c.id)} strategy={verticalListSortingStrategy}>
+                          {categories.map(cat => (
+                            <SortableCategoryRow key={cat.id} cat={cat} onRemove={() => removeCategory(cat.id)} />
+                          ))}
+                        </SortableContext>
+                      </DndContext>
+                    )}
+                  </div>
+                  <p className="text-xs text-muted-foreground mt-3">{categories.length} categories · drag to reorder</p>
+                </>
+              ) : (
+                <>
+                  <div className="flex items-center gap-3 text-muted-foreground mb-5">
+                    <ShieldCheck className="h-5 w-5 shrink-0" />
+                    <p className="text-sm">You can view categories but don't have permission to add, delete, or reorder them. Ask the Owner to grant you "Manage Categories" access.</p>
+                  </div>
+                  <div className="border rounded-xl overflow-hidden divide-y">
+                    {categories.length === 0 ? (
+                      <div className="p-6 text-center text-muted-foreground text-sm">No categories found</div>
+                    ) : categories.map(cat => (
+                      <div key={cat.id} className="flex items-center px-4 py-3 text-sm">{cat.name}</div>
+                    ))}
+                  </div>
+                  <p className="text-xs text-muted-foreground mt-3">{categories.length} categories</p>
+                </>
+              )}
             </CardContent>
           </Card>
         </TabsContent>
@@ -960,6 +991,13 @@ export default function SettingsPage() {
                             description="Access the recycle bin and restore deleted entries"
                             checked={newStaffPerms.canViewDeletedItems}
                             onChange={v => setNewStaffPerms(p => ({ ...p, canViewDeletedItems: v }))}
+                          />
+                          <PermissionToggle
+                            id="new-manage-categories"
+                            label="Manage Categories"
+                            description="Add, delete, and reorder work categories"
+                            checked={newStaffPerms.canManageCategories}
+                            onChange={v => setNewStaffPerms(p => ({ ...p, canManageCategories: v }))}
                           />
                         </div>
                       </div>
