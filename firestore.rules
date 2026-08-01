@@ -2,8 +2,6 @@ rules_version = '2';
 service cloud.firestore {
   match /databases/{database}/documents {
 
-    // ── Helper functions ─────────────────────────────────────────────────────
-
     function isAuth() {
       return request.auth != null;
     }
@@ -38,87 +36,66 @@ service cloud.firestore {
       return isOwner() || isManager() || isStaff();
     }
 
-    // Staff with explicit financial-services permission, or manager/owner
     function canAccessFinancial() {
       return isOwner()
         || isManager()
         || (isStaff() && get(userDoc()).data.canAccessFinancialServices == true);
     }
 
-    // ── workEntries — all authenticated roles can read and write ─────────────
     match /workEntries/{entryId} {
       allow read, write: if isAnyRole();
     }
 
-    // ── workAdjustments — all authenticated roles can read and write ─────────
     match /workAdjustments/{adjId} {
       allow read, write: if isAnyRole();
     }
 
-    // ── categories — all roles can read; owner/manager manage ────────────────
     match /categories/{catId} {
       allow read: if isAnyRole();
       allow write: if isOwnerOrManager();
     }
 
-    // ── settings — all roles can read; only owner can write ──────────────────
     match /settings/{docId} {
       allow read: if isAnyRole();
       allow write: if isOwner();
     }
 
-    // ── users — role-based access ─────────────────────────────────────────────
     match /users/{uid} {
-      // Anyone authenticated can read their own profile
       allow read: if isAuth() && request.auth.uid == uid;
-      // Owner can read all profiles (for Staff Management)
       allow read: if isOwner();
-      // A user can create their own profile (owner bootstrap or email-link first sign-in)
       allow create: if isAuth() && request.auth.uid == uid
                     && request.resource.data.role in ['owner', 'manager', 'staff'];
-      // Owner can create profiles for other users (staff onboarding via secondary app)
       allow create: if isOwner();
-      // Only owner can update/delete other user profiles (staff/manager management)
       allow update, delete: if isOwner();
-      // A user can update their own profile (e.g. display name) but NOT change role
       allow update: if isAuth() && request.auth.uid == uid
                     && request.resource.data.role == resource.data.role;
     }
 
-    // ── pendingInvites — for email-link staff invite flow ────────────────────
     match /pendingInvites/{inviteId} {
-      // Allow anyone to read (including newly signed-in users before profile exists)
       allow read: if true;
-      // Only owner can create/update/delete invites
       allow write: if isOwner();
     }
 
-    // ── AEPS Withdrawals ─────────────────────────────────────────────────────
     match /aepsWithdrawals/{id} {
       allow read, write: if canAccessFinancial();
     }
 
-    // ── Electric Recharges ────────────────────────────────────────────────────
     match /electricRecharges/{id} {
       allow read, write: if canAccessFinancial();
     }
 
-    // ── Money Transfers ───────────────────────────────────────────────────────
     match /moneyTransfers/{id} {
       allow read, write: if canAccessFinancial();
     }
 
-    // ── Flight Bookings ───────────────────────────────────────────────────────
     match /flightBookings/{id} {
       allow read, write: if canAccessFinancial();
     }
 
-    // ── Quick Action Work — all authenticated roles can read and write ─────────
     match /quickActionWork/{id} {
       allow read, write: if isAnyRole();
     }
 
-    // ── Payment History — all authenticated roles can read and write ──────────
     match /paymentHistory/{id} {
       allow read, write: if isAnyRole();
     }
