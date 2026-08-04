@@ -13,7 +13,7 @@ import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Skeleton } from '@/components/ui/skeleton';
 import {
   IndianRupee, Users, Clock, AlertTriangle, FileText, XCircle, TrendingUp,
-  CheckCircle2, Phone, Pencil,
+  CheckCircle2, Pencil,
 } from 'lucide-react';
 import { Link } from 'wouter';
 import { Button } from '@/components/ui/button';
@@ -69,9 +69,6 @@ function ReminderRow({ entry }: { entry: WorkEntry & { daysPending: number } }) 
       <Badge variant="outline" className="text-[10px] font-normal px-1.5 py-0 text-muted-foreground border-muted shrink-0">
         {cat}
       </Badge>
-      <span className="flex items-center gap-1 text-xs text-muted-foreground whitespace-nowrap">
-        <Phone className="h-3 w-3 shrink-0" />{entry.mobile}
-      </span>
       {/* Spacer — pushes right-side items to the edge on desktop */}
       <span className="hidden sm:block flex-1" />
       {/* Right cluster: badge + due + edit */}
@@ -318,7 +315,7 @@ export default function DashboardPage() {
       {isOwner && (
         <section>
           {/* Work summary cards */}
-          <div className="grid grid-cols-2 md:grid-cols-3 xl:grid-cols-6 gap-4 mb-4">
+          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4 mb-4">
             <Card className="bg-primary/5 border-primary/20 shadow-sm hover:shadow-md transition-shadow">
               <CardHeader className="flex flex-row items-center justify-between pb-2">
                 <CardTitle className="text-xs font-medium text-primary uppercase tracking-wide">Today's Earning</CardTitle>
