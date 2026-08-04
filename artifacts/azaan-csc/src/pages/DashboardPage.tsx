@@ -5,6 +5,7 @@ import {
   subscribeToElectricRecharges, ElectricRecharge,
   subscribeToMoneyTransfers, MoneyTransfer,
   subscribeToQuickActions, QuickActionEntry,
+  FlightBooking, subscribeToFlightBookings,
 } from '@/lib/firestore';
 import { useAuth } from '@/contexts/AuthContext';
 import { isToday, isThisMonth, subDays, format } from 'date-fns';
@@ -100,6 +101,7 @@ export default function DashboardPage() {
   const [rechargeEntries, setRechargeEntries] = useState<ElectricRecharge[]>([]);
   const [transferEntries, setTransferEntries] = useState<MoneyTransfer[]>([]);
   const [quickEntries, setQuickEntries] = useState<QuickActionEntry[]>([]);
+  const [flightEntries, setFlightEntries] = useState<FlightBooking[]>([]);
   const [loading, setLoading] = useState(true);
   const [firestoreError, setFirestoreError] = useState<string | null>(null);
   const [completingId, setCompletingId] = useState<string | null>(null);
@@ -113,7 +115,7 @@ export default function DashboardPage() {
     const loaded = new Set<string>();
     const done = (key: string) => {
       loaded.add(key);
-      if (loaded.size >= 5) setLoading(false);
+      if (loaded.size >= 6) setLoading(false);
     };
     const timer = setTimeout(() => setLoading(false), 10_000);
 
@@ -125,7 +127,8 @@ export default function DashboardPage() {
       (d) => { setQuickEntries(d); done('quick'); },
       (err) => { done('quick'); setFirestoreError(`Quick Action Work: ${err.message}`); },
     );
-    return () => { clearTimeout(timer); u1(); u2(); u3(); u4(); u5(); };
+    const u6 = subscribeToFlightBookings((d) => { setFlightEntries(d); done('flight'); });
+    return () => { clearTimeout(timer); u1(); u2(); u3(); u4(); u5(); u6(); };
   }, []);
 
   const today = new Date();
@@ -196,7 +199,10 @@ export default function DashboardPage() {
   const todayChallanCost = todayWork.reduce((s, e) => s + (e.challanAmount ?? 0) + (e.netAdjustmentChallan ?? 0), 0);
   const todayWorkProfit = workTodayEarning - todayChallanCost;
   const todayQuickProfit = todayQuickEarning;
-  const todayTotalProfit = todayWorkProfit + todayAepsProfit + todayRechargeProfit + todayTransferProfit + todayQuickProfit;
+  const todayFlightProfit = flightEntries
+    .filter(e => isToday(e.createdAt.toDate()))
+    .reduce((s, e) => s + e.profitMargin, 0);
+  const todayTotalProfit = todayWorkProfit + todayAepsProfit + todayRechargeProfit + todayTransferProfit + todayQuickProfit + todayFlightProfit;
 
   const monthAepsProfit = aepsEntries
     .filter(e => isThisMonth(e.createdAt.toDate()) && resolveStatus(e.paymentStatus) === 'paid')
@@ -212,7 +218,10 @@ export default function DashboardPage() {
     .reduce((s, e) => s + (e.challanAmount ?? 0), 0);
   const monthWorkProfit = workMonthEarning - monthChallanCost;
   const monthQuickProfit = monthQuickEarning;
-  const monthTotalProfit = monthWorkProfit + monthAepsProfit + monthRechargeProfit + monthTransferProfit + monthQuickProfit;
+  const monthFlightProfit = flightEntries
+    .filter(e => isThisMonth(e.createdAt.toDate()))
+    .reduce((s, e) => s + e.profitMargin, 0);
+  const monthTotalProfit = monthWorkProfit + monthAepsProfit + monthRechargeProfit + monthTransferProfit + monthQuickProfit + monthFlightProfit;
 
   // Pending reminders (3+ days old, or has due amount)
   const reminderEntries = workEntries
@@ -334,14 +343,14 @@ export default function DashboardPage() {
 
             <Card className="shadow-sm hover:shadow-md transition-shadow">
               <CardHeader className="flex flex-row items-center justify-between pb-2">
-                <CardTitle className="text-xs font-medium uppercase tracking-wide text-muted-foreground">This Month</CardTitle>
+                <CardTitle className="text-xs font-medium uppercase tracking-wide text-muted-foreground">This Month Profit</CardTitle>
                 <div className="h-8 w-8 rounded-full bg-blue-50 flex items-center justify-center">
                   <TrendingUp className="h-4 w-4 text-blue-600" />
                 </div>
               </CardHeader>
               <CardContent>
-                <div className="text-2xl font-bold">{formatCurrency(monthEarning)}</div>
-                <p className="text-xs text-muted-foreground mt-1">Monthly earned</p>
+                <div className="text-2xl font-bold">{formatCurrency(monthTotalProfit)}</div>
+                <p className="text-xs text-muted-foreground mt-1">All 6 services (paid only)</p>
               </CardContent>
             </Card>
 
@@ -410,14 +419,14 @@ export default function DashboardPage() {
             <StatCard
               label="Today's Total Profit"
               value={formatCurrency(todayTotalProfit)}
-              sub={`Work ₹${Math.round(todayWorkProfit)} · Quick ₹${Math.round(todayQuickProfit)} · AEPS ₹${Math.round(todayAepsProfit)} · Recharge ₹${Math.round(todayRechargeProfit)} · Transfer ₹${Math.round(todayTransferProfit)}`}
+              sub={`Work ₹${Math.round(todayWorkProfit)} · Quick ₹${Math.round(todayQuickProfit)} · AEPS ₹${Math.round(todayAepsProfit)} · Recharge ₹${Math.round(todayRechargeProfit)} · Transfer ₹${Math.round(todayTransferProfit)} · Flight ₹${Math.round(todayFlightProfit)}`}
               icon={TrendingUp}
               gradient="bg-gradient-to-br from-emerald-500 to-emerald-700"
             />
             <StatCard
               label="Month's Total Profit"
               value={formatCurrency(monthTotalProfit)}
-              sub="Work + Quick + AEPS + Recharge + Transfer (paid only)"
+              sub={`Work ₹${Math.round(monthWorkProfit)} · Quick ₹${Math.round(monthQuickProfit)} · AEPS ₹${Math.round(monthAepsProfit)} · Recharge ₹${Math.round(monthRechargeProfit)} · Transfer ₹${Math.round(monthTransferProfit)} · Flight ₹${Math.round(monthFlightProfit)}`}
               icon={IndianRupee}
               gradient="bg-gradient-to-br from-indigo-500 to-indigo-700"
             />
