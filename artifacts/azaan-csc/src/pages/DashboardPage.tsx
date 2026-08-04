@@ -215,7 +215,7 @@ export default function DashboardPage() {
     .reduce((s, e) => s + e.profitMargin, 0);
   const monthChallanCost = workEntries
     .filter(e => isThisMonth(e.date.toDate()) && e.status !== 'Rejected')
-    .reduce((s, e) => s + (e.challanAmount ?? 0), 0);
+    .reduce((s, e) => s + (e.challanAmount ?? 0) + (e.netAdjustmentChallan ?? 0), 0);
   const monthWorkProfit = workMonthEarning - monthChallanCost;
   const monthQuickProfit = monthQuickEarning;
   const monthFlightProfit = flightEntries

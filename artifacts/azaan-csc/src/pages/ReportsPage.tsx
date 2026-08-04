@@ -28,7 +28,8 @@ import {
 import {
   ShieldCheck, TrendingUp, IndianRupee, Download, Search,
   CalendarIcon, ChevronUp, ChevronDown, ChevronsUpDown,
-  AlertTriangle, X, Banknote, Wifi,
+  AlertTriangle, X, Banknote, Wifi, Users, ChevronRight,
+  LayoutDashboard, Briefcase, BarChart3, Info,
 } from 'lucide-react';
 import {
   LineChart, Line, BarChart, Bar, XAxis, YAxis, CartesianGrid,
@@ -40,9 +41,10 @@ import type { DateRange } from 'react-day-picker';
 // Types
 // ─────────────────────────────────────────────────────────────────────────────
 
-type PresetKey = 'today' | 'yesterday' | 'thisWeek' | 'thisMonth' | 'lastMonth' | 'custom';
-type SortDir   = 'asc' | 'desc' | null;
-type TabKey    = 'overview' | 'work' | 'category' | 'aeps' | 'recharge' | 'transfer' | 'quick' | 'flight' | 'cashonline';
+type PresetKey    = 'today' | 'yesterday' | 'thisWeek' | 'thisMonth' | 'lastMonth' | 'custom';
+type SortDir      = 'asc' | 'desc' | null;
+type TabKey       = 'overview' | 'work' | 'financial' | 'staff';
+type FinancialKey = 'aeps' | 'recharge' | 'transfer' | 'quick' | 'flight';
 
 interface DateRangeState { from: Date; to: Date; preset: PresetKey; }
 
@@ -119,7 +121,6 @@ function StatusBadge({ status }: { status: WorkEntry['status'] }) {
   return <span className={`inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium border ${cls[status]}`}>{status}</span>;
 }
 
-/** Create a Th component bound to a sort state — call inside each tab component */
 function makeTh(sort: ReturnType<typeof useSortState>) {
   return function Th({ col, label, align = 'left' }: { col: string; label: string; align?: 'left' | 'right' }) {
     return (
@@ -133,15 +134,21 @@ function makeTh(sort: ReturnType<typeof useSortState>) {
   };
 }
 
-/** Consistent summary stat cards used across every tab */
-function StatCards({ items }: { items: { label: string; value: string; sub?: string; cls?: string }[] }) {
+function StatCards({ items }: { items: { label: string; value: string; sub?: string; cls?: string; info?: string }[] }) {
   const cols = items.length === 3 ? 'grid-cols-1 sm:grid-cols-3' : 'grid-cols-2 sm:grid-cols-4';
   return (
     <div className={`grid gap-3 ${cols}`}>
       {items.map(s => (
         <Card key={s.label}>
           <CardContent className="pt-4 pb-3">
-            <p className="text-xs text-muted-foreground uppercase tracking-wide mb-1">{s.label}</p>
+            <div className="flex items-center gap-1 mb-1">
+              <p className="text-xs text-muted-foreground uppercase tracking-wide">{s.label}</p>
+              {s.info && (
+                <span title={s.info} className="cursor-help">
+                  <Info className="h-3 w-3 text-muted-foreground/60" />
+                </span>
+              )}
+            </div>
             <p className={`text-xl font-semibold ${s.cls ?? ''}`}>{s.value}</p>
             {s.sub && <p className="text-xs text-muted-foreground mt-0.5">{s.sub}</p>}
           </CardContent>
@@ -159,13 +166,12 @@ function getWorkChallan(e: WorkEntry): number {
   return (e.challanAmount ?? 0) + (e.netAdjustmentChallan ?? 0);
 }
 
-/** For Cash vs Online: treat anything that isn't explicitly 'Online' as 'Cash' */
 function isOnline(mode: string | undefined): boolean {
   return mode === 'Online';
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
-// Daily trend builder (reused by AEPS / Recharge / Transfer)
+// Daily trend builder
 // ─────────────────────────────────────────────────────────────────────────────
 
 function buildDailyTrend(
@@ -186,13 +192,12 @@ function buildDailyTrend(
   }));
 }
 
-/** Bar chart for daily profit — shared across financial service tabs */
 function DailyTrendChart({ data, color, label }: { data: { date: string; value: number }[]; color: string; label: string }) {
   const hasData = data.some(d => d.value > 0);
   if (!hasData) return (
     <div className="flex flex-col items-center justify-center h-36 text-muted-foreground">
       <TrendingUp className="h-7 w-7 mb-2 opacity-20" />
-      <p className="text-sm">No data in this period.</p>
+      <p className="text-sm">Is period me koi data nahi.</p>
     </div>
   );
   return (
@@ -211,15 +216,15 @@ function DailyTrendChart({ data, color, label }: { data: { date: string; value: 
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
-// Date Range Filter
+// Date Range Filter (shown at top of page, single for all tabs)
 // ─────────────────────────────────────────────────────────────────────────────
 
 const PRESETS: { key: Exclude<PresetKey, 'custom'>; label: string }[] = [
-  { key: 'today',     label: 'Today' },
-  { key: 'yesterday', label: 'Yesterday' },
-  { key: 'thisWeek',  label: 'This Week' },
-  { key: 'thisMonth', label: 'This Month' },
-  { key: 'lastMonth', label: 'Last Month' },
+  { key: 'today',     label: 'Aaj' },
+  { key: 'yesterday', label: 'Kal' },
+  { key: 'thisWeek',  label: 'Is Hafte' },
+  { key: 'thisMonth', label: 'Is Mahine' },
+  { key: 'lastMonth', label: 'Pichle Mahine' },
 ];
 
 function DateRangeFilter({ value, onChange }: { value: DateRangeState; onChange: (v: DateRangeState) => void }) {
@@ -236,18 +241,18 @@ function DateRangeFilter({ value, onChange }: { value: DateRangeState; onChange:
   };
   const customLabel = value.preset === 'custom'
     ? `${format(value.from, 'dd MMM')} – ${format(value.to, 'dd MMM yyyy')}`
-    : 'Custom Range';
+    : 'Custom';
 
   return (
     <div className="flex items-center gap-1.5 flex-wrap">
       {PRESETS.map(p => (
-        <Button key={p.key} size="sm" variant={value.preset === p.key ? 'default' : 'outline'} className="h-8 text-xs rounded-lg" onClick={() => applyPreset(p.key)}>
+        <Button key={p.key} size="sm" variant={value.preset === p.key ? 'default' : 'outline'} className="h-9 text-sm rounded-lg px-3" onClick={() => applyPreset(p.key)}>
           {p.label}
         </Button>
       ))}
       <Popover open={open} onOpenChange={setOpen}>
         <PopoverTrigger asChild>
-          <Button size="sm" variant={value.preset === 'custom' ? 'default' : 'outline'} className="h-8 text-xs rounded-lg gap-1.5">
+          <Button size="sm" variant={value.preset === 'custom' ? 'default' : 'outline'} className="h-9 text-sm rounded-lg gap-1.5 px-3">
             <CalendarIcon className="h-3.5 w-3.5" />{customLabel}
           </Button>
         </PopoverTrigger>
@@ -263,7 +268,7 @@ function DateRangeFilter({ value, onChange }: { value: DateRangeState; onChange:
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
-// Source colors (used in Overview + Cash vs Online)
+// Source colors
 // ─────────────────────────────────────────────────────────────────────────────
 
 const SOURCE_COLORS: Record<string, string> = {
@@ -276,8 +281,10 @@ const SOURCE_COLORS: Record<string, string> = {
 };
 
 // ─────────────────────────────────────────────────────────────────────────────
-// Tab 1: Overview
+// TAB 1 — Overview
 // ─────────────────────────────────────────────────────────────────────────────
+
+const PIE_COLORS = { Cash: '#10b981', Online: '#3b82f6' };
 
 function OverviewTab({
   work, aeps, recharge, transfer, quick, flight, dateRange,
@@ -305,15 +312,14 @@ function OverviewTab({
   const totalCredit = activeWork.reduce((s, e) => s + (e.dueAmount < 0 ? -e.dueAmount : 0), 0);
 
   const profitSources = [
-    { label: 'Work',       profit: workProfit,     sub: `${formatCurrency(workCollected)} − ${formatCurrency(workChallan)} challan` },
-    ...(aepsProfit     > 0 ? [{ label: 'AEPS',             profit: aepsProfit,     sub: `${aepsPaid.length} transactions` }]    : []),
-    ...(rechargeProfit > 0 ? [{ label: 'Recharge',         profit: rechargeProfit, sub: `${rechargePaid.length} transactions` }] : []),
-    ...(transferProfit > 0 ? [{ label: 'Transfer',         profit: transferProfit, sub: `${transferPaid.length} transactions` }] : []),
-    ...(quickEarned    > 0 ? [{ label: 'Quick Work',       profit: quickEarned,    sub: `${quickPaid.length} transactions` }]    : []),
-    ...(flight.length  > 0 ? [{ label: 'Flight Booking',   profit: flightProfit,   sub: `${flight.length} bookings` }]          : []),
+    { label: 'Work',           profit: workProfit,     sub: `${formatCurrency(workCollected)} − ${formatCurrency(workChallan)} challan` },
+    ...(aepsProfit     !== 0 ? [{ label: 'AEPS',           profit: aepsProfit,     sub: `${aepsPaid.length} transactions` }]    : []),
+    ...(rechargeProfit !== 0 ? [{ label: 'Recharge',       profit: rechargeProfit, sub: `${rechargePaid.length} transactions` }] : []),
+    ...(transferProfit !== 0 ? [{ label: 'Transfer',       profit: transferProfit, sub: `${transferPaid.length} transactions` }] : []),
+    ...(quickEarned    !== 0 ? [{ label: 'Quick Work',     profit: quickEarned,    sub: `${quickPaid.length} transactions` }]    : []),
+    ...(flight.length   > 0  ? [{ label: 'Flight Booking', profit: flightProfit,   sub: `${flight.length} bookings` }]          : []),
   ];
   const totalProfit = profitSources.reduce((s, src) => s + src.profit, 0);
-
   const breakdownData = profitSources.map(s => ({ name: s.label, profit: Math.round(s.profit) }));
 
   const trendData = useMemo(() => buildDailyTrend(
@@ -321,17 +327,46 @@ function OverviewTab({
     dateRange.from, dateRange.to,
   ), [activeWork, dateRange]);
 
+  // Cash vs Online calculation
+  const cashOnlineRows = useMemo(() => {
+    const calc = (items: { mode: string | undefined; amount: number }[]) => {
+      let cash = 0, online = 0;
+      items.forEach(({ mode, amount }) => { if (isOnline(mode)) online += amount; else cash += amount; });
+      return { cash, online };
+    };
+    const wt = calc(activeWork.map(e => ({ mode: e.paymentMode, amount: e.paidAmount })));
+    const at = calc(aepsPaid.map(e => ({ mode: e.paymentMode, amount: e.profitMargin })));
+    const rt = calc(rechargePaid.map(e => ({ mode: e.paymentMode, amount: e.profitMargin })));
+    const tt = calc(transferPaid.map(e => ({ mode: e.paymentMode, amount: e.profitMargin })));
+    const qt = calc(quickPaid.map(e => ({ mode: e.paymentMode, amount: e.amount })));
+    const ft = calc(flight.map(e => ({ mode: undefined as string | undefined, amount: e.profitMargin })));
+    return [
+      { module: 'Work',           ...wt, total: wt.cash + wt.online },
+      { module: 'AEPS',           ...at, total: at.cash + at.online },
+      { module: 'Recharge',       ...rt, total: rt.cash + rt.online },
+      { module: 'Money Transfer', ...tt, total: tt.cash + tt.online },
+      { module: 'Quick Work',     ...qt, total: qt.cash + qt.online },
+      { module: 'Flight Booking', ...ft, total: ft.cash + ft.online },
+    ].filter(r => r.cash !== 0 || r.online !== 0 || r.total !== 0);
+  }, [activeWork, aepsPaid, rechargePaid, transferPaid, quickPaid, flight]);
+
+  const grandCash   = cashOnlineRows.reduce((s, r) => s + r.cash, 0);
+  const grandOnline = cashOnlineRows.reduce((s, r) => s + r.online, 0);
+  const grandTotal  = grandCash + grandOnline;
+  const pieData = [{ name: 'Cash', value: grandCash }, { name: 'Online', value: grandOnline }].filter(d => d.value > 0);
+
   return (
     <div className="space-y-6">
       {/* KPI row */}
       <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
         <Card className="border-primary/20 bg-primary/5">
           <CardHeader className="pb-2 flex flex-row items-center justify-between">
-            <CardTitle className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">Total Profit</CardTitle>
+            <CardTitle className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">Kul Kamai (Profit)</CardTitle>
             <TrendingUp className="h-4 w-4 text-primary" />
           </CardHeader>
           <CardContent>
             <div className="text-3xl font-bold text-primary">{formatCurrency(totalProfit)}</div>
+            <p className="text-xs text-muted-foreground mt-1">Sirf paid entries ka — due wala count nahi</p>
             <div className="mt-2 space-y-1">
               {profitSources.map(src => (
                 <div key={src.label} className="flex items-center justify-between text-xs">
@@ -348,51 +383,51 @@ function OverviewTab({
 
         <Card>
           <CardHeader className="pb-2 flex flex-row items-center justify-between">
-            <CardTitle className="text-xs font-medium uppercase tracking-wide text-muted-foreground">Work Revenue</CardTitle>
+            <CardTitle className="text-xs font-medium uppercase tracking-wide text-muted-foreground">Work Kamai</CardTitle>
             <IndianRupee className="h-4 w-4 text-emerald-500" />
           </CardHeader>
           <CardContent>
             <div className="text-2xl font-bold text-emerald-700">{formatCurrency(workCollected)}</div>
-            <p className="text-xs text-muted-foreground mt-1">{activeWork.length} entries</p>
+            <p className="text-xs text-muted-foreground mt-1">{activeWork.length} entries (jo paisa mila)</p>
           </CardContent>
         </Card>
 
         <Card>
           <CardHeader className="pb-2 flex flex-row items-center justify-between">
-            <CardTitle className="text-xs font-medium uppercase tracking-wide text-muted-foreground">Outstanding Due</CardTitle>
+            <CardTitle className="text-xs font-medium uppercase tracking-wide text-muted-foreground">Baaki Due</CardTitle>
             <AlertTriangle className="h-4 w-4 text-amber-500" />
           </CardHeader>
           <CardContent>
             <div className={`text-2xl font-bold ${totalDue > 0 ? 'text-amber-700' : 'text-muted-foreground'}`}>{formatCurrency(totalDue)}</div>
             {totalCredit > 0
-              ? <p className="text-xs text-emerald-700 mt-1 font-medium">+ {formatCurrency(totalCredit)} overpaid/credit</p>
-              : totalDue === 0 && <p className="text-xs text-muted-foreground mt-1">All cleared</p>}
+              ? <p className="text-xs text-emerald-700 mt-1 font-medium">+ {formatCurrency(totalCredit)} extra mila</p>
+              : totalDue === 0 && <p className="text-xs text-muted-foreground mt-1">Sab clear</p>}
           </CardContent>
         </Card>
 
         <Card>
           <CardHeader className="pb-2 flex flex-row items-center justify-between">
-            <CardTitle className="text-xs font-medium uppercase tracking-wide text-muted-foreground">Challan Spent</CardTitle>
+            <CardTitle className="text-xs font-medium uppercase tracking-wide text-muted-foreground">Challan Lagat</CardTitle>
             <IndianRupee className="h-4 w-4 text-slate-400" />
           </CardHeader>
           <CardContent>
             <div className="text-2xl font-bold">{formatCurrency(workChallan)}</div>
-            <p className="text-xs text-muted-foreground mt-1">Govt fees deducted</p>
+            <p className="text-xs text-muted-foreground mt-1">Govt fees (profit me se ghata)</p>
           </CardContent>
         </Card>
       </div>
 
-      {/* Profit by source */}
+      {/* Profit by source chart */}
       {breakdownData.some(d => d.profit > 0) && (
         <Card>
-          <CardHeader className="pb-2"><CardTitle className="text-sm">Profit by Source</CardTitle></CardHeader>
+          <CardHeader className="pb-2"><CardTitle className="text-sm">Service-wise Kamai</CardTitle></CardHeader>
           <CardContent>
             <ResponsiveContainer width="100%" height={Math.max(160, breakdownData.length * 44)}>
               <BarChart data={breakdownData} layout="vertical" margin={{ top: 0, right: 16, left: 16, bottom: 0 }}>
                 <CartesianGrid strokeDasharray="3 3" stroke="hsl(var(--border))" horizontal={false} />
                 <XAxis type="number" tick={{ fontSize: 11 }} tickFormatter={v => `₹${Number(v).toLocaleString('en-IN')}`} />
-                <YAxis type="category" dataKey="name" tick={{ fontSize: 12 }} width={80} />
-                <Tooltip formatter={(v: number) => [formatCurrency(v), 'Profit']} />
+                <YAxis type="category" dataKey="name" tick={{ fontSize: 12 }} width={90} />
+                <Tooltip formatter={(v: number) => [formatCurrency(v), 'Kamai']} />
                 <Bar dataKey="profit" radius={[0, 4, 4, 0]}>
                   {breakdownData.map(d => <Cell key={d.name} fill={SOURCE_COLORS[d.name] ?? '#94a3b8'} />)}
                 </Bar>
@@ -404,12 +439,12 @@ function OverviewTab({
 
       {/* Daily work profit trend */}
       <Card>
-        <CardHeader className="pb-2"><CardTitle className="text-sm">Daily Work Profit</CardTitle></CardHeader>
+        <CardHeader className="pb-2"><CardTitle className="text-sm">Roz ka Work Profit</CardTitle></CardHeader>
         <CardContent>
           {!trendData.some(d => d.value !== 0) ? (
             <div className="flex flex-col items-center justify-center h-36 text-muted-foreground">
               <TrendingUp className="h-7 w-7 mb-2 opacity-20" />
-              <p className="text-sm">No work entries in this period.</p>
+              <p className="text-sm">Is period me koi work entry nahi.</p>
             </div>
           ) : trendData.length <= 2 ? (
             <ResponsiveContainer width="100%" height={200}>
@@ -417,8 +452,8 @@ function OverviewTab({
                 <CartesianGrid strokeDasharray="3 3" stroke="hsl(var(--border))" />
                 <XAxis dataKey="date" tick={{ fontSize: 11 }} />
                 <YAxis tick={{ fontSize: 11 }} />
-                <Tooltip formatter={(v: number) => [formatCurrency(v), 'Profit']} />
-                <Bar dataKey="value" fill="#4f46e5" name="Profit" radius={[4, 4, 0, 0]} />
+                <Tooltip formatter={(v: number) => [formatCurrency(v), 'Kamai']} />
+                <Bar dataKey="value" fill="#4f46e5" name="Kamai" radius={[4, 4, 0, 0]} />
               </BarChart>
             </ResponsiveContainer>
           ) : (
@@ -427,23 +462,99 @@ function OverviewTab({
                 <CartesianGrid strokeDasharray="3 3" stroke="hsl(var(--border))" />
                 <XAxis dataKey="date" tick={{ fontSize: 11 }} interval="preserveStartEnd" />
                 <YAxis tick={{ fontSize: 11 }} />
-                <Tooltip formatter={(v: number) => [formatCurrency(v), 'Profit']} />
-                <Line type="monotone" dataKey="value" stroke="#4f46e5" strokeWidth={2} dot={trendData.length <= 14} name="Profit" />
+                <Tooltip formatter={(v: number) => [formatCurrency(v), 'Kamai']} />
+                <Line type="monotone" dataKey="value" stroke="#4f46e5" strokeWidth={2} dot={trendData.length <= 14} name="Kamai" />
               </LineChart>
             </ResponsiveContainer>
           )}
         </CardContent>
       </Card>
+
+      {/* Cash vs Online section */}
+      <div>
+        <h3 className="text-sm font-semibold mb-3 flex items-center gap-2">
+          <Banknote className="h-4 w-4 text-emerald-600" />
+          Cash vs Online Breakdown
+        </h3>
+        <div className="grid grid-cols-1 sm:grid-cols-3 gap-4 mb-4">
+          <Card className="border-emerald-200 bg-emerald-50/50">
+            <CardHeader className="pb-2 flex flex-row items-center justify-between">
+              <CardTitle className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">Cash Mila</CardTitle>
+              <Banknote className="h-4 w-4 text-emerald-600" />
+            </CardHeader>
+            <CardContent>
+              <div className="text-2xl font-bold text-emerald-700">{formatCurrency(grandCash)}</div>
+              {grandTotal > 0 && <p className="text-xs text-muted-foreground mt-1">{Math.round((grandCash / grandTotal) * 100)}% of total</p>}
+            </CardContent>
+          </Card>
+          <Card className="border-blue-200 bg-blue-50/50">
+            <CardHeader className="pb-2 flex flex-row items-center justify-between">
+              <CardTitle className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">Online Mila</CardTitle>
+              <Wifi className="h-4 w-4 text-blue-600" />
+            </CardHeader>
+            <CardContent>
+              <div className="text-2xl font-bold text-blue-700">{formatCurrency(grandOnline)}</div>
+              {grandTotal > 0 && <p className="text-xs text-muted-foreground mt-1">{Math.round((grandOnline / grandTotal) * 100)}% of total</p>}
+            </CardContent>
+          </Card>
+          <Card>
+            <CardHeader className="pb-2 flex flex-row items-center justify-between">
+              <CardTitle className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">Total</CardTitle>
+              <IndianRupee className="h-4 w-4 text-primary" />
+            </CardHeader>
+            <CardContent>
+              <div className="text-2xl font-bold text-primary">{formatCurrency(grandTotal)}</div>
+              <p className="text-xs text-muted-foreground mt-1">Sabhi sources mila ke</p>
+            </CardContent>
+          </Card>
+        </div>
+        {grandTotal > 0 && (
+          <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
+            <Card>
+              <CardHeader className="pb-2"><CardTitle className="text-sm">Cash vs Online Chart</CardTitle></CardHeader>
+              <CardContent>
+                <ResponsiveContainer width="100%" height={200}>
+                  <PieChart>
+                    <Pie data={pieData} dataKey="value" nameKey="name" cx="50%" cy="50%" innerRadius={50} outerRadius={80} paddingAngle={3}
+                      label={({ name, percent }) => `${name} ${(percent * 100).toFixed(0)}%`} labelLine={false}>
+                      {pieData.map(d => <Cell key={d.name} fill={PIE_COLORS[d.name as keyof typeof PIE_COLORS] ?? '#94a3b8'} />)}
+                    </Pie>
+                    <Tooltip formatter={(v: number) => [formatCurrency(v)]} />
+                    <Legend />
+                  </PieChart>
+                </ResponsiveContainer>
+              </CardContent>
+            </Card>
+            <Card>
+              <CardHeader className="pb-2"><CardTitle className="text-sm">Service-wise Split</CardTitle></CardHeader>
+              <CardContent>
+                <div className="space-y-2">
+                  {cashOnlineRows.map(r => (
+                    <div key={r.module} className="flex items-center justify-between text-sm py-1 border-b last:border-0">
+                      <span className="font-medium">{r.module}</span>
+                      <div className="flex gap-3 text-xs">
+                        <span className="text-emerald-700">Cash: {formatCurrency(r.cash)}</span>
+                        <span className="text-blue-700">Online: {formatCurrency(r.online)}</span>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              </CardContent>
+            </Card>
+          </div>
+        )}
+      </div>
     </div>
   );
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
-// Tab 2: Work & Challan
+// TAB 2 — Work (Work entries + Category breakdown combined)
 // ─────────────────────────────────────────────────────────────────────────────
 
-function WorkChallanTab({ work }: { work: WorkEntry[] }) {
-  const [search, setSearch] = useState('');
+function WorkTab({ work }: { work: WorkEntry[] }) {
+  const [search, setSearch]           = useState('');
+  const [showCategory, setShowCategory] = useState(false);
   const sort = useSortState('date');
   const Th = makeTh(sort);
 
@@ -474,13 +585,25 @@ function WorkChallanTab({ work }: { work: WorkEntry[] }) {
 
   const sorted = useMemo(() => sortRows(filtered, sort.col, sort.dir, getValue), [filtered, sort.col, sort.dir, getValue]);
 
+  // Category aggregation
+  const catRows = useMemo(() => {
+    const map: Record<string, { category: string; count: number; collected: number; challan: number; netProfit: number }> = {};
+    active.forEach(e => {
+      const cat = e.category === 'Other' && e.otherCategory ? e.otherCategory : e.category;
+      if (!map[cat]) map[cat] = { category: cat, count: 0, collected: 0, challan: 0, netProfit: 0 };
+      map[cat].count++; map[cat].collected += e.paidAmount;
+      map[cat].challan += getWorkChallan(e); map[cat].netProfit += e.paidAmount - getWorkChallan(e);
+    });
+    return Object.values(map).sort((a, b) => b.netProfit - a.netProfit);
+  }, [active]);
+
   const exportCSV = () => {
-    downloadCSV(`work-challan-${format(new Date(), 'yyyy-MM-dd')}.csv`, [
-      ['Date', 'Customer', 'Mobile', 'Category', 'Total Amount', 'Challan', 'Paid', 'Due', 'Status'],
+    downloadCSV(`work-report-${format(new Date(), 'yyyy-MM-dd')}.csv`, [
+      ['Date', 'Customer', 'Mobile', 'Category', 'Total Amount', 'Challan', 'Paid', 'Due', 'Status', 'Added By'],
       ...sorted.map(e => [
         format(e.date.toDate(), 'dd/MM/yyyy'), e.customerName, e.mobile,
         e.category === 'Other' && e.otherCategory ? e.otherCategory : e.category,
-        String(e.totalAmount), String(getWorkChallan(e)), String(e.paidAmount), String(e.dueAmount), e.status,
+        String(e.totalAmount), String(getWorkChallan(e)), String(e.paidAmount), String(e.dueAmount), e.status, e.addedBy ?? '',
       ]),
     ]);
   };
@@ -488,10 +611,10 @@ function WorkChallanTab({ work }: { work: WorkEntry[] }) {
   return (
     <div className="space-y-5">
       <StatCards items={[
-        { label: 'Total Entries',   value: String(active.length) },
-        { label: 'Total Collected', value: formatCurrency(totalCollected), cls: 'text-emerald-700' },
-        { label: 'Total Challan',   value: formatCurrency(totalChallan),   cls: 'text-slate-600' },
-        { label: 'Net Profit',      value: formatCurrency(totalCollected - totalChallan), cls: 'text-primary font-bold' },
+        { label: 'Kul Entries',   value: String(active.length), info: 'Rejected ko chhod ke sab entries' },
+        { label: 'Jo Paisa Mila', value: formatCurrency(totalCollected), cls: 'text-emerald-700', info: 'Customer se actually mila hua paisa (due wala nahi)' },
+        { label: 'Challan Lagat', value: formatCurrency(totalChallan),   cls: 'text-slate-600', info: 'Govt fees jo profit me se ghata' },
+        { label: 'Net Kamai',     value: formatCurrency(totalCollected - totalChallan), cls: 'text-primary font-bold', info: 'Mila hua paisa minus challan = asli kamai' },
       ]} />
 
       {rejected.length > 0 && (
@@ -499,34 +622,64 @@ function WorkChallanTab({ work }: { work: WorkEntry[] }) {
           <X className="h-4 w-4 text-red-500 mt-0.5 shrink-0" />
           <div>
             <span className="font-semibold text-red-700">Rejected/Refunded: </span>
-            <span className="text-red-600">{rejected.length} {rejected.length === 1 ? 'entry' : 'entries'}</span>
-            {totalRefund > 0 && <span className="text-red-600"> · {formatCurrency(totalRefund)} refunded</span>}
-            <p className="text-xs text-red-500 mt-0.5">Not counted in profit figures above.</p>
+            <span className="text-red-600">{rejected.length} entries</span>
+            {totalRefund > 0 && <span className="text-red-600"> · {formatCurrency(totalRefund)} wapas diya</span>}
+            <p className="text-xs text-red-500 mt-0.5">Upar ke numbers me shamil nahi.</p>
           </div>
         </div>
       )}
 
+      {/* Search + Export */}
       <div className="flex flex-col sm:flex-row items-stretch sm:items-center gap-2 justify-between">
         <div className="relative flex-1 max-w-sm">
           <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
-          <Input placeholder="Search customer, category…" value={search} onChange={e => setSearch(e.target.value)} className="pl-8 h-9" />
+          <Input placeholder="Customer ya category dhundo…" value={search} onChange={e => setSearch(e.target.value)} className="pl-8 h-10" />
         </div>
-        <Button variant="outline" size="sm" className="gap-1.5 h-9" onClick={exportCSV}><Download className="h-4 w-4" /> Export CSV</Button>
+        <Button variant="outline" size="sm" className="gap-1.5 h-10" onClick={exportCSV}><Download className="h-4 w-4" /> CSV Download</Button>
       </div>
 
-      <Card>
+      {/* Mobile card list */}
+      <div className="block sm:hidden space-y-2">
+        {sorted.length === 0 ? (
+          <div className="text-center py-10 text-muted-foreground text-sm">{search ? `"${search}" ke liye koi entry nahi.` : 'Is period me koi entry nahi.'}</div>
+        ) : sorted.map(e => {
+          const cat = e.category === 'Other' && e.otherCategory ? e.otherCategory : e.category;
+          const due = e.dueAmount;
+          return (
+            <Card key={e.id} className="overflow-hidden">
+              <CardContent className="p-4">
+                <div className="flex justify-between items-start mb-2">
+                  <div>
+                    <div className="font-semibold text-sm">{e.customerName}</div>
+                    <div className="text-xs text-muted-foreground">{format(e.date.toDate(), 'dd MMM yyyy')} · {cat}</div>
+                  </div>
+                  <StatusBadge status={e.status} />
+                </div>
+                <div className="grid grid-cols-3 gap-2 text-xs mt-2">
+                  <div><div className="text-muted-foreground">Mila</div><div className="font-semibold text-emerald-700">{formatCurrency(e.paidAmount)}</div></div>
+                  <div><div className="text-muted-foreground">Challan</div><div className="font-semibold">{getWorkChallan(e) > 0 ? formatCurrency(getWorkChallan(e)) : '—'}</div></div>
+                  <div><div className="text-muted-foreground">Due</div><div className={`font-semibold ${due > 0 ? 'text-amber-700' : ''}`}>{due > 0 ? formatCurrency(due) : '—'}</div></div>
+                </div>
+              </CardContent>
+            </Card>
+          );
+        })}
+      </div>
+
+      {/* Desktop table */}
+      <Card className="hidden sm:block">
         <div className="overflow-x-auto">
           <Table>
             <TableHeader>
               <TableRow>
-                <Th col="date" label="Date" /><Th col="customer" label="Customer" /><Th col="category" label="Category" />
+                <Th col="date" label="Tarikh" /><Th col="customer" label="Customer" /><Th col="category" label="Category" />
                 <Th col="total" label="Total" align="right" /><Th col="challan" label="Challan" align="right" />
-                <Th col="paid" label="Paid" align="right" /><Th col="due" label="Due" align="right" /><Th col="status" label="Status" />
+                <Th col="paid" label="Mila" align="right" /><Th col="due" label="Due" align="right" /><Th col="status" label="Status" />
               </TableRow>
             </TableHeader>
             <TableBody>
               {sorted.length === 0 ? (
-                <TableRow><TableCell colSpan={8} className="text-center py-12 text-muted-foreground">{search ? `No entries match "${search}".` : 'No entries in this period.'}</TableCell></TableRow>
+                <TableRow><TableCell colSpan={8} className="text-center py-12 text-muted-foreground">{search ? `"${search}" ke liye koi entry nahi.` : 'Is period me koi entry nahi.'}</TableCell></TableRow>
               ) : sorted.map(e => {
                 const due = e.dueAmount;
                 const cat = e.category === 'Other' && e.otherCategory ? e.otherCategory : e.category;
@@ -540,7 +693,7 @@ function WorkChallanTab({ work }: { work: WorkEntry[] }) {
                     <TableCell className="text-right tabular-nums text-emerald-700 font-medium">{formatCurrency(e.paidAmount)}</TableCell>
                     <TableCell className="text-right tabular-nums">
                       {due > 0 ? <span className="text-amber-700 font-medium">{formatCurrency(due)}</span>
-                        : due < 0 ? <span className="text-emerald-700 text-xs">+{formatCurrency(-due)} credit</span>
+                        : due < 0 ? <span className="text-emerald-700 text-xs">+{formatCurrency(-due)}</span>
                         : <span className="text-muted-foreground">—</span>}
                     </TableCell>
                     <TableCell><StatusBadge status={e.status} /></TableCell>
@@ -550,770 +703,494 @@ function WorkChallanTab({ work }: { work: WorkEntry[] }) {
             </TableBody>
           </Table>
         </div>
-        {sorted.length > 0 && <div className="px-4 py-2 border-t text-xs text-muted-foreground">{sorted.length} {sorted.length === 1 ? 'entry' : 'entries'}{search ? ` matching "${search}"` : ''}</div>}
+        {sorted.length > 0 && <div className="px-4 py-2 border-t text-xs text-muted-foreground">{sorted.length} entries{search ? ` (filtered)` : ''}</div>}
+      </Card>
+
+      {/* Category breakdown (collapsible) */}
+      <Card>
+        <button
+          className="w-full flex items-center justify-between px-4 py-3 hover:bg-muted/20 transition-colors"
+          onClick={() => setShowCategory(v => !v)}
+        >
+          <span className="font-semibold text-sm">Category-wise Breakdown</span>
+          {showCategory ? <ChevronUp className="h-4 w-4" /> : <ChevronDown className="h-4 w-4" />}
+        </button>
+        {showCategory && (
+          <div className="border-t">
+            {catRows.length === 0 ? (
+              <div className="text-center py-8 text-muted-foreground text-sm">Is period me koi category data nahi.</div>
+            ) : (
+              <div className="divide-y">
+                {catRows.map(r => (
+                  <div key={r.category} className="flex items-center justify-between px-4 py-3 hover:bg-muted/20">
+                    <div>
+                      <div className="font-medium text-sm">{r.category}</div>
+                      <div className="text-xs text-muted-foreground">{r.count} entries</div>
+                    </div>
+                    <div className="text-right">
+                      <div className="font-semibold text-sm text-primary">{formatCurrency(r.netProfit)} kamai</div>
+                      <div className="text-xs text-muted-foreground">{formatCurrency(r.collected)} mila · {r.challan > 0 ? `${formatCurrency(r.challan)} challan` : 'no challan'}</div>
+                    </div>
+                  </div>
+                ))}
+                <div className="flex items-center justify-between px-4 py-3 bg-muted/20 font-semibold text-sm">
+                  <span>Total ({catRows.reduce((s, r) => s + r.count, 0)} entries)</span>
+                  <span className="text-primary">{formatCurrency(catRows.reduce((s, r) => s + r.netProfit, 0))} kamai</span>
+                </div>
+              </div>
+            )}
+          </div>
+        )}
       </Card>
     </div>
   );
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
-// Tab 3: Category-wise
+// TAB 3 — Financial Services (chip selector)
 // ─────────────────────────────────────────────────────────────────────────────
 
-interface CategoryRow { category: string; count: number; collected: number; challan: number; netProfit: number; }
-
-function CategoryTab({ work }: { work: WorkEntry[] }) {
-  const sort = useSortState('count');
+function AepsSection({ entries, dateRange }: { entries: AepsWithdrawal[]; dateRange: DateRangeState }) {
+  const [search, setSearch] = useState('');
+  const sort = useSortState('date');
   const Th = makeTh(sort);
-
-  const rows = useMemo<CategoryRow[]>(() => {
-    const map: Record<string, CategoryRow> = {};
-    work.filter(e => e.status !== 'Rejected').forEach(e => {
-      const cat = e.category === 'Other' && e.otherCategory ? e.otherCategory : e.category;
-      if (!map[cat]) map[cat] = { category: cat, count: 0, collected: 0, challan: 0, netProfit: 0 };
-      map[cat].count++; map[cat].collected += e.paidAmount;
-      map[cat].challan += getWorkChallan(e); map[cat].netProfit += e.paidAmount - getWorkChallan(e);
-    });
-    return Object.values(map);
-  }, [work]);
-
-  const getValue = useCallback((r: CategoryRow, col: string): string | number => {
-    switch (col) {
-      case 'category': return r.category; case 'count': return r.count;
-      case 'collected': return r.collected; case 'challan': return r.challan;
-      case 'profit': return r.netProfit; default: return 0;
-    }
-  }, []);
-
-  const sorted  = useMemo(() => sortRows(rows, sort.col, sort.dir, getValue), [rows, sort.col, sort.dir, getValue]);
-  const totals  = useMemo(() => rows.reduce((a, r) => ({ count: a.count + r.count, collected: a.collected + r.collected, challan: a.challan + r.challan, profit: a.profit + r.netProfit }), { count: 0, collected: 0, challan: 0, profit: 0 }), [rows]);
-
-  const exportCSV = () => {
-    downloadCSV(`category-report-${format(new Date(), 'yyyy-MM-dd')}.csv`, [
-      ['Category', 'Entries', 'Collected (₹)', 'Challan (₹)', 'Net Profit (₹)'],
-      ...sorted.map(r => [r.category, String(r.count), String(r.collected), String(r.challan), String(r.netProfit)]),
-    ]);
-  };
+  const paid        = entries.filter(e => resolveStatus(e.paymentStatus) === 'paid');
+  const totalAmount = paid.reduce((s, e) => s + e.amount, 0);
+  const totalProfit = paid.reduce((s, e) => s + e.profitMargin, 0);
+  const trendData   = useMemo(() => buildDailyTrend(paid.map(e => ({ ts: e.createdAt.toDate(), value: e.profitMargin })), dateRange.from, dateRange.to), [paid, dateRange]);
+  const filtered    = useMemo(() => { const q = search.toLowerCase(); return entries.filter(e => !search || e.customerName.toLowerCase().includes(q) || e.bankName.toLowerCase().includes(q)); }, [entries, search]);
+  const getValue    = useCallback((e: AepsWithdrawal, col: string): string | number => { switch (col) { case 'date': return e.createdAt.toMillis(); case 'customer': return e.customerName; case 'bank': return e.bankName; case 'amount': return e.amount; case 'profit': return e.profitMargin; default: return 0; } }, []);
+  const sorted      = useMemo(() => sortRows(filtered, sort.col, sort.dir, getValue), [filtered, sort.col, sort.dir, getValue]);
+  const exportCSV   = () => downloadCSV(`aeps-${format(new Date(), 'yyyy-MM-dd')}.csv`, [['Date','Customer','Bank','Amount','Profit'], ...sorted.map(e => [format(e.createdAt.toDate(),'dd/MM/yyyy'),e.customerName,e.bankName,String(e.amount),String(e.profitMargin)])]);
 
   return (
     <div className="space-y-4">
-      <div className="flex justify-end">
-        <Button variant="outline" size="sm" className="gap-1.5 h-9" onClick={exportCSV}><Download className="h-4 w-4" /> Export CSV</Button>
-      </div>
-      <Card>
-        <div className="overflow-x-auto">
-          <Table>
-            <TableHeader>
-              <TableRow>
-                <Th col="category" label="Category" /><Th col="count" label="Entries" align="right" />
-                <Th col="collected" label="Collected" align="right" /><Th col="challan" label="Challan" align="right" />
-                <Th col="profit" label="Net Profit" align="right" />
-              </TableRow>
-            </TableHeader>
-            <TableBody>
-              {sorted.length === 0
-                ? <TableRow><TableCell colSpan={5} className="text-center py-12 text-muted-foreground">No entries in this period.</TableCell></TableRow>
-                : sorted.map(r => (
-                  <TableRow key={r.category} className="hover:bg-muted/30">
-                    <TableCell className="font-medium">{r.category}</TableCell>
-                    <TableCell className="text-right tabular-nums">{r.count}</TableCell>
-                    <TableCell className="text-right tabular-nums text-emerald-700 font-medium">{formatCurrency(r.collected)}</TableCell>
-                    <TableCell className="text-right tabular-nums text-slate-500">{r.challan > 0 ? formatCurrency(r.challan) : '—'}</TableCell>
-                    <TableCell className={`text-right tabular-nums font-semibold ${r.netProfit >= 0 ? 'text-primary' : 'text-red-600'}`}>{formatCurrency(r.netProfit)}</TableCell>
-                  </TableRow>
-                ))}
-            </TableBody>
-          </Table>
-        </div>
-        {sorted.length > 0 && (
-          <div className="px-4 py-3 border-t bg-muted/20 flex">
-            <div className="flex-1 text-sm font-semibold">Total ({totals.count} entries)</div>
-            <div className="w-28 text-right text-sm font-semibold text-emerald-700 pr-4">{formatCurrency(totals.collected)}</div>
-            <div className="w-24 text-right text-sm font-semibold text-slate-600 pr-4">{formatCurrency(totals.challan)}</div>
-            <div className="w-24 text-right text-sm font-semibold text-primary">{formatCurrency(totals.profit)}</div>
-          </div>
-        )}
-      </Card>
-    </div>
-  );
-}
-
-// ─────────────────────────────────────────────────────────────────────────────
-// Tab 4: AEPS
-// ─────────────────────────────────────────────────────────────────────────────
-
-function AepsTab({ entries, dateRange }: { entries: AepsWithdrawal[]; dateRange: DateRangeState }) {
-  const [search, setSearch] = useState('');
-  const sort = useSortState('date');
-  const Th = makeTh(sort);
-
-  const paid        = entries.filter(e => resolveStatus(e.paymentStatus) === 'paid');
-  const totalAmount = paid.reduce((s, e) => s + e.amount, 0);
-  const totalProfit = paid.reduce((s, e) => s + e.profitMargin, 0);
-
-  const trendData = useMemo(() => buildDailyTrend(paid.map(e => ({ ts: e.createdAt.toDate(), value: e.profitMargin })), dateRange.from, dateRange.to), [paid, dateRange]);
-
-  const filtered = useMemo(() => {
-    const q = search.toLowerCase();
-    return entries.filter(e => !search || e.customerName.toLowerCase().includes(q) || e.bankName.toLowerCase().includes(q));
-  }, [entries, search]);
-
-  const getValue = useCallback((e: AepsWithdrawal, col: string): string | number => {
-    switch (col) {
-      case 'date': return e.createdAt.toMillis(); case 'customer': return e.customerName;
-      case 'bank': return e.bankName; case 'amount': return e.amount; case 'profit': return e.profitMargin;
-      default: return 0;
-    }
-  }, []);
-
-  const sorted = useMemo(() => sortRows(filtered, sort.col, sort.dir, getValue), [filtered, sort.col, sort.dir, getValue]);
-
-  const exportCSV = () => {
-    downloadCSV(`aeps-report-${format(new Date(), 'yyyy-MM-dd')}.csv`, [
-      ['Date', 'Customer', 'Bank Name', 'Amount (₹)', 'Profit Margin (₹)'],
-      ...sorted.map(e => [format(e.createdAt.toDate(), 'dd/MM/yyyy'), e.customerName, e.bankName, String(e.amount), String(e.profitMargin)]),
-    ]);
-  };
-
-  return (
-    <div className="space-y-5">
       <StatCards items={[
-        { label: 'Total Withdrawals', value: String(entries.length) },
-        { label: 'Total Amount',      value: formatCurrency(totalAmount), cls: 'text-emerald-700' },
-        { label: 'Total Profit',      value: formatCurrency(totalProfit), cls: 'text-primary font-bold' },
+        { label: 'Kul Withdrawals', value: String(entries.length) },
+        { label: 'Total Amount',    value: formatCurrency(totalAmount), cls: 'text-emerald-700', info: 'Customer ka apna paisa — shop ki kamai nahi' },
+        { label: 'Shop Ki Kamai',   value: formatCurrency(totalProfit), cls: 'text-primary font-bold', info: 'Har withdrawal par jo fee mili' },
       ]} />
-      <Card><CardHeader className="pb-2"><CardTitle className="text-sm">Daily Profit Trend</CardTitle></CardHeader>
-        <CardContent><DailyTrendChart data={trendData} color="#10b981" label="Profit" /></CardContent></Card>
-      <div className="flex flex-col sm:flex-row items-stretch sm:items-center gap-2 justify-between">
-        <div className="relative flex-1 max-w-sm">
-          <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
-          <Input placeholder="Search customer, bank…" value={search} onChange={e => setSearch(e.target.value)} className="pl-8 h-9" />
-        </div>
-        <Button variant="outline" size="sm" className="gap-1.5 h-9" onClick={exportCSV}><Download className="h-4 w-4" /> Export CSV</Button>
+      <Card><CardHeader className="pb-2"><CardTitle className="text-sm">Roz ka Profit</CardTitle></CardHeader><CardContent><DailyTrendChart data={trendData} color="#10b981" label="Kamai" /></CardContent></Card>
+      <div className="flex flex-col sm:flex-row gap-2 justify-between">
+        <div className="relative flex-1 max-w-sm"><Search className="absolute left-2.5 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" /><Input placeholder="Customer ya bank…" value={search} onChange={e => setSearch(e.target.value)} className="pl-8 h-10" /></div>
+        <Button variant="outline" size="sm" className="gap-1.5 h-10" onClick={exportCSV}><Download className="h-4 w-4" /> CSV Download</Button>
       </div>
-      <Card>
-        <div className="overflow-x-auto">
-          <Table>
-            <TableHeader><TableRow>
-              <Th col="date" label="Date" /><Th col="customer" label="Customer" /><Th col="bank" label="Bank Name" />
-              <Th col="amount" label="Amount" align="right" /><Th col="profit" label="Profit Margin" align="right" />
-            </TableRow></TableHeader>
-            <TableBody>
-              {sorted.length === 0
-                ? <TableRow><TableCell colSpan={5} className="text-center py-12 text-muted-foreground">{search ? `No entries match "${search}".` : 'No AEPS transactions in this period.'}</TableCell></TableRow>
-                : sorted.map(e => (
-                  <TableRow key={e.id} className="hover:bg-muted/30">
-                    <TableCell className="text-xs text-muted-foreground whitespace-nowrap">{format(e.createdAt.toDate(), 'dd MMM yyyy')}</TableCell>
-                    <TableCell className="font-medium">{e.customerName}</TableCell>
-                    <TableCell className="text-muted-foreground">{e.bankName}</TableCell>
-                    <TableCell className="text-right tabular-nums font-medium">{formatCurrency(e.amount)}</TableCell>
-                    <TableCell className="text-right tabular-nums text-emerald-700 font-semibold">{formatCurrency(e.profitMargin)}</TableCell>
-                  </TableRow>
-                ))}
-            </TableBody>
-          </Table>
-        </div>
-        {sorted.length > 0 && <div className="px-4 py-2 border-t text-xs text-muted-foreground">{sorted.length} transactions{search ? ` matching "${search}"` : ''}</div>}
-      </Card>
+      {/* Mobile cards */}
+      <div className="block sm:hidden space-y-2">
+        {sorted.length === 0 ? <div className="text-center py-8 text-muted-foreground text-sm">Is period me koi data nahi.</div>
+          : sorted.map(e => (
+            <Card key={e.id}><CardContent className="p-4">
+              <div className="flex justify-between items-start">
+                <div><div className="font-semibold text-sm">{e.customerName}</div><div className="text-xs text-muted-foreground">{format(e.createdAt.toDate(),'dd MMM yyyy')} · {e.bankName}</div></div>
+                <div className="text-right"><div className="font-semibold text-sm text-emerald-700">{formatCurrency(e.profitMargin)}</div><div className="text-xs text-muted-foreground">Amount: {formatCurrency(e.amount)}</div></div>
+              </div>
+            </CardContent></Card>
+          ))}
+      </div>
+      {/* Desktop table */}
+      <Card className="hidden sm:block"><div className="overflow-x-auto"><Table><TableHeader><TableRow><Th col="date" label="Date"/><Th col="customer" label="Customer"/><Th col="bank" label="Bank"/><Th col="amount" label="Amount" align="right"/><Th col="profit" label="Kamai" align="right"/></TableRow></TableHeader><TableBody>{sorted.length===0?<TableRow><TableCell colSpan={5} className="text-center py-10 text-muted-foreground">Is period me koi data nahi.</TableCell></TableRow>:sorted.map(e=><TableRow key={e.id} className="hover:bg-muted/30"><TableCell className="text-xs text-muted-foreground whitespace-nowrap">{format(e.createdAt.toDate(),'dd MMM yyyy')}</TableCell><TableCell className="font-medium">{e.customerName}</TableCell><TableCell className="text-muted-foreground">{e.bankName}</TableCell><TableCell className="text-right tabular-nums font-medium">{formatCurrency(e.amount)}</TableCell><TableCell className="text-right tabular-nums text-emerald-700 font-semibold">{formatCurrency(e.profitMargin)}</TableCell></TableRow>)}</TableBody></Table></div>{sorted.length>0&&<div className="px-4 py-2 border-t text-xs text-muted-foreground">{sorted.length} transactions</div>}</Card>
     </div>
   );
 }
 
-// ─────────────────────────────────────────────────────────────────────────────
-// Tab 5: Recharge
-// ─────────────────────────────────────────────────────────────────────────────
-
-function RechargeTab({ entries, dateRange }: { entries: ElectricRecharge[]; dateRange: DateRangeState }) {
+function RechargeSection({ entries, dateRange }: { entries: ElectricRecharge[]; dateRange: DateRangeState }) {
   const [search, setSearch] = useState('');
   const sort = useSortState('date');
   const Th = makeTh(sort);
-
   const paid        = entries.filter(e => resolveStatus(e.paymentStatus) === 'paid');
   const totalAmount = paid.reduce((s, e) => s + e.rechargeAmount, 0);
   const totalProfit = paid.reduce((s, e) => s + e.profitMargin, 0);
-
-  const trendData = useMemo(() => buildDailyTrend(paid.map(e => ({ ts: e.createdAt.toDate(), value: e.profitMargin })), dateRange.from, dateRange.to), [paid, dateRange]);
-
-  const filtered = useMemo(() => {
-    const q = search.toLowerCase();
-    return entries.filter(e => !search || e.customerName.toLowerCase().includes(q) || e.consumerNumber.includes(q));
-  }, [entries, search]);
-
-  const getValue = useCallback((e: ElectricRecharge, col: string): string | number => {
-    switch (col) {
-      case 'date': return e.createdAt.toMillis(); case 'customer': return e.customerName;
-      case 'consumer': return e.consumerNumber; case 'amount': return e.rechargeAmount; case 'profit': return e.profitMargin;
-      default: return 0;
-    }
-  }, []);
-
-  const sorted = useMemo(() => sortRows(filtered, sort.col, sort.dir, getValue), [filtered, sort.col, sort.dir, getValue]);
-
-  const exportCSV = () => {
-    downloadCSV(`recharge-report-${format(new Date(), 'yyyy-MM-dd')}.csv`, [
-      ['Date', 'Customer', 'Consumer Number', 'Recharge Amount (₹)', 'Profit Margin (₹)'],
-      ...sorted.map(e => [format(e.createdAt.toDate(), 'dd/MM/yyyy'), e.customerName, e.consumerNumber, String(e.rechargeAmount), String(e.profitMargin)]),
-    ]);
-  };
+  const trendData   = useMemo(() => buildDailyTrend(paid.map(e => ({ ts: e.createdAt.toDate(), value: e.profitMargin })), dateRange.from, dateRange.to), [paid, dateRange]);
+  const filtered    = useMemo(() => { const q = search.toLowerCase(); return entries.filter(e => !search || e.customerName.toLowerCase().includes(q) || e.consumerNumber.includes(q)); }, [entries, search]);
+  const getValue    = useCallback((e: ElectricRecharge, col: string): string | number => { switch (col) { case 'date': return e.createdAt.toMillis(); case 'customer': return e.customerName; case 'consumer': return e.consumerNumber; case 'amount': return e.rechargeAmount; case 'profit': return e.profitMargin; default: return 0; } }, []);
+  const sorted      = useMemo(() => sortRows(filtered, sort.col, sort.dir, getValue), [filtered, sort.col, sort.dir, getValue]);
+  const exportCSV   = () => downloadCSV(`recharge-${format(new Date(), 'yyyy-MM-dd')}.csv`, [['Date','Customer','Consumer No','Recharge Amt','Profit'], ...sorted.map(e => [format(e.createdAt.toDate(),'dd/MM/yyyy'),e.customerName,e.consumerNumber,String(e.rechargeAmount),String(e.profitMargin)])]);
 
   return (
-    <div className="space-y-5">
+    <div className="space-y-4">
       <StatCards items={[
-        { label: 'Total Recharges',  value: String(entries.length) },
-        { label: 'Total Recharged',  value: formatCurrency(totalAmount), cls: 'text-emerald-700' },
-        { label: 'Total Profit',     value: formatCurrency(totalProfit), cls: 'text-primary font-bold' },
+        { label: 'Kul Recharges',  value: String(entries.length) },
+        { label: 'Total Recharged',value: formatCurrency(totalAmount), cls: 'text-emerald-700', info: 'Customer ka bijli recharge amount' },
+        { label: 'Shop Ki Kamai',  value: formatCurrency(totalProfit), cls: 'text-primary font-bold', info: 'Har recharge par jo fee mili' },
       ]} />
-      <Card><CardHeader className="pb-2"><CardTitle className="text-sm">Daily Profit Trend</CardTitle></CardHeader>
-        <CardContent><DailyTrendChart data={trendData} color="#f59e0b" label="Profit" /></CardContent></Card>
-      <div className="flex flex-col sm:flex-row items-stretch sm:items-center gap-2 justify-between">
-        <div className="relative flex-1 max-w-sm">
-          <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
-          <Input placeholder="Search customer, consumer no…" value={search} onChange={e => setSearch(e.target.value)} className="pl-8 h-9" />
-        </div>
-        <Button variant="outline" size="sm" className="gap-1.5 h-9" onClick={exportCSV}><Download className="h-4 w-4" /> Export CSV</Button>
+      <Card><CardHeader className="pb-2"><CardTitle className="text-sm">Roz ka Profit</CardTitle></CardHeader><CardContent><DailyTrendChart data={trendData} color="#f59e0b" label="Kamai" /></CardContent></Card>
+      <div className="flex flex-col sm:flex-row gap-2 justify-between">
+        <div className="relative flex-1 max-w-sm"><Search className="absolute left-2.5 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" /><Input placeholder="Customer ya consumer no…" value={search} onChange={e => setSearch(e.target.value)} className="pl-8 h-10" /></div>
+        <Button variant="outline" size="sm" className="gap-1.5 h-10" onClick={exportCSV}><Download className="h-4 w-4" /> CSV Download</Button>
       </div>
-      <Card>
-        <div className="overflow-x-auto">
-          <Table>
-            <TableHeader><TableRow>
-              <Th col="date" label="Date" /><Th col="customer" label="Customer" /><Th col="consumer" label="Consumer No." />
-              <Th col="amount" label="Recharge Amt" align="right" /><Th col="profit" label="Profit Margin" align="right" />
-            </TableRow></TableHeader>
-            <TableBody>
-              {sorted.length === 0
-                ? <TableRow><TableCell colSpan={5} className="text-center py-12 text-muted-foreground">{search ? `No entries match "${search}".` : 'No recharge transactions in this period.'}</TableCell></TableRow>
-                : sorted.map(e => (
-                  <TableRow key={e.id} className="hover:bg-muted/30">
-                    <TableCell className="text-xs text-muted-foreground whitespace-nowrap">{format(e.createdAt.toDate(), 'dd MMM yyyy')}</TableCell>
-                    <TableCell className="font-medium">{e.customerName}</TableCell>
-                    <TableCell className="text-muted-foreground font-mono text-sm">{e.consumerNumber}</TableCell>
-                    <TableCell className="text-right tabular-nums font-medium">{formatCurrency(e.rechargeAmount)}</TableCell>
-                    <TableCell className="text-right tabular-nums text-emerald-700 font-semibold">{formatCurrency(e.profitMargin)}</TableCell>
-                  </TableRow>
-                ))}
-            </TableBody>
-          </Table>
-        </div>
-        {sorted.length > 0 && <div className="px-4 py-2 border-t text-xs text-muted-foreground">{sorted.length} transactions{search ? ` matching "${search}"` : ''}</div>}
-      </Card>
+      <div className="block sm:hidden space-y-2">
+        {sorted.length === 0 ? <div className="text-center py-8 text-muted-foreground text-sm">Is period me koi data nahi.</div>
+          : sorted.map(e => (<Card key={e.id}><CardContent className="p-4"><div className="flex justify-between items-start"><div><div className="font-semibold text-sm">{e.customerName}</div><div className="text-xs text-muted-foreground">{format(e.createdAt.toDate(),'dd MMM yyyy')} · {e.consumerNumber}</div></div><div className="text-right"><div className="font-semibold text-sm text-emerald-700">{formatCurrency(e.profitMargin)}</div><div className="text-xs text-muted-foreground">{formatCurrency(e.rechargeAmount)}</div></div></div></CardContent></Card>))}
+      </div>
+      <Card className="hidden sm:block"><div className="overflow-x-auto"><Table><TableHeader><TableRow><Th col="date" label="Date"/><Th col="customer" label="Customer"/><Th col="consumer" label="Consumer No"/><Th col="amount" label="Recharge Amt" align="right"/><Th col="profit" label="Kamai" align="right"/></TableRow></TableHeader><TableBody>{sorted.length===0?<TableRow><TableCell colSpan={5} className="text-center py-10 text-muted-foreground">Is period me koi data nahi.</TableCell></TableRow>:sorted.map(e=><TableRow key={e.id} className="hover:bg-muted/30"><TableCell className="text-xs text-muted-foreground whitespace-nowrap">{format(e.createdAt.toDate(),'dd MMM yyyy')}</TableCell><TableCell className="font-medium">{e.customerName}</TableCell><TableCell className="text-muted-foreground font-mono text-sm">{e.consumerNumber}</TableCell><TableCell className="text-right tabular-nums font-medium">{formatCurrency(e.rechargeAmount)}</TableCell><TableCell className="text-right tabular-nums text-emerald-700 font-semibold">{formatCurrency(e.profitMargin)}</TableCell></TableRow>)}</TableBody></Table></div>{sorted.length>0&&<div className="px-4 py-2 border-t text-xs text-muted-foreground">{sorted.length} transactions</div>}</Card>
     </div>
   );
 }
 
-// ─────────────────────────────────────────────────────────────────────────────
-// Tab 6: Money Transfer
-// ─────────────────────────────────────────────────────────────────────────────
-
-function TransferTab({ entries, dateRange }: { entries: MoneyTransfer[]; dateRange: DateRangeState }) {
+function TransferSection({ entries, dateRange }: { entries: MoneyTransfer[]; dateRange: DateRangeState }) {
   const [search, setSearch] = useState('');
   const sort = useSortState('date');
   const Th = makeTh(sort);
-
   const paid        = entries.filter(e => resolveStatus(e.paymentStatus) === 'paid');
   const totalAmount = paid.reduce((s, e) => s + e.amount, 0);
   const totalProfit = paid.reduce((s, e) => s + e.profitMargin, 0);
-
-  const trendData = useMemo(() => buildDailyTrend(paid.map(e => ({ ts: e.createdAt.toDate(), value: e.profitMargin })), dateRange.from, dateRange.to), [paid, dateRange]);
-
-  const filtered = useMemo(() => {
-    const q = search.toLowerCase();
-    return entries.filter(e => !search || e.name.toLowerCase().includes(q) || e.mobileOrAccount.includes(q));
-  }, [entries, search]);
-
-  const getValue = useCallback((e: MoneyTransfer, col: string): string | number => {
-    switch (col) {
-      case 'date': return e.createdAt.toMillis(); case 'name': return e.name;
-      case 'account': return e.mobileOrAccount; case 'amount': return e.amount; case 'profit': return e.profitMargin;
-      default: return 0;
-    }
-  }, []);
-
-  const sorted = useMemo(() => sortRows(filtered, sort.col, sort.dir, getValue), [filtered, sort.col, sort.dir, getValue]);
-
-  const exportCSV = () => {
-    downloadCSV(`transfer-report-${format(new Date(), 'yyyy-MM-dd')}.csv`, [
-      ['Date', 'Name', 'Mobile/Account', 'Amount (₹)', 'Profit Margin (₹)'],
-      ...sorted.map(e => [format(e.createdAt.toDate(), 'dd/MM/yyyy'), e.name, e.mobileOrAccount, String(e.amount), String(e.profitMargin)]),
-    ]);
-  };
+  const trendData   = useMemo(() => buildDailyTrend(paid.map(e => ({ ts: e.createdAt.toDate(), value: e.profitMargin })), dateRange.from, dateRange.to), [paid, dateRange]);
+  const filtered    = useMemo(() => { const q = search.toLowerCase(); return entries.filter(e => !search || e.name.toLowerCase().includes(q) || e.mobileOrAccount.includes(q)); }, [entries, search]);
+  const getValue    = useCallback((e: MoneyTransfer, col: string): string | number => { switch (col) { case 'date': return e.createdAt.toMillis(); case 'name': return e.name; case 'account': return e.mobileOrAccount; case 'amount': return e.amount; case 'profit': return e.profitMargin; default: return 0; } }, []);
+  const sorted      = useMemo(() => sortRows(filtered, sort.col, sort.dir, getValue), [filtered, sort.col, sort.dir, getValue]);
+  const exportCSV   = () => downloadCSV(`transfer-${format(new Date(), 'yyyy-MM-dd')}.csv`, [['Date','Name','Mobile/Account','Amount','Profit'], ...sorted.map(e => [format(e.createdAt.toDate(),'dd/MM/yyyy'),e.name,e.mobileOrAccount,String(e.amount),String(e.profitMargin)])]);
 
   return (
-    <div className="space-y-5">
+    <div className="space-y-4">
       <StatCards items={[
-        { label: 'Total Transfers',   value: String(entries.length) },
-        { label: 'Total Transferred', value: formatCurrency(totalAmount), cls: 'text-emerald-700' },
-        { label: 'Total Profit',      value: formatCurrency(totalProfit), cls: 'text-primary font-bold' },
+        { label: 'Kul Transfers',     value: String(entries.length) },
+        { label: 'Total Transferred', value: formatCurrency(totalAmount), cls: 'text-emerald-700', info: 'Customer ka paisa jo bheja gaya' },
+        { label: 'Shop Ki Kamai',     value: formatCurrency(totalProfit), cls: 'text-primary font-bold', info: 'Har transfer par jo fee mili' },
       ]} />
-      <Card><CardHeader className="pb-2"><CardTitle className="text-sm">Daily Profit Trend</CardTitle></CardHeader>
-        <CardContent><DailyTrendChart data={trendData} color="#8b5cf6" label="Profit" /></CardContent></Card>
-      <div className="flex flex-col sm:flex-row items-stretch sm:items-center gap-2 justify-between">
-        <div className="relative flex-1 max-w-sm">
-          <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
-          <Input placeholder="Search name, mobile/account…" value={search} onChange={e => setSearch(e.target.value)} className="pl-8 h-9" />
-        </div>
-        <Button variant="outline" size="sm" className="gap-1.5 h-9" onClick={exportCSV}><Download className="h-4 w-4" /> Export CSV</Button>
+      <Card><CardHeader className="pb-2"><CardTitle className="text-sm">Roz ka Profit</CardTitle></CardHeader><CardContent><DailyTrendChart data={trendData} color="#8b5cf6" label="Kamai" /></CardContent></Card>
+      <div className="flex flex-col sm:flex-row gap-2 justify-between">
+        <div className="relative flex-1 max-w-sm"><Search className="absolute left-2.5 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" /><Input placeholder="Naam ya account…" value={search} onChange={e => setSearch(e.target.value)} className="pl-8 h-10" /></div>
+        <Button variant="outline" size="sm" className="gap-1.5 h-10" onClick={exportCSV}><Download className="h-4 w-4" /> CSV Download</Button>
       </div>
-      <Card>
-        <div className="overflow-x-auto">
-          <Table>
-            <TableHeader><TableRow>
-              <Th col="date" label="Date" /><Th col="name" label="Name" /><Th col="account" label="Mobile / Account" />
-              <Th col="amount" label="Amount" align="right" /><Th col="profit" label="Profit Margin" align="right" />
-            </TableRow></TableHeader>
-            <TableBody>
-              {sorted.length === 0
-                ? <TableRow><TableCell colSpan={5} className="text-center py-12 text-muted-foreground">{search ? `No entries match "${search}".` : 'No transfers in this period.'}</TableCell></TableRow>
-                : sorted.map(e => (
-                  <TableRow key={e.id} className="hover:bg-muted/30">
-                    <TableCell className="text-xs text-muted-foreground whitespace-nowrap">{format(e.createdAt.toDate(), 'dd MMM yyyy')}</TableCell>
-                    <TableCell className="font-medium">{e.name}</TableCell>
-                    <TableCell className="text-muted-foreground font-mono text-sm">{e.mobileOrAccount}</TableCell>
-                    <TableCell className="text-right tabular-nums font-medium">{formatCurrency(e.amount)}</TableCell>
-                    <TableCell className="text-right tabular-nums text-emerald-700 font-semibold">{formatCurrency(e.profitMargin)}</TableCell>
-                  </TableRow>
-                ))}
-            </TableBody>
-          </Table>
-        </div>
-        {sorted.length > 0 && <div className="px-4 py-2 border-t text-xs text-muted-foreground">{sorted.length} transactions{search ? ` matching "${search}"` : ''}</div>}
-      </Card>
+      <div className="block sm:hidden space-y-2">
+        {sorted.length === 0 ? <div className="text-center py-8 text-muted-foreground text-sm">Is period me koi data nahi.</div>
+          : sorted.map(e => (<Card key={e.id}><CardContent className="p-4"><div className="flex justify-between items-start"><div><div className="font-semibold text-sm">{e.name}</div><div className="text-xs text-muted-foreground">{format(e.createdAt.toDate(),'dd MMM yyyy')} · {e.mobileOrAccount}</div></div><div className="text-right"><div className="font-semibold text-sm text-emerald-700">{formatCurrency(e.profitMargin)}</div><div className="text-xs text-muted-foreground">{formatCurrency(e.amount)}</div></div></div></CardContent></Card>))}
+      </div>
+      <Card className="hidden sm:block"><div className="overflow-x-auto"><Table><TableHeader><TableRow><Th col="date" label="Date"/><Th col="name" label="Naam"/><Th col="account" label="Mobile/Account"/><Th col="amount" label="Amount" align="right"/><Th col="profit" label="Kamai" align="right"/></TableRow></TableHeader><TableBody>{sorted.length===0?<TableRow><TableCell colSpan={5} className="text-center py-10 text-muted-foreground">Is period me koi data nahi.</TableCell></TableRow>:sorted.map(e=><TableRow key={e.id} className="hover:bg-muted/30"><TableCell className="text-xs text-muted-foreground whitespace-nowrap">{format(e.createdAt.toDate(),'dd MMM yyyy')}</TableCell><TableCell className="font-medium">{e.name}</TableCell><TableCell className="text-muted-foreground font-mono text-sm">{e.mobileOrAccount}</TableCell><TableCell className="text-right tabular-nums font-medium">{formatCurrency(e.amount)}</TableCell><TableCell className="text-right tabular-nums text-emerald-700 font-semibold">{formatCurrency(e.profitMargin)}</TableCell></TableRow>)}</TableBody></Table></div>{sorted.length>0&&<div className="px-4 py-2 border-t text-xs text-muted-foreground">{sorted.length} transactions</div>}</Card>
     </div>
   );
 }
 
-// ─────────────────────────────────────────────────────────────────────────────
-// Tab 7: Quick Work
-// ─────────────────────────────────────────────────────────────────────────────
-
-function QuickTab({ entries }: { entries: QuickActionEntry[] }) {
+function QuickSection({ entries }: { entries: QuickActionEntry[] }) {
   const sort = useSortState('count');
   const Th = makeTh(sort);
-
   const paid       = entries.filter(e => resolveStatus(e.paymentStatus) === 'paid');
   const grandTotal = paid.reduce((s, e) => s + e.amount, 0);
-
-  const rows = useMemo(() => {
-    const map: Record<string, { category: string; count: number; total: number }> = {};
-    paid.forEach(e => {
-      if (!map[e.category]) map[e.category] = { category: e.category, count: 0, total: 0 };
-      map[e.category].count++; map[e.category].total += e.amount;
-    });
-    return Object.values(map);
-  }, [paid]);
-
-  const getValue = useCallback((r: { category: string; count: number; total: number }, col: string): string | number => {
-    switch (col) { case 'category': return r.category; case 'count': return r.count; case 'total': return r.total; default: return 0; }
-  }, []);
-
-  const sorted = useMemo(() => sortRows(rows, sort.col, sort.dir, getValue), [rows, sort.col, sort.dir, getValue]);
-
-  const exportCSV = () => {
-    downloadCSV(`quick-work-report-${format(new Date(), 'yyyy-MM-dd')}.csv`, [
-      ['Category', 'Count', 'Total Amount (₹)'],
-      ...sorted.map(r => [r.category, String(r.count), String(r.total)]),
-    ]);
-  };
+  const rows       = useMemo(() => { const map: Record<string, { category: string; count: number; total: number }> = {}; paid.forEach(e => { if (!map[e.category]) map[e.category] = { category: e.category, count: 0, total: 0 }; map[e.category].count++; map[e.category].total += e.amount; }); return Object.values(map); }, [paid]);
+  const getValue   = useCallback((r: { category: string; count: number; total: number }, col: string): string | number => { switch (col) { case 'category': return r.category; case 'count': return r.count; case 'total': return r.total; default: return 0; } }, []);
+  const sorted     = useMemo(() => sortRows(rows, sort.col, sort.dir, getValue), [rows, sort.col, sort.dir, getValue]);
+  const exportCSV  = () => downloadCSV(`quick-work-${format(new Date(), 'yyyy-MM-dd')}.csv`, [['Category','Count','Total (₹)'], ...sorted.map(r => [r.category, String(r.count), String(r.total)])]);
 
   return (
-    <div className="space-y-5">
+    <div className="space-y-4">
       <StatCards items={[
-        { label: 'Total Transactions', value: String(entries.length) },
-        { label: 'Paid Transactions',  value: String(paid.length) },
-        { label: 'Total Earned',       value: formatCurrency(grandTotal), cls: 'text-primary font-bold' },
+        { label: 'Kul Kaam',    value: String(entries.length) },
+        { label: 'Paid Kaam',   value: String(paid.length) },
+        { label: 'Kul Kamai',   value: formatCurrency(grandTotal), cls: 'text-primary font-bold', info: 'Quick work se jo paisa mila' },
       ]} />
-      <div className="flex justify-end">
-        <Button variant="outline" size="sm" className="gap-1.5 h-9" onClick={exportCSV}><Download className="h-4 w-4" /> Export CSV</Button>
+      <div className="flex justify-end"><Button variant="outline" size="sm" className="gap-1.5 h-10" onClick={exportCSV}><Download className="h-4 w-4" /> CSV Download</Button></div>
+      {/* Mobile: category cards */}
+      <div className="block sm:hidden space-y-2">
+        {sorted.length === 0 ? <div className="text-center py-8 text-muted-foreground text-sm">Is period me koi data nahi.</div>
+          : sorted.map(r => (<Card key={r.category}><CardContent className="p-4 flex justify-between items-center"><div><div className="font-semibold text-sm">{r.category}</div><div className="text-xs text-muted-foreground">{r.count} entries</div></div><div className="font-semibold text-emerald-700">{formatCurrency(r.total)}</div></CardContent></Card>))}
       </div>
-      <Card>
-        <div className="overflow-x-auto">
-          <Table>
-            <TableHeader><TableRow>
-              <Th col="category" label="Category" />
-              <Th col="count" label="Count" align="right" />
-              <Th col="total" label="Total Amount" align="right" />
-            </TableRow></TableHeader>
-            <TableBody>
-              {sorted.length === 0
-                ? <TableRow><TableCell colSpan={3} className="text-center py-12 text-muted-foreground">No quick action work in this period.</TableCell></TableRow>
-                : sorted.map(r => (
-                  <TableRow key={r.category} className="hover:bg-muted/30">
-                    <TableCell className="font-medium">{r.category}</TableCell>
-                    <TableCell className="text-right tabular-nums">{r.count}</TableCell>
-                    <TableCell className="text-right tabular-nums text-emerald-700 font-semibold">{formatCurrency(r.total)}</TableCell>
-                  </TableRow>
-                ))}
-            </TableBody>
-          </Table>
-        </div>
-        {sorted.length > 0 && (
-          <div className="px-4 py-3 border-t bg-muted/20 flex justify-between text-sm font-semibold">
-            <span>Total ({paid.length} transactions)</span>
-            <span className="text-primary">{formatCurrency(grandTotal)}</span>
-          </div>
-        )}
-      </Card>
+      <Card className="hidden sm:block"><div className="overflow-x-auto"><Table><TableHeader><TableRow><Th col="category" label="Category"/><Th col="count" label="Count" align="right"/><Th col="total" label="Total" align="right"/></TableRow></TableHeader><TableBody>{sorted.length===0?<TableRow><TableCell colSpan={3} className="text-center py-10 text-muted-foreground">Is period me koi data nahi.</TableCell></TableRow>:sorted.map(r=><TableRow key={r.category} className="hover:bg-muted/30"><TableCell className="font-medium">{r.category}</TableCell><TableCell className="text-right tabular-nums">{r.count}</TableCell><TableCell className="text-right tabular-nums text-emerald-700 font-semibold">{formatCurrency(r.total)}</TableCell></TableRow>)}</TableBody></Table></div>{sorted.length>0&&<div className="px-4 py-3 border-t bg-muted/20 flex justify-between text-sm font-semibold"><span>Total ({paid.length})</span><span className="text-primary">{formatCurrency(grandTotal)}</span></div>}</Card>
     </div>
   );
 }
 
-// ─────────────────────────────────────────────────────────────────────────────
-// Tab 8: Cash vs Online
-// ─────────────────────────────────────────────────────────────────────────────
-
-interface CashOnlineRow {
-  module: string;
-  cash: number;
-  online: number;
-  total: number;
-}
-
-const PIE_COLORS = { Cash: '#10b981', Online: '#3b82f6' };
-
-// ─────────────────────────────────────────────────────────────────────────────
-// Tab: Flight Booking
-// ─────────────────────────────────────────────────────────────────────────────
-
-function FlightTab({ entries, dateRange }: { entries: FlightBooking[]; dateRange: DateRangeState }) {
+function FlightSection({ entries, dateRange }: { entries: FlightBooking[]; dateRange: DateRangeState }) {
   const [search, setSearch] = useState('');
   const sort = useSortState('date');
   const Th = makeTh(sort);
+  const totalProfit = entries.reduce((s, e) => s + e.profitMargin, 0);
+  const totalCharged = entries.reduce((s, e) => s + e.amountCharged, 0);
+  const trendData   = useMemo(() => buildDailyTrend(entries.map(e => ({ ts: e.createdAt.toDate(), value: e.profitMargin })), dateRange.from, dateRange.to), [entries, dateRange]);
+  const filtered    = useMemo(() => { const q = search.toLowerCase(); return entries.filter(e => !search || e.customerName.toLowerCase().includes(q) || e.flightFrom.toLowerCase().includes(q) || e.flightTo.toLowerCase().includes(q)); }, [entries, search]);
+  const getValue    = useCallback((e: FlightBooking, col: string): string | number => { switch (col) { case 'date': return e.createdAt.toMillis(); case 'customer': return e.customerName; case 'from': return e.flightFrom; case 'to': return e.flightTo; case 'boarding': return e.boardingDate; case 'fare': return e.actualFare; case 'charged': return e.amountCharged; case 'profit': return e.profitMargin; default: return 0; } }, []);
+  const sorted      = useMemo(() => sortRows(filtered, sort.col, sort.dir, getValue), [filtered, sort.col, sort.dir, getValue]);
+  const exportCSV   = () => downloadCSV(`flight-${format(new Date(), 'yyyy-MM-dd')}.csv`, [['Date','Customer','From','To','Boarding','Actual Fare','Charged','Profit','Added By'], ...sorted.map(e => [format(e.createdAt.toDate(),'dd/MM/yyyy HH:mm'),e.customerName,e.flightFrom,e.flightTo,e.boardingDate,String(e.actualFare),String(e.amountCharged),String(e.profitMargin),e.addedBy])]);
 
-  const totalBookings = entries.length;
-  const totalCharged  = entries.reduce((s, e) => s + e.amountCharged, 0);
-  const totalProfit   = entries.reduce((s, e) => s + e.profitMargin, 0);
+  return (
+    <div className="space-y-4">
+      <StatCards items={[
+        { label: 'Kul Bookings',   value: String(entries.length) },
+        { label: 'Total Charged',  value: formatCurrency(totalCharged),  cls: 'text-emerald-700', info: 'Customer se jo paisa liya gaya' },
+        { label: 'Shop Ki Kamai',  value: formatCurrency(totalProfit),   cls: 'text-primary font-bold', info: 'Charged − Actual Fare = asli kamai' },
+      ]} />
+      <Card><CardHeader className="pb-2"><CardTitle className="text-sm">Roz ka Profit</CardTitle></CardHeader><CardContent><DailyTrendChart data={trendData} color="#f43f5e" label="Kamai" /></CardContent></Card>
+      <div className="flex flex-col sm:flex-row gap-2 justify-between">
+        <div className="relative flex-1 max-w-sm"><Search className="absolute left-2.5 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" /><Input placeholder="Customer ya route…" value={search} onChange={e => setSearch(e.target.value)} className="pl-8 h-10" /></div>
+        <Button variant="outline" size="sm" className="gap-1.5 h-10" onClick={exportCSV}><Download className="h-4 w-4" /> CSV Download</Button>
+      </div>
+      <div className="block sm:hidden space-y-2">
+        {sorted.length === 0 ? <div className="text-center py-8 text-muted-foreground text-sm">Is period me koi data nahi.</div>
+          : sorted.map(e => (<Card key={e.id}><CardContent className="p-4"><div className="flex justify-between items-start mb-1"><div><div className="font-semibold text-sm">{e.customerName}</div><div className="text-xs text-muted-foreground">{e.flightFrom} → {e.flightTo} · {e.boardingDate ? format(new Date(e.boardingDate+'T00:00:00'),'dd MMM') : '—'}</div></div><div className="text-right"><div className="font-semibold text-sm text-emerald-700">{formatCurrency(e.profitMargin)}</div><div className="text-xs text-muted-foreground">Charged: {formatCurrency(e.amountCharged)}</div></div></div></CardContent></Card>))}
+      </div>
+      <Card className="hidden sm:block"><div className="overflow-x-auto"><Table><TableHeader><TableRow><Th col="date" label="Date"/><Th col="customer" label="Customer"/><Th col="from" label="From"/><Th col="to" label="To"/><Th col="boarding" label="Boarding"/><Th col="fare" label="Actual Fare" align="right"/><Th col="charged" label="Charged" align="right"/><Th col="profit" label="Kamai" align="right"/></TableRow></TableHeader><TableBody>{sorted.length===0?<TableRow><TableCell colSpan={8} className="text-center py-10 text-muted-foreground">Is period me koi data nahi.</TableCell></TableRow>:sorted.map(e=><TableRow key={e.id} className="hover:bg-muted/30"><TableCell className="text-xs text-muted-foreground whitespace-nowrap">{format(e.createdAt.toDate(),'dd MMM yyyy')}</TableCell><TableCell className="font-medium">{e.customerName}</TableCell><TableCell className="text-muted-foreground">{e.flightFrom}</TableCell><TableCell className="text-muted-foreground">{e.flightTo}</TableCell><TableCell className="text-muted-foreground whitespace-nowrap">{e.boardingDate?format(new Date(e.boardingDate+'T00:00:00'),'dd MMM yyyy'):'—'}</TableCell><TableCell className="text-right tabular-nums">{formatCurrency(e.actualFare)}</TableCell><TableCell className="text-right tabular-nums">{formatCurrency(e.amountCharged)}</TableCell><TableCell className="text-right tabular-nums text-emerald-700 font-semibold">{formatCurrency(e.profitMargin)}</TableCell></TableRow>)}</TableBody></Table></div>{sorted.length>0&&<div className="px-4 py-2 border-t text-xs text-muted-foreground">{sorted.length} bookings</div>}</Card>
+    </div>
+  );
+}
 
-  const trendData = useMemo(() => buildDailyTrend(
-    entries.map(e => ({ ts: e.createdAt.toDate(), value: e.profitMargin })),
-    dateRange.from, dateRange.to,
-  ), [entries, dateRange]);
+const FINANCIAL_CHIPS: { key: FinancialKey; label: string; color: string }[] = [
+  { key: 'aeps',     label: 'AEPS',     color: '#10b981' },
+  { key: 'recharge', label: 'Recharge', color: '#f59e0b' },
+  { key: 'transfer', label: 'Transfer', color: '#8b5cf6' },
+  { key: 'quick',    label: 'Quick Work',color: '#06b6d4' },
+  { key: 'flight',   label: 'Flight',   color: '#f43f5e' },
+];
 
-  const filtered = useMemo(() => {
-    const q = search.toLowerCase();
-    return entries.filter(e =>
-      !search ||
-      e.customerName.toLowerCase().includes(q) ||
-      e.flightFrom.toLowerCase().includes(q) ||
-      e.flightTo.toLowerCase().includes(q),
-    );
-  }, [entries, search]);
+function FinancialTab({
+  aeps, recharge, transfer, quick, flight, dateRange,
+}: {
+  aeps: AepsWithdrawal[]; recharge: ElectricRecharge[];
+  transfer: MoneyTransfer[]; quick: QuickActionEntry[]; flight: FlightBooking[];
+  dateRange: DateRangeState;
+}) {
+  const [active, setActive] = useState<FinancialKey>('aeps');
 
-  const getValue = useCallback((e: FlightBooking, col: string): string | number => {
-    switch (col) {
-      case 'date':     return e.createdAt.toMillis();
-      case 'customer': return e.customerName;
-      case 'from':     return e.flightFrom;
-      case 'to':       return e.flightTo;
-      case 'boarding': return e.boardingDate;
-      case 'fare':     return e.actualFare;
-      case 'charged':  return e.amountCharged;
-      case 'profit':   return e.profitMargin;
-      default:         return 0;
-    }
-  }, []);
-
-  const sorted = useMemo(() => sortRows(filtered, sort.col, sort.dir, getValue), [filtered, sort.col, sort.dir, getValue]);
-
-  const exportCSV = () => {
-    downloadCSV(`flight-booking-report-${format(new Date(), 'yyyy-MM-dd')}.csv`, [
-      ['Date', 'Customer', 'Flight From', 'Flight To', 'Boarding Date', 'Actual Fare (₹)', 'Amount Charged (₹)', 'Profit (₹)', 'Added By'],
-      ...sorted.map(e => [
-        format(e.createdAt.toDate(), 'dd/MM/yyyy HH:mm'),
-        e.customerName, e.flightFrom, e.flightTo, e.boardingDate,
-        String(e.actualFare), String(e.amountCharged), String(e.profitMargin), e.addedBy,
-      ]),
-    ]);
+  // Summary totals for chip badges
+  const summaries: Record<FinancialKey, number> = {
+    aeps:     aeps.filter(e => resolveStatus(e.paymentStatus) === 'paid').reduce((s, e) => s + e.profitMargin, 0),
+    recharge: recharge.filter(e => resolveStatus(e.paymentStatus) === 'paid').reduce((s, e) => s + e.profitMargin, 0),
+    transfer: transfer.filter(e => resolveStatus(e.paymentStatus) === 'paid').reduce((s, e) => s + e.profitMargin, 0),
+    quick:    quick.filter(e => resolveStatus(e.paymentStatus) === 'paid').reduce((s, e) => s + e.amount, 0),
+    flight:   flight.reduce((s, e) => s + e.profitMargin, 0),
   };
 
   return (
     <div className="space-y-5">
-      <StatCards items={[
-        { label: 'Total Bookings',          value: String(totalBookings) },
-        { label: 'Total Amount Charged',    value: formatCurrency(totalCharged),  cls: 'text-emerald-700' },
-        { label: 'Total Profit',            value: formatCurrency(totalProfit),   cls: 'text-primary font-bold' },
-      ]} />
-      <Card>
-        <CardHeader className="pb-2"><CardTitle className="text-sm">Daily Profit Trend</CardTitle></CardHeader>
-        <CardContent><DailyTrendChart data={trendData} color="#f43f5e" label="Profit" /></CardContent>
-      </Card>
-      <div className="flex flex-col sm:flex-row items-stretch sm:items-center gap-2 justify-between">
-        <div className="relative flex-1 max-w-sm">
-          <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
-          <Input placeholder="Search customer, route…" value={search} onChange={e => setSearch(e.target.value)} className="pl-8 h-9" />
-        </div>
-        <Button variant="outline" size="sm" className="gap-1.5 h-9" onClick={exportCSV}><Download className="h-4 w-4" /> Export CSV</Button>
+      {/* Chip selector */}
+      <div className="flex flex-wrap gap-2">
+        {FINANCIAL_CHIPS.map(chip => (
+          <button
+            key={chip.key}
+            onClick={() => setActive(chip.key)}
+            className={`flex items-center gap-2 px-4 py-2 rounded-full text-sm font-medium border transition-all ${
+              active === chip.key
+                ? 'text-white border-transparent shadow-sm'
+                : 'bg-card text-foreground border-border hover:border-muted-foreground'
+            }`}
+            style={active === chip.key ? { backgroundColor: chip.color, borderColor: chip.color } : {}}
+          >
+            <span className="inline-block h-2 w-2 rounded-full" style={{ backgroundColor: chip.color }} />
+            {chip.label}
+            {summaries[chip.key] > 0 && (
+              <span className={`text-xs tabular-nums ${active === chip.key ? 'text-white/80' : 'text-muted-foreground'}`}>
+                {formatCurrency(summaries[chip.key])}
+              </span>
+            )}
+          </button>
+        ))}
       </div>
-      <Card>
-        <div className="overflow-x-auto">
-          <Table>
-            <TableHeader><TableRow>
-              <Th col="date"     label="Date" />
-              <Th col="customer" label="Customer" />
-              <Th col="from"     label="From" />
-              <Th col="to"       label="To" />
-              <Th col="boarding" label="Boarding Date" />
-              <Th col="fare"     label="Actual Fare"  align="right" />
-              <Th col="charged"  label="Amt Charged"  align="right" />
-              <Th col="profit"   label="Profit"       align="right" />
-            </TableRow></TableHeader>
-            <TableBody>
-              {sorted.length === 0
-                ? <TableRow><TableCell colSpan={8} className="text-center py-12 text-muted-foreground">{search ? `No entries match "${search}".` : 'No flight bookings in this period.'}</TableCell></TableRow>
-                : sorted.map(e => (
-                  <TableRow key={e.id} className="hover:bg-muted/30">
-                    <TableCell className="text-xs text-muted-foreground whitespace-nowrap">{format(e.createdAt.toDate(), 'dd MMM yyyy')}</TableCell>
-                    <TableCell className="font-medium">{e.customerName}</TableCell>
-                    <TableCell className="text-muted-foreground">{e.flightFrom}</TableCell>
-                    <TableCell className="text-muted-foreground">{e.flightTo}</TableCell>
-                    <TableCell className="text-muted-foreground whitespace-nowrap">
-                      {e.boardingDate ? format(new Date(e.boardingDate + 'T00:00:00'), 'dd MMM yyyy') : '—'}
-                    </TableCell>
-                    <TableCell className="text-right tabular-nums font-medium">{formatCurrency(e.actualFare)}</TableCell>
-                    <TableCell className="text-right tabular-nums font-medium">{formatCurrency(e.amountCharged)}</TableCell>
-                    <TableCell className="text-right tabular-nums text-emerald-700 font-semibold">{formatCurrency(e.profitMargin)}</TableCell>
-                  </TableRow>
-                ))}
-            </TableBody>
-          </Table>
-        </div>
-        {sorted.length > 0 && <div className="px-4 py-2 border-t text-xs text-muted-foreground">{sorted.length} booking{sorted.length !== 1 ? 's' : ''}{search ? ` matching "${search}"` : ''}</div>}
-      </Card>
+
+      {/* Section content */}
+      {active === 'aeps'     && <AepsSection     entries={aeps}     dateRange={dateRange} />}
+      {active === 'recharge' && <RechargeSection entries={recharge} dateRange={dateRange} />}
+      {active === 'transfer' && <TransferSection entries={transfer} dateRange={dateRange} />}
+      {active === 'quick'    && <QuickSection    entries={quick} />}
+      {active === 'flight'   && <FlightSection   entries={flight}   dateRange={dateRange} />}
     </div>
   );
 }
 
-function CashOnlineTab({
-  work, aeps, recharge, transfer, quick, flight,
+// ─────────────────────────────────────────────────────────────────────────────
+// TAB 4 — Staff-wise Profit
+// ─────────────────────────────────────────────────────────────────────────────
+
+interface StaffStat {
+  name: string;
+  workCount: number;   workProfit: number;   workDue: number;
+  aepsCount: number;   aepsProfit: number;
+  rechargeCount: number; rechargeProfit: number;
+  transferCount: number; transferProfit: number;
+  quickCount: number;  quickProfit: number;
+  flightCount: number; flightProfit: number;
+  totalEntries: number;
+  totalProfit: number;
+  totalDue: number;
+}
+
+function StaffTab({
+  work, aeps, recharge, transfer, quick, flight, isOwner, currentDisplayName,
 }: {
   work: WorkEntry[]; aeps: AepsWithdrawal[]; recharge: ElectricRecharge[];
   transfer: MoneyTransfer[]; quick: QuickActionEntry[]; flight: FlightBooking[];
+  isOwner: boolean; currentDisplayName: string;
 }) {
-  // For each module: group collected amounts into Cash vs Online
-  // Anything without paymentMode, or with 'Due'/'None', defaults to Cash
-  const rows = useMemo<CashOnlineRow[]>(() => {
-    const calc = (items: { mode: string | undefined; amount: number }[]): { cash: number; online: number } => {
-      let cash = 0, online = 0;
-      items.forEach(({ mode, amount }) => {
-        if (isOnline(mode)) online += amount;
-        else cash += amount;
+  const [expandedName, setExpandedName] = useState<string | null>(null);
+
+  const staffStats = useMemo<StaffStat[]>(() => {
+    const map = new Map<string, StaffStat>();
+
+    const ensure = (name: string) => {
+      if (!map.has(name)) map.set(name, {
+        name, workCount: 0, workProfit: 0, workDue: 0,
+        aepsCount: 0, aepsProfit: 0, rechargeCount: 0, rechargeProfit: 0,
+        transferCount: 0, transferProfit: 0, quickCount: 0, quickProfit: 0,
+        flightCount: 0, flightProfit: 0, totalEntries: 0, totalProfit: 0, totalDue: 0,
       });
-      return { cash, online };
+      return map.get(name)!;
     };
 
-    const workActive = work.filter(e => e.status !== 'Rejected');
-    const workTotals = calc(workActive.map(e => ({ mode: e.paymentMode, amount: e.paidAmount })));
+    // Work entries (non-rejected, paid portion)
+    work.filter(e => e.status !== 'Rejected').forEach(e => {
+      const s = ensure(e.addedBy || 'Unknown');
+      const profit = e.paidAmount - getWorkChallan(e);
+      s.workCount++;
+      s.workProfit += profit;
+      s.workDue += Math.max(0, e.dueAmount);
+    });
 
-    // AEPS: only the profitMargin is shop income — the withdrawal amount is the
-    // customer's own money paid out in cash and must NOT count as shop revenue.
-    const aepsPaid = aeps.filter(e => resolveStatus(e.paymentStatus) === 'paid');
-    const aepsTotals = calc(aepsPaid.map(e => ({ mode: e.paymentMode, amount: e.profitMargin })));
+    // AEPS (paid only)
+    aeps.filter(e => resolveStatus(e.paymentStatus) === 'paid').forEach(e => {
+      const s = ensure(e.addedBy || 'Unknown');
+      s.aepsCount++;
+      s.aepsProfit += e.profitMargin;
+    });
 
-    // Recharge: only the profitMargin is shop income — the recharge amount itself
-    // is the customer's top-up value, not money earned by the shop.
-    const rechargePaid = recharge.filter(e => resolveStatus(e.paymentStatus) === 'paid');
-    const rechargeTotals = calc(rechargePaid.map(e => ({ mode: e.paymentMode, amount: e.profitMargin })));
+    // Recharge (paid only)
+    recharge.filter(e => resolveStatus(e.paymentStatus) === 'paid').forEach(e => {
+      const s = ensure(e.addedBy || 'Unknown');
+      s.rechargeCount++;
+      s.rechargeProfit += e.profitMargin;
+    });
 
-    // Money Transfer: only the profitMargin is shop income — the transfer amount
-    // is the customer's funds being sent out and not revenue earned by the shop.
-    const transferPaid = transfer.filter(e => resolveStatus(e.paymentStatus) === 'paid');
-    const transferTotals = calc(transferPaid.map(e => ({ mode: e.paymentMode, amount: e.profitMargin })));
+    // Transfer (paid only)
+    transfer.filter(e => resolveStatus(e.paymentStatus) === 'paid').forEach(e => {
+      const s = ensure(e.addedBy || 'Unknown');
+      s.transferCount++;
+      s.transferProfit += e.profitMargin;
+    });
 
-    const quickPaid = quick.filter(e => resolveStatus(e.paymentStatus) === 'paid');
-    const quickTotals = calc(quickPaid.map(e => ({ mode: e.paymentMode, amount: e.amount })));
+    // Quick Work (paid only)
+    quick.filter(e => resolveStatus(e.paymentStatus) === 'paid').forEach(e => {
+      const s = ensure(e.addedBy || 'Unknown');
+      s.quickCount++;
+      s.quickProfit += e.amount;
+    });
 
-    // Flight Booking: only the profit is shop income — the actual fare passes
-    // through to the airline. All flight profits default to Cash (no paymentMode stored).
-    const flightTotals = calc(flight.map(e => ({ mode: undefined as string | undefined, amount: e.profitMargin })));
+    // Flight Booking (all — no payment mode)
+    flight.forEach(e => {
+      const s = ensure(e.addedBy || 'Unknown');
+      s.flightCount++;
+      s.flightProfit += e.profitMargin;
+    });
 
-    return [
-      { module: 'Work',           ...workTotals,     total: workTotals.cash + workTotals.online },
-      { module: 'AEPS',           ...aepsTotals,     total: aepsTotals.cash + aepsTotals.online },
-      { module: 'Recharge',       ...rechargeTotals, total: rechargeTotals.cash + rechargeTotals.online },
-      { module: 'Money Transfer', ...transferTotals, total: transferTotals.cash + transferTotals.online },
-      { module: 'Quick Work',     ...quickTotals,    total: quickTotals.cash + quickTotals.online },
-      { module: 'Flight Booking', ...flightTotals,   total: flightTotals.cash + flightTotals.online },
-    ].filter(r => r.cash !== 0 || r.online !== 0 || r.total !== 0);
+    // Compute totals
+    map.forEach(s => {
+      s.totalEntries = s.workCount + s.aepsCount + s.rechargeCount + s.transferCount + s.quickCount + s.flightCount;
+      s.totalProfit  = s.workProfit + s.aepsProfit + s.rechargeProfit + s.transferProfit + s.quickProfit + s.flightProfit;
+      s.totalDue     = s.workDue;
+    });
+
+    return Array.from(map.values()).sort((a, b) => b.totalProfit - a.totalProfit);
   }, [work, aeps, recharge, transfer, quick, flight]);
 
-  const grandCash   = rows.reduce((s, r) => s + r.cash, 0);
-  const grandOnline = rows.reduce((s, r) => s + r.online, 0);
-  const grandTotal  = grandCash + grandOnline;
+  // Role-based filter: staff only sees own card
+  const visibleStats = isOwner ? staffStats : staffStats.filter(s => s.name === currentDisplayName);
 
-  const pieData = [
-    { name: 'Cash',   value: grandCash },
-    { name: 'Online', value: grandOnline },
-  ].filter(d => d.value > 0);
+  if (visibleStats.length === 0) {
+    return (
+      <div className="flex flex-col items-center justify-center py-20 text-muted-foreground gap-3">
+        <Users className="h-10 w-10 opacity-20" />
+        <p className="text-sm">Is period me koi entry nahi.</p>
+      </div>
+    );
+  }
 
-  const exportCSV = () => {
-    downloadCSV(`cash-vs-online-${format(new Date(), 'yyyy-MM-dd')}.csv`, [
-      ['Module', 'Cash (₹)', 'Online (₹)', 'Total (₹)'],
-      ...rows.map(r => [r.module, String(r.cash), String(r.online), String(r.total)]),
-      ['TOTAL', String(grandCash), String(grandOnline), String(grandTotal)],
-    ]);
-  };
+  const breakdown = (s: StaffStat) => [
+    { label: 'Work',    count: s.workCount,     profit: s.workProfit,     color: SOURCE_COLORS['Work'] },
+    { label: 'AEPS',   count: s.aepsCount,     profit: s.aepsProfit,     color: SOURCE_COLORS['AEPS'] },
+    { label: 'Recharge', count: s.rechargeCount, profit: s.rechargeProfit, color: SOURCE_COLORS['Recharge'] },
+    { label: 'Transfer', count: s.transferCount, profit: s.transferProfit, color: SOURCE_COLORS['Transfer'] },
+    { label: 'Quick',  count: s.quickCount,    profit: s.quickProfit,    color: SOURCE_COLORS['Quick Work'] },
+    { label: 'Flight', count: s.flightCount,   profit: s.flightProfit,   color: SOURCE_COLORS['Flight Booking'] },
+  ].filter(b => b.count > 0);
 
   return (
-    <div className="space-y-6">
-      {/* Grand totals */}
-      <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
-        <Card className="border-emerald-200 bg-emerald-50/50">
-          <CardHeader className="pb-2 flex flex-row items-center justify-between">
-            <CardTitle className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">Total Cash</CardTitle>
-            <Banknote className="h-4 w-4 text-emerald-600" />
-          </CardHeader>
-          <CardContent>
-            <div className="text-3xl font-bold text-emerald-700">{formatCurrency(grandCash)}</div>
-            {grandTotal > 0 && <p className="text-xs text-muted-foreground mt-1">{Math.round((grandCash / grandTotal) * 100)}% of total collected</p>}
-          </CardContent>
-        </Card>
-
-        <Card className="border-blue-200 bg-blue-50/50">
-          <CardHeader className="pb-2 flex flex-row items-center justify-between">
-            <CardTitle className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">Total Online</CardTitle>
-            <Wifi className="h-4 w-4 text-blue-600" />
-          </CardHeader>
-          <CardContent>
-            <div className="text-3xl font-bold text-blue-700">{formatCurrency(grandOnline)}</div>
-            {grandTotal > 0 && <p className="text-xs text-muted-foreground mt-1">{Math.round((grandOnline / grandTotal) * 100)}% of total collected</p>}
-          </CardContent>
-        </Card>
-
-        <Card>
-          <CardHeader className="pb-2 flex flex-row items-center justify-between">
-            <CardTitle className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">Total Collected</CardTitle>
-            <IndianRupee className="h-4 w-4 text-primary" />
-          </CardHeader>
-          <CardContent>
-            <div className="text-3xl font-bold text-primary">{formatCurrency(grandTotal)}</div>
-            <p className="text-xs text-muted-foreground mt-1">All modules combined</p>
-          </CardContent>
-        </Card>
-      </div>
-
-      {/* Chart + breakdown */}
-      <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
-        {/* Donut chart */}
-        <Card>
-          <CardHeader className="pb-2"><CardTitle className="text-sm">Cash vs Online Split</CardTitle></CardHeader>
-          <CardContent>
-            {grandTotal === 0 ? (
-              <div className="flex flex-col items-center justify-center h-52 text-muted-foreground">
-                <IndianRupee className="h-8 w-8 mb-2 opacity-20" />
-                <p className="text-sm">No collections in this period.</p>
-              </div>
-            ) : (
-              <ResponsiveContainer width="100%" height={220}>
-                <PieChart>
-                  <Pie
-                    data={pieData}
-                    dataKey="value"
-                    nameKey="name"
-                    cx="50%"
-                    cy="50%"
-                    innerRadius={55}
-                    outerRadius={88}
-                    paddingAngle={3}
-                    label={({ name, percent }) => `${name} ${(percent * 100).toFixed(0)}%`}
-                    labelLine={false}
-                  >
-                    {pieData.map(d => <Cell key={d.name} fill={PIE_COLORS[d.name as keyof typeof PIE_COLORS] ?? '#94a3b8'} />)}
-                  </Pie>
-                  <Tooltip formatter={(v: number) => [formatCurrency(v)]} />
-                  <Legend />
-                </PieChart>
-              </ResponsiveContainer>
-            )}
-          </CardContent>
-        </Card>
-
-        {/* Module bar chart */}
-        <Card>
-          <CardHeader className="pb-2"><CardTitle className="text-sm">By Module</CardTitle></CardHeader>
-          <CardContent>
-            {rows.length === 0 ? (
-              <div className="flex flex-col items-center justify-center h-52 text-muted-foreground">
-                <p className="text-sm">No data in this period.</p>
-              </div>
-            ) : (
-              <ResponsiveContainer width="100%" height={220}>
-                <BarChart data={rows} margin={{ top: 4, right: 8, left: -10, bottom: 0 }}>
-                  <CartesianGrid strokeDasharray="3 3" stroke="hsl(var(--border))" />
-                  <XAxis dataKey="module" tick={{ fontSize: 10 }} />
-                  <YAxis tick={{ fontSize: 11 }} />
-                  <Tooltip formatter={(v: number) => [formatCurrency(v)]} />
-                  <Legend />
-                  <Bar dataKey="cash"   name="Cash"   fill="#10b981" stackId="a" radius={[0,0,0,0]} />
-                  <Bar dataKey="online" name="Online" fill="#3b82f6" stackId="a" radius={[3,3,0,0]} />
-                </BarChart>
-              </ResponsiveContainer>
-            )}
-          </CardContent>
-        </Card>
-      </div>
-
-      {/* Breakdown table */}
-      <div className="flex justify-end">
-        <Button variant="outline" size="sm" className="gap-1.5 h-9" onClick={exportCSV}><Download className="h-4 w-4" /> Export CSV</Button>
-      </div>
-      <Card>
-        <div className="overflow-x-auto">
-          <Table>
-            <TableHeader>
-              <TableRow>
-                <TableHead>Module</TableHead>
-                <TableHead className="text-right">
-                  <span className="flex items-center justify-end gap-1.5"><Banknote className="h-3.5 w-3.5 text-emerald-600" />Cash</span>
-                </TableHead>
-                <TableHead className="text-right">
-                  <span className="flex items-center justify-end gap-1.5"><Wifi className="h-3.5 w-3.5 text-blue-600" />Online</span>
-                </TableHead>
-                <TableHead className="text-right">Total</TableHead>
-              </TableRow>
-            </TableHeader>
-            <TableBody>
-              {rows.length === 0
-                ? <TableRow><TableCell colSpan={4} className="text-center py-12 text-muted-foreground">No collections in this period.</TableCell></TableRow>
-                : rows.map(r => (
-                  <TableRow key={r.module} className="hover:bg-muted/30">
-                    <TableCell className="font-medium">{r.module}</TableCell>
-                    <TableCell className="text-right tabular-nums text-emerald-700 font-medium">{r.cash > 0 ? formatCurrency(r.cash) : '—'}</TableCell>
-                    <TableCell className="text-right tabular-nums text-blue-700 font-medium">{r.online > 0 ? formatCurrency(r.online) : '—'}</TableCell>
-                    <TableCell className="text-right tabular-nums font-semibold">{formatCurrency(r.total)}</TableCell>
-                  </TableRow>
-                ))}
-            </TableBody>
-          </Table>
+    <div className="space-y-4">
+      {!isOwner && (
+        <div className="flex items-center gap-2 rounded-lg border bg-blue-50 px-4 py-3 text-sm text-blue-700">
+          <Info className="h-4 w-4 shrink-0" />
+          <span>Sirf aapka apna performance dikh raha hai.</span>
         </div>
-        {rows.length > 0 && (
-          <div className="px-4 py-3 border-t bg-muted/20 flex">
-            <div className="flex-1 text-sm font-semibold">Grand Total</div>
-            <div className="w-32 text-right text-sm font-semibold text-emerald-700 pr-4">{formatCurrency(grandCash)}</div>
-            <div className="w-32 text-right text-sm font-semibold text-blue-700 pr-4">{formatCurrency(grandOnline)}</div>
-            <div className="w-28 text-right text-sm font-semibold text-primary">{formatCurrency(grandTotal)}</div>
-          </div>
-        )}
-      </Card>
+      )}
+      {isOwner && (
+        <p className="text-xs text-muted-foreground">
+          {visibleStats.length} staff · Sabse zyada kamai karne wale sabse upar · Sirf paid entries ka profit
+        </p>
+      )}
+
+      {visibleStats.map((s, idx) => (
+        <Card key={s.name} className={idx === 0 && isOwner ? 'border-primary/30 bg-primary/5' : ''}>
+          {/* Card header — tappable to expand */}
+          <button
+            className="w-full text-left px-5 py-4 hover:bg-muted/20 transition-colors"
+            onClick={() => setExpandedName(expandedName === s.name ? null : s.name)}
+          >
+            <div className="flex items-center justify-between gap-3">
+              <div className="flex items-center gap-3 min-w-0">
+                <div className={`h-10 w-10 rounded-full flex items-center justify-center shrink-0 font-bold text-white text-sm ${idx === 0 && isOwner ? 'bg-primary' : 'bg-slate-400'}`}>
+                  {s.name.charAt(0).toUpperCase()}
+                </div>
+                <div className="min-w-0">
+                  <div className="font-semibold text-sm flex items-center gap-2">
+                    {s.name}
+                    {idx === 0 && isOwner && <span className="text-[10px] bg-primary/10 text-primary px-2 py-0.5 rounded-full">Top Performer</span>}
+                  </div>
+                  <div className="text-xs text-muted-foreground">{s.totalEntries} entries</div>
+                </div>
+              </div>
+              <div className="flex items-center gap-4 shrink-0">
+                <div className="text-right">
+                  <div className="font-bold text-base text-emerald-700">{formatCurrency(s.totalProfit)}</div>
+                  <div className="text-xs text-muted-foreground">kamai</div>
+                </div>
+                {s.totalDue > 0 && (
+                  <div className="text-right">
+                    <div className="font-semibold text-sm text-amber-700">{formatCurrency(s.totalDue)}</div>
+                    <div className="text-xs text-muted-foreground">due</div>
+                  </div>
+                )}
+                <ChevronRight className={`h-4 w-4 text-muted-foreground transition-transform ${expandedName === s.name ? 'rotate-90' : ''}`} />
+              </div>
+            </div>
+          </button>
+
+          {/* Expanded source breakdown */}
+          {expandedName === s.name && (
+            <div className="border-t px-5 py-4 space-y-3">
+              <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wide">Source-wise Breakdown</p>
+              <div className="grid grid-cols-2 sm:grid-cols-3 gap-3">
+                {breakdown(s).map(b => (
+                  <div key={b.label} className="rounded-lg border p-3">
+                    <div className="flex items-center gap-1.5 mb-1">
+                      <span className="inline-block h-2 w-2 rounded-full shrink-0" style={{ background: b.color }} />
+                      <span className="text-xs font-medium text-muted-foreground">{b.label}</span>
+                    </div>
+                    <div className="font-semibold text-sm">{formatCurrency(b.profit)}</div>
+                    <div className="text-xs text-muted-foreground">{b.count} entries</div>
+                  </div>
+                ))}
+              </div>
+              {s.totalDue > 0 && (
+                <div className="flex items-center gap-2 rounded-lg border border-amber-200 bg-amber-50 px-3 py-2 text-sm">
+                  <AlertTriangle className="h-4 w-4 text-amber-600 shrink-0" />
+                  <span className="text-amber-700">{formatCurrency(s.totalDue)} baaki hai (Work entries se)</span>
+                </div>
+              )}
+            </div>
+          )}
+        </Card>
+      ))}
     </div>
   );
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
-// Main
+// Main component
 // ─────────────────────────────────────────────────────────────────────────────
 
-const TABS: { key: TabKey; label: string }[] = [
-  { key: 'overview',   label: 'Overview' },
-  { key: 'work',       label: 'Work & Challan' },
-  { key: 'category',   label: 'Category-wise' },
-  { key: 'aeps',       label: 'AEPS' },
-  { key: 'recharge',   label: 'Recharge' },
-  { key: 'transfer',   label: 'Money Transfer' },
-  { key: 'quick',      label: 'Quick Work' },
-  { key: 'flight',     label: 'Flight Booking' },
-  { key: 'cashonline', label: 'Cash vs Online' },
+const MAIN_TABS: { key: TabKey; label: string; icon: React.ElementType }[] = [
+  { key: 'overview',   label: 'Overview',          icon: LayoutDashboard },
+  { key: 'work',       label: 'Work',               icon: Briefcase },
+  { key: 'financial',  label: 'Financial Services', icon: BarChart3 },
+  { key: 'staff',      label: 'Staff',              icon: Users },
 ];
 
 export default function ReportsPage() {
-  const { isOwner } = useAuth();
+  const { isOwner, displayName } = useAuth();
   const [activeTab, setActiveTab] = useState<TabKey>('overview');
 
   const [workEntries,     setWorkEntries]     = useState<WorkEntry[]>([]);
@@ -1349,67 +1226,106 @@ export default function ReportsPage() {
   const fq = useMemo(() => quickEntries   .filter(e => inRange(e.createdAt.toDate(), dateRange.from, dateRange.to)), [quickEntries,    dateRange]);
   const ff = useMemo(() => flightEntries  .filter(e => inRange(e.createdAt.toDate(), dateRange.from, dateRange.to)), [flightEntries,   dateRange]);
 
-  // ── Access guard ────────────────────────────────────────────────────────────
+  // Access guard — owner only (Staff tab has internal role-based filter)
   if (!isOwner) return (
     <div className="flex flex-col items-center justify-center py-24 text-center gap-4">
       <div className="h-16 w-16 rounded-full bg-muted flex items-center justify-center">
         <ShieldCheck className="h-8 w-8 text-muted-foreground" />
       </div>
       <h2 className="text-xl font-semibold">Access Restricted</h2>
-      <p className="text-muted-foreground max-w-xs">Reports are only visible to the Owner.</p>
+      <p className="text-muted-foreground max-w-xs">Reports sirf Owner dekh sakta hai.</p>
     </div>
   );
 
   if (loading) return (
     <div className="space-y-6 max-w-6xl">
       <Skeleton className="h-8 w-48" />
-      <div className="flex gap-1 flex-wrap">{TABS.map((_, i) => <Skeleton key={i} className="h-10 w-24 rounded" />)}</div>
-      <div className="flex gap-2 flex-wrap">{[0,1,2,3,4].map(i => <Skeleton key={i} className="h-8 w-24 rounded-lg" />)}</div>
+      <div className="flex gap-2">{[0,1,2,3].map(i => <Skeleton key={i} className="h-12 flex-1 rounded-xl" />)}</div>
+      <div className="flex gap-2 flex-wrap">{[0,1,2,3,4].map(i => <Skeleton key={i} className="h-9 w-24 rounded-lg" />)}</div>
       <div className="grid grid-cols-2 md:grid-cols-4 gap-4">{[0,1,2,3].map(i => <Skeleton key={i} className="h-28 rounded-xl" />)}</div>
       <Skeleton className="h-64 rounded-xl" />
     </div>
   );
 
+  // Compute export all CSV
+  const exportAll = () => {
+    const label = PRESETS.find(p => p.key === dateRange.preset)?.label ?? `${format(dateRange.from,'dd MMM')}–${format(dateRange.to,'dd MMM yyyy')}`;
+    downloadCSV(`full-report-${format(new Date(), 'yyyy-MM-dd')}.csv`, [
+      [`AZAAN CSC — Full Report (${label})`],
+      [],
+      ['=== WORK ENTRIES ==='],
+      ['Date','Customer','Category','Total','Challan','Paid','Due','Status','Added By'],
+      ...fw.map(e => [format(e.date.toDate(),'dd/MM/yyyy'),e.customerName,e.category,String(e.totalAmount),String(getWorkChallan(e)),String(e.paidAmount),String(e.dueAmount),e.status,e.addedBy??'']),
+      [],
+      ['=== AEPS ==='],
+      ['Date','Customer','Bank','Amount','Profit','Added By'],
+      ...fa.map(e => [format(e.createdAt.toDate(),'dd/MM/yyyy'),e.customerName,e.bankName,String(e.amount),String(e.profitMargin),e.addedBy??'']),
+      [],
+      ['=== RECHARGE ==='],
+      ['Date','Customer','Consumer No','Recharge Amt','Profit','Added By'],
+      ...fr.map(e => [format(e.createdAt.toDate(),'dd/MM/yyyy'),e.customerName,e.consumerNumber,String(e.rechargeAmount),String(e.profitMargin),e.addedBy??'']),
+      [],
+      ['=== TRANSFER ==='],
+      ['Date','Name','Account','Amount','Profit','Added By'],
+      ...ft.map(e => [format(e.createdAt.toDate(),'dd/MM/yyyy'),e.name,e.mobileOrAccount,String(e.amount),String(e.profitMargin),e.addedBy??'']),
+      [],
+      ['=== QUICK WORK ==='],
+      ['Date','Category','Amount','Status','Added By'],
+      ...fq.map(e => [format(e.createdAt.toDate(),'dd/MM/yyyy'),e.category,String(e.amount),resolveStatus(e.paymentStatus),e.addedBy??'']),
+      [],
+      ['=== FLIGHT BOOKINGS ==='],
+      ['Date','Customer','From','To','Boarding','Actual Fare','Charged','Profit','Added By'],
+      ...ff.map(e => [format(e.createdAt.toDate(),'dd/MM/yyyy'),e.customerName,e.flightFrom,e.flightTo,e.boardingDate,String(e.actualFare),String(e.amountCharged),String(e.profitMargin),e.addedBy]),
+    ]);
+  };
+
   return (
-    <div className="space-y-6 max-w-6xl">
-      {/* Page header */}
-      <div>
-        <h1 className="text-2xl font-bold" style={{ fontFamily: 'var(--app-font-display)' }}>Reports</h1>
-        <p className="text-muted-foreground text-sm mt-0.5">Earnings, collections, and service analytics</p>
+    <div className="space-y-5 max-w-6xl">
+      {/* Page header with Export */}
+      <div className="flex items-start justify-between gap-4">
+        <div>
+          <h1 className="text-2xl font-bold" style={{ fontFamily: 'var(--app-font-display)' }}>Reports</h1>
+          <p className="text-muted-foreground text-sm mt-0.5">Kamai, collection aur service analytics</p>
+        </div>
+        <Button variant="outline" size="sm" className="gap-1.5 h-10 shrink-0" onClick={exportAll}>
+          <Download className="h-4 w-4" />
+          <span className="hidden sm:inline">Sab Download (CSV)</span>
+          <span className="sm:hidden">Export</span>
+        </Button>
       </div>
 
-      {/* Tab bar — horizontally scrollable on mobile */}
-      <div className="overflow-x-auto -mx-4 px-4 sm:mx-0 sm:px-0">
-        <div className="flex items-center border-b min-w-max">
-          {TABS.map(tab => (
+      {/* Global date range filter — applies to ALL tabs */}
+      <div className="rounded-xl border bg-card p-3">
+        <p className="text-xs text-muted-foreground mb-2 font-medium">Period chuno (sabhi tabs ke liye):</p>
+        <DateRangeFilter value={dateRange} onChange={setDateRange} />
+      </div>
+
+      {/* 4 main tab buttons */}
+      <div className="grid grid-cols-2 sm:grid-cols-4 gap-2">
+        {MAIN_TABS.map(tab => {
+          const Icon = tab.icon;
+          return (
             <button
               key={tab.key}
               onClick={() => setActiveTab(tab.key)}
-              className={`px-4 py-2.5 text-sm font-medium border-b-2 -mb-px transition-colors whitespace-nowrap ${
+              className={`flex flex-col sm:flex-row items-center justify-center sm:justify-start gap-1 sm:gap-2 px-3 py-3 rounded-xl border font-medium text-sm transition-all ${
                 activeTab === tab.key
-                  ? 'border-primary text-primary'
-                  : 'border-transparent text-muted-foreground hover:text-foreground'
+                  ? 'bg-primary text-white border-primary shadow-sm'
+                  : 'bg-card text-muted-foreground border-border hover:border-muted-foreground hover:text-foreground'
               }`}
             >
-              {tab.label}
+              <Icon className="h-4 w-4 shrink-0" />
+              <span>{tab.label}</span>
             </button>
-          ))}
-        </div>
+          );
+        })}
       </div>
 
-      {/* Global date range filter */}
-      <DateRangeFilter value={dateRange} onChange={setDateRange} />
-
       {/* Tab content */}
-      {activeTab === 'overview'   && <OverviewTab    work={fw} aeps={fa} recharge={fr} transfer={ft} quick={fq} flight={ff} dateRange={dateRange} />}
-      {activeTab === 'work'       && <WorkChallanTab work={fw} />}
-      {activeTab === 'category'   && <CategoryTab   work={fw} />}
-      {activeTab === 'aeps'       && <AepsTab        entries={fa} dateRange={dateRange} />}
-      {activeTab === 'recharge'   && <RechargeTab    entries={fr} dateRange={dateRange} />}
-      {activeTab === 'transfer'   && <TransferTab    entries={ft} dateRange={dateRange} />}
-      {activeTab === 'quick'      && <QuickTab       entries={fq} />}
-      {activeTab === 'flight'     && <FlightTab      entries={ff} dateRange={dateRange} />}
-      {activeTab === 'cashonline' && <CashOnlineTab  work={fw} aeps={fa} recharge={fr} transfer={ft} quick={fq} flight={ff} />}
+      {activeTab === 'overview'  && <OverviewTab    work={fw} aeps={fa} recharge={fr} transfer={ft} quick={fq} flight={ff} dateRange={dateRange} />}
+      {activeTab === 'work'      && <WorkTab         work={fw} />}
+      {activeTab === 'financial' && <FinancialTab    aeps={fa} recharge={fr} transfer={ft} quick={fq} flight={ff} dateRange={dateRange} />}
+      {activeTab === 'staff'     && <StaffTab        work={fw} aeps={fa} recharge={fr} transfer={ft} quick={fq} flight={ff} isOwner={isOwner} currentDisplayName={displayName} />}
     </div>
   );
 }
