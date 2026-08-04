@@ -1,6 +1,6 @@
 import { useState, useEffect } from 'react';
 import {
-  WorkEntry, subscribeToWorkEntries, updateWorkEntry,
+  WorkEntry, subscribeToWorkEntries,
   subscribeToAepsWithdrawals, AepsWithdrawal,
   subscribeToElectricRecharges, ElectricRecharge,
   subscribeToMoneyTransfers, MoneyTransfer,
@@ -13,7 +13,7 @@ import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Skeleton } from '@/components/ui/skeleton';
 import {
   IndianRupee, Users, Clock, AlertTriangle, FileText, XCircle, TrendingUp,
-  CheckCircle2, Phone, Loader2,
+  CheckCircle2, Phone, Pencil,
 } from 'lucide-react';
 import { Link } from 'wouter';
 import { Button } from '@/components/ui/button';
@@ -48,49 +48,47 @@ function StatCard({ label, value, sub, icon: Icon, gradient }: {
 }
 
 // ── Reminder row ───────────────────────────────────────────────────
-function ReminderRow({ entry, onComplete, completing }: {
-  entry: WorkEntry & { daysPending: number };
-  onComplete: () => void;
-  completing: boolean;
-}) {
+function ReminderRow({ entry }: { entry: WorkEntry & { daysPending: number } }) {
   const isVeryUrgent = entry.daysPending >= 7;
-  const isUrgent = entry.daysPending >= 3;
+  const isUrgent     = entry.daysPending >= 3;
+  const isModerate   = entry.daysPending >= 1;
+  const cat = entry.category === 'Other' && entry.otherCategory ? entry.otherCategory : entry.category;
+
+  const badgeCls = isVeryUrgent
+    ? 'text-red-700 bg-red-100 border-red-300'
+    : isUrgent
+    ? 'text-orange-700 bg-orange-100 border-orange-300'
+    : isModerate
+    ? 'text-amber-600 bg-amber-50 border-amber-200'
+    : 'text-blue-600 bg-blue-50 border-blue-200';
+
   return (
-    <div className={`px-4 py-3 flex flex-col sm:flex-row sm:items-center justify-between gap-2 transition-colors
-      ${isVeryUrgent ? 'bg-red-50/70' : isUrgent ? 'bg-amber-50/70' : 'bg-blue-50/40'}`}>
-      <div className="min-w-0">
-        <div className="flex flex-wrap items-center gap-2">
-          <span className="font-semibold text-sm">{entry.customerName}</span>
-          <span className="text-xs text-muted-foreground flex items-center gap-1">
-            <Phone className="h-3 w-3" />{entry.mobile}
-          </span>
-        </div>
-        <div className="flex flex-wrap items-center gap-2 mt-1">
-          <Badge variant="secondary" className="text-xs font-normal py-0">
-            {entry.category === 'Other' && entry.otherCategory ? entry.otherCategory : entry.category}
+    <div className="rounded-xl border bg-card shadow-sm hover:shadow-md transition-all p-4 flex items-start sm:items-center justify-between gap-3">
+      <div className="min-w-0 flex-1">
+        <div className="flex flex-wrap items-center gap-2 mb-1">
+          <span className="font-bold text-sm text-foreground">{entry.customerName}</span>
+          <Badge variant="outline" className="text-[10px] font-normal px-1.5 py-0 text-muted-foreground border-muted">
+            {cat}
           </Badge>
-          <span className={`text-xs font-semibold px-2 py-0.5 rounded-full border
-            ${isVeryUrgent ? 'text-red-700 bg-red-100 border-red-200' :
-              isUrgent ? 'text-amber-700 bg-amber-100 border-amber-200' :
-              'text-blue-700 bg-blue-100 border-blue-200'}`}>
+        </div>
+        <div className="flex items-center gap-1.5 text-xs text-muted-foreground mb-2">
+          <Phone className="h-3 w-3 shrink-0" />
+          <span>{entry.mobile}</span>
+        </div>
+        <div className="flex flex-wrap items-center gap-2">
+          <span className={`text-xs font-semibold px-2 py-0.5 rounded-full border ${badgeCls}`}>
             {entry.daysPending > 0 ? `${entry.daysPending}d pending` : 'Added today'}
           </span>
           {entry.dueAmount > 0 && (
-            <span className="text-xs font-semibold text-red-600">Due: {formatCurrency(entry.dueAmount)}</span>
+            <span className="text-sm font-bold text-red-600">Due: {formatCurrency(entry.dueAmount)}</span>
           )}
         </div>
       </div>
-      <div className="flex items-center gap-2 shrink-0">
-        <Button size="sm" variant="outline"
-          className="h-7 text-xs gap-1.5 border-emerald-300 text-emerald-700 hover:bg-emerald-50"
-          onClick={onComplete} disabled={completing}>
-          {completing ? <Loader2 className="h-3 w-3 animate-spin" /> : <CheckCircle2 className="h-3 w-3" />}
-          Complete
+      <Link href={`/work/${entry.id}/edit`} className="shrink-0">
+        <Button size="sm" variant="ghost" className="h-8 w-8 p-0 text-muted-foreground hover:text-foreground hover:bg-muted rounded-lg">
+          <Pencil className="h-3.5 w-3.5" />
         </Button>
-        <Link href={`/work/${entry.id}/edit`}>
-          <Button size="sm" variant="ghost" className="h-7 text-xs">Edit</Button>
-        </Link>
-      </div>
+      </Link>
     </div>
   );
 }
@@ -104,7 +102,6 @@ export default function DashboardPage() {
   const [flightEntries, setFlightEntries] = useState<FlightBooking[]>([]);
   const [loading, setLoading] = useState(true);
   const [firestoreError, setFirestoreError] = useState<string | null>(null);
-  const [completingId, setCompletingId] = useState<string | null>(null);
   const { isOwner, canAccessFinancialServices } = useAuth();
   const { toast } = useToast();
 
@@ -248,18 +245,6 @@ export default function DashboardPage() {
     .sort((a, b) => (b.createdAt?.toMillis() ?? 0) - (a.createdAt?.toMillis() ?? 0))
     .slice(0, 8);
 
-  const handleMarkCompleted = async (entry: WorkEntry & { daysPending: number }) => {
-    if (!entry.id) return;
-    setCompletingId(entry.id);
-    try {
-      await updateWorkEntry(entry.id, { status: 'Completed', totalAmount: entry.totalAmount }, entry.paidAmount);
-      toast({ title: 'Marked as Completed', description: `${entry.customerName} — ${entry.category === 'Other' && entry.otherCategory ? entry.otherCategory : entry.category}` });
-    } catch (err: any) {
-      toast({ variant: 'destructive', title: 'Error', description: err.message });
-    } finally {
-      setCompletingId(null);
-    }
-  };
 
   if (loading) return (
     <div className="space-y-6">
@@ -290,9 +275,14 @@ export default function DashboardPage() {
       {/* ── PENDING REMINDERS ───────────────────────────────────── */}
       <section>
         <div className="flex items-center justify-between mb-3">
-          <h2 className="text-sm font-semibold flex items-center gap-2 text-foreground">
+          <h2 className="text-sm font-semibold flex items-center gap-1.5 text-foreground">
             <AlertTriangle className="h-4 w-4 text-amber-500" />
             Today's Pending Reminders
+            {reminderEntries.length > 0 && (
+              <span className="text-xs font-medium text-amber-700 bg-amber-50 border border-amber-200 px-1.5 py-0.5 rounded-full">
+                {reminderEntries.length}
+              </span>
+            )}
           </h2>
           {reminderEntries.length > 0 && (
             <Link href="/pending">
@@ -300,27 +290,29 @@ export default function DashboardPage() {
             </Link>
           )}
         </div>
-        <div className="bg-card border rounded-xl overflow-hidden">
-          {reminderEntries.length === 0 ? (
-            <div className="px-5 py-4 flex items-center gap-4 bg-emerald-50/60">
-              <div className="h-9 w-9 rounded-full bg-emerald-100 flex items-center justify-center shrink-0">
-                <CheckCircle2 className="h-5 w-5 text-emerald-600" />
+        {reminderEntries.length === 0 ? (
+          <div className="rounded-xl border bg-emerald-50/60 px-5 py-4 flex items-center gap-4">
+            <div className="h-9 w-9 rounded-full bg-emerald-100 flex items-center justify-center shrink-0">
+              <CheckCircle2 className="h-5 w-5 text-emerald-600" />
+            </div>
+            <p className="text-sm text-emerald-800 font-medium">No urgent pending work — great job staying on top!</p>
+          </div>
+        ) : (
+          <div className="space-y-2">
+            {reminderEntries.slice(0, 5).map(entry => (
+              <ReminderRow key={entry.id} entry={entry} />
+            ))}
+            {reminderEntries.length > 5 && (
+              <div className="text-center pt-1">
+                <Link href="/pending">
+                  <Button variant="ghost" size="sm" className="text-xs text-muted-foreground h-7 hover:text-foreground">
+                    +{reminderEntries.length - 5} more — View All
+                  </Button>
+                </Link>
               </div>
-              <p className="text-sm text-emerald-800 font-medium">No urgent pending work — great job staying on top!</p>
-            </div>
-          ) : (
-            <div className="divide-y">
-              {reminderEntries.map(entry => (
-                <ReminderRow
-                  key={entry.id}
-                  entry={entry}
-                  completing={completingId === entry.id}
-                  onComplete={() => handleMarkCompleted(entry)}
-                />
-              ))}
-            </div>
-          )}
-        </div>
+            )}
+          </div>
+        )}
       </section>
 
       {/* ── OWNER: SUMMARY STATS ────────────────────────────────── */}
