@@ -197,7 +197,7 @@ function DailyTrendChart({ data, color, label }: { data: { date: string; value: 
   if (!hasData) return (
     <div className="flex flex-col items-center justify-center h-36 text-muted-foreground">
       <TrendingUp className="h-7 w-7 mb-2 opacity-20" />
-      <p className="text-sm">Is period me koi data nahi.</p>
+      <p className="text-sm">No data in this period.</p>
     </div>
   );
   return (
@@ -220,11 +220,11 @@ function DailyTrendChart({ data, color, label }: { data: { date: string; value: 
 // ─────────────────────────────────────────────────────────────────────────────
 
 const PRESETS: { key: Exclude<PresetKey, 'custom'>; label: string }[] = [
-  { key: 'today',     label: 'Aaj' },
-  { key: 'yesterday', label: 'Kal' },
-  { key: 'thisWeek',  label: 'Is Hafte' },
-  { key: 'thisMonth', label: 'Is Mahine' },
-  { key: 'lastMonth', label: 'Pichle Mahine' },
+  { key: 'today',     label: 'Today' },
+  { key: 'yesterday', label: 'Yesterday' },
+  { key: 'thisWeek',  label: 'This Week' },
+  { key: 'thisMonth', label: 'This Month' },
+  { key: 'lastMonth', label: 'Last Month' },
 ];
 
 function DateRangeFilter({ value, onChange }: { value: DateRangeState; onChange: (v: DateRangeState) => void }) {
@@ -361,12 +361,12 @@ function OverviewTab({
       <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
         <Card className="border-primary/20 bg-primary/5">
           <CardHeader className="pb-2 flex flex-row items-center justify-between">
-            <CardTitle className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">Kul Kamai (Profit)</CardTitle>
+            <CardTitle className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">Total Profit</CardTitle>
             <TrendingUp className="h-4 w-4 text-primary" />
           </CardHeader>
           <CardContent>
             <div className="text-3xl font-bold text-primary">{formatCurrency(totalProfit)}</div>
-            <p className="text-xs text-muted-foreground mt-1">Sirf paid entries ka — due wala count nahi</p>
+            <p className="text-xs text-muted-foreground mt-1">Paid entries only — pending dues not included</p>
             <div className="mt-2 space-y-1">
               {profitSources.map(src => (
                 <div key={src.label} className="flex items-center justify-between text-xs">
@@ -383,36 +383,36 @@ function OverviewTab({
 
         <Card>
           <CardHeader className="pb-2 flex flex-row items-center justify-between">
-            <CardTitle className="text-xs font-medium uppercase tracking-wide text-muted-foreground">Work Kamai</CardTitle>
+            <CardTitle className="text-xs font-medium uppercase tracking-wide text-muted-foreground">Work Earnings</CardTitle>
             <IndianRupee className="h-4 w-4 text-emerald-500" />
           </CardHeader>
           <CardContent>
             <div className="text-2xl font-bold text-emerald-700">{formatCurrency(workCollected)}</div>
-            <p className="text-xs text-muted-foreground mt-1">{activeWork.length} entries (jo paisa mila)</p>
+            <p className="text-xs text-muted-foreground mt-1">{activeWork.length} entries (amount collected)</p>
           </CardContent>
         </Card>
 
         <Card>
           <CardHeader className="pb-2 flex flex-row items-center justify-between">
-            <CardTitle className="text-xs font-medium uppercase tracking-wide text-muted-foreground">Baaki Due</CardTitle>
+            <CardTitle className="text-xs font-medium uppercase tracking-wide text-muted-foreground">Outstanding Due</CardTitle>
             <AlertTriangle className="h-4 w-4 text-amber-500" />
           </CardHeader>
           <CardContent>
             <div className={`text-2xl font-bold ${totalDue > 0 ? 'text-amber-700' : 'text-muted-foreground'}`}>{formatCurrency(totalDue)}</div>
             {totalCredit > 0
-              ? <p className="text-xs text-emerald-700 mt-1 font-medium">+ {formatCurrency(totalCredit)} extra mila</p>
-              : totalDue === 0 && <p className="text-xs text-muted-foreground mt-1">Sab clear</p>}
+              ? <p className="text-xs text-emerald-700 mt-1 font-medium">+ {formatCurrency(totalCredit)} overpaid</p>
+              : totalDue === 0 && <p className="text-xs text-muted-foreground mt-1">All cleared</p>}
           </CardContent>
         </Card>
 
         <Card>
           <CardHeader className="pb-2 flex flex-row items-center justify-between">
-            <CardTitle className="text-xs font-medium uppercase tracking-wide text-muted-foreground">Challan Lagat</CardTitle>
+            <CardTitle className="text-xs font-medium uppercase tracking-wide text-muted-foreground">Challan Cost</CardTitle>
             <IndianRupee className="h-4 w-4 text-slate-400" />
           </CardHeader>
           <CardContent>
             <div className="text-2xl font-bold">{formatCurrency(workChallan)}</div>
-            <p className="text-xs text-muted-foreground mt-1">Govt fees (profit me se ghata)</p>
+            <p className="text-xs text-muted-foreground mt-1">Govt fees (deducted from profit)</p>
           </CardContent>
         </Card>
       </div>
@@ -420,14 +420,14 @@ function OverviewTab({
       {/* Profit by source chart */}
       {breakdownData.some(d => d.profit > 0) && (
         <Card>
-          <CardHeader className="pb-2"><CardTitle className="text-sm">Service-wise Kamai</CardTitle></CardHeader>
+          <CardHeader className="pb-2"><CardTitle className="text-sm">Earnings by Service</CardTitle></CardHeader>
           <CardContent>
             <ResponsiveContainer width="100%" height={Math.max(160, breakdownData.length * 44)}>
               <BarChart data={breakdownData} layout="vertical" margin={{ top: 0, right: 16, left: 16, bottom: 0 }}>
                 <CartesianGrid strokeDasharray="3 3" stroke="hsl(var(--border))" horizontal={false} />
                 <XAxis type="number" tick={{ fontSize: 11 }} tickFormatter={v => `₹${Number(v).toLocaleString('en-IN')}`} />
                 <YAxis type="category" dataKey="name" tick={{ fontSize: 12 }} width={90} />
-                <Tooltip formatter={(v: number) => [formatCurrency(v), 'Kamai']} />
+                <Tooltip formatter={(v: number) => [formatCurrency(v), 'Earnings']} />
                 <Bar dataKey="profit" radius={[0, 4, 4, 0]}>
                   {breakdownData.map(d => <Cell key={d.name} fill={SOURCE_COLORS[d.name] ?? '#94a3b8'} />)}
                 </Bar>
@@ -439,12 +439,12 @@ function OverviewTab({
 
       {/* Daily work profit trend */}
       <Card>
-        <CardHeader className="pb-2"><CardTitle className="text-sm">Roz ka Work Profit</CardTitle></CardHeader>
+        <CardHeader className="pb-2"><CardTitle className="text-sm">Daily Work Profit</CardTitle></CardHeader>
         <CardContent>
           {!trendData.some(d => d.value !== 0) ? (
             <div className="flex flex-col items-center justify-center h-36 text-muted-foreground">
               <TrendingUp className="h-7 w-7 mb-2 opacity-20" />
-              <p className="text-sm">Is period me koi work entry nahi.</p>
+              <p className="text-sm">No work entries in this period.</p>
             </div>
           ) : trendData.length <= 2 ? (
             <ResponsiveContainer width="100%" height={200}>
@@ -452,8 +452,8 @@ function OverviewTab({
                 <CartesianGrid strokeDasharray="3 3" stroke="hsl(var(--border))" />
                 <XAxis dataKey="date" tick={{ fontSize: 11 }} />
                 <YAxis tick={{ fontSize: 11 }} />
-                <Tooltip formatter={(v: number) => [formatCurrency(v), 'Kamai']} />
-                <Bar dataKey="value" fill="#4f46e5" name="Kamai" radius={[4, 4, 0, 0]} />
+                <Tooltip formatter={(v: number) => [formatCurrency(v), 'Earnings']} />
+                <Bar dataKey="value" fill="#4f46e5" name="Earnings" radius={[4, 4, 0, 0]} />
               </BarChart>
             </ResponsiveContainer>
           ) : (
@@ -462,8 +462,8 @@ function OverviewTab({
                 <CartesianGrid strokeDasharray="3 3" stroke="hsl(var(--border))" />
                 <XAxis dataKey="date" tick={{ fontSize: 11 }} interval="preserveStartEnd" />
                 <YAxis tick={{ fontSize: 11 }} />
-                <Tooltip formatter={(v: number) => [formatCurrency(v), 'Kamai']} />
-                <Line type="monotone" dataKey="value" stroke="#4f46e5" strokeWidth={2} dot={trendData.length <= 14} name="Kamai" />
+                <Tooltip formatter={(v: number) => [formatCurrency(v), 'Earnings']} />
+                <Line type="monotone" dataKey="value" stroke="#4f46e5" strokeWidth={2} dot={trendData.length <= 14} name="Earnings" />
               </LineChart>
             </ResponsiveContainer>
           )}
@@ -479,7 +479,7 @@ function OverviewTab({
         <div className="grid grid-cols-1 sm:grid-cols-3 gap-4 mb-4">
           <Card className="border-emerald-200 bg-emerald-50/50">
             <CardHeader className="pb-2 flex flex-row items-center justify-between">
-              <CardTitle className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">Cash Mila</CardTitle>
+              <CardTitle className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">Cash Collected</CardTitle>
               <Banknote className="h-4 w-4 text-emerald-600" />
             </CardHeader>
             <CardContent>
@@ -489,7 +489,7 @@ function OverviewTab({
           </Card>
           <Card className="border-blue-200 bg-blue-50/50">
             <CardHeader className="pb-2 flex flex-row items-center justify-between">
-              <CardTitle className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">Online Mila</CardTitle>
+              <CardTitle className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">Online Collected</CardTitle>
               <Wifi className="h-4 w-4 text-blue-600" />
             </CardHeader>
             <CardContent>
@@ -504,7 +504,7 @@ function OverviewTab({
             </CardHeader>
             <CardContent>
               <div className="text-2xl font-bold text-primary">{formatCurrency(grandTotal)}</div>
-              <p className="text-xs text-muted-foreground mt-1">Sabhi sources mila ke</p>
+              <p className="text-xs text-muted-foreground mt-1">Combined across all sources</p>
             </CardContent>
           </Card>
         </div>
@@ -611,10 +611,10 @@ function WorkTab({ work }: { work: WorkEntry[] }) {
   return (
     <div className="space-y-5">
       <StatCards items={[
-        { label: 'Kul Entries',   value: String(active.length), info: 'Rejected ko chhod ke sab entries' },
-        { label: 'Jo Paisa Mila', value: formatCurrency(totalCollected), cls: 'text-emerald-700', info: 'Customer se actually mila hua paisa (due wala nahi)' },
-        { label: 'Challan Lagat', value: formatCurrency(totalChallan),   cls: 'text-slate-600', info: 'Govt fees jo profit me se ghata' },
-        { label: 'Net Kamai',     value: formatCurrency(totalCollected - totalChallan), cls: 'text-primary font-bold', info: 'Mila hua paisa minus challan = asli kamai' },
+        { label: 'Total Entries',    value: String(active.length), info: 'All entries excluding rejected' },
+        { label: 'Amount Collected', value: formatCurrency(totalCollected), cls: 'text-emerald-700', info: 'Amount actually collected from customers (dues not included)' },
+        { label: 'Challan Cost',     value: formatCurrency(totalChallan),   cls: 'text-slate-600', info: 'Govt fees deducted from profit' },
+        { label: 'Net Profit',       value: formatCurrency(totalCollected - totalChallan), cls: 'text-primary font-bold', info: 'Amount collected minus challan cost = actual profit' },
       ]} />
 
       {rejected.length > 0 && (
@@ -623,8 +623,8 @@ function WorkTab({ work }: { work: WorkEntry[] }) {
           <div>
             <span className="font-semibold text-red-700">Rejected/Refunded: </span>
             <span className="text-red-600">{rejected.length} entries</span>
-            {totalRefund > 0 && <span className="text-red-600"> · {formatCurrency(totalRefund)} wapas diya</span>}
-            <p className="text-xs text-red-500 mt-0.5">Upar ke numbers me shamil nahi.</p>
+            {totalRefund > 0 && <span className="text-red-600"> · {formatCurrency(totalRefund)} refunded</span>}
+            <p className="text-xs text-red-500 mt-0.5">Not included in the totals above.</p>
           </div>
         </div>
       )}
@@ -633,7 +633,7 @@ function WorkTab({ work }: { work: WorkEntry[] }) {
       <div className="flex flex-col sm:flex-row items-stretch sm:items-center gap-2 justify-between">
         <div className="relative flex-1 max-w-sm">
           <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
-          <Input placeholder="Customer ya category dhundo…" value={search} onChange={e => setSearch(e.target.value)} className="pl-8 h-10" />
+          <Input placeholder="Search by customer or category…" value={search} onChange={e => setSearch(e.target.value)} className="pl-8 h-10" />
         </div>
         <Button variant="outline" size="sm" className="gap-1.5 h-10" onClick={exportCSV}><Download className="h-4 w-4" /> CSV Download</Button>
       </div>
@@ -641,7 +641,7 @@ function WorkTab({ work }: { work: WorkEntry[] }) {
       {/* Mobile card list */}
       <div className="block sm:hidden space-y-2">
         {sorted.length === 0 ? (
-          <div className="text-center py-10 text-muted-foreground text-sm">{search ? `"${search}" ke liye koi entry nahi.` : 'Is period me koi entry nahi.'}</div>
+          <div className="text-center py-10 text-muted-foreground text-sm">{search ? `No entries matching "${search}".` : 'No entries in this period.'}</div>
         ) : sorted.map(e => {
           const cat = e.category === 'Other' && e.otherCategory ? e.otherCategory : e.category;
           const due = e.dueAmount;
@@ -656,7 +656,7 @@ function WorkTab({ work }: { work: WorkEntry[] }) {
                   <StatusBadge status={e.status} />
                 </div>
                 <div className="grid grid-cols-3 gap-2 text-xs mt-2">
-                  <div><div className="text-muted-foreground">Mila</div><div className="font-semibold text-emerald-700">{formatCurrency(e.paidAmount)}</div></div>
+                  <div><div className="text-muted-foreground">Collected</div><div className="font-semibold text-emerald-700">{formatCurrency(e.paidAmount)}</div></div>
                   <div><div className="text-muted-foreground">Challan</div><div className="font-semibold">{getWorkChallan(e) > 0 ? formatCurrency(getWorkChallan(e)) : '—'}</div></div>
                   <div><div className="text-muted-foreground">Due</div><div className={`font-semibold ${due > 0 ? 'text-amber-700' : ''}`}>{due > 0 ? formatCurrency(due) : '—'}</div></div>
                 </div>
@@ -672,14 +672,14 @@ function WorkTab({ work }: { work: WorkEntry[] }) {
           <Table>
             <TableHeader>
               <TableRow>
-                <Th col="date" label="Tarikh" /><Th col="customer" label="Customer" /><Th col="category" label="Category" />
+                <Th col="date" label="Date" /><Th col="customer" label="Customer" /><Th col="category" label="Category" />
                 <Th col="total" label="Total" align="right" /><Th col="challan" label="Challan" align="right" />
-                <Th col="paid" label="Mila" align="right" /><Th col="due" label="Due" align="right" /><Th col="status" label="Status" />
+                <Th col="paid" label="Collected" align="right" /><Th col="due" label="Due" align="right" /><Th col="status" label="Status" />
               </TableRow>
             </TableHeader>
             <TableBody>
               {sorted.length === 0 ? (
-                <TableRow><TableCell colSpan={8} className="text-center py-12 text-muted-foreground">{search ? `"${search}" ke liye koi entry nahi.` : 'Is period me koi entry nahi.'}</TableCell></TableRow>
+                <TableRow><TableCell colSpan={8} className="text-center py-12 text-muted-foreground">{search ? `No entries matching "${search}".` : 'No entries in this period.'}</TableCell></TableRow>
               ) : sorted.map(e => {
                 const due = e.dueAmount;
                 const cat = e.category === 'Other' && e.otherCategory ? e.otherCategory : e.category;
@@ -718,7 +718,7 @@ function WorkTab({ work }: { work: WorkEntry[] }) {
         {showCategory && (
           <div className="border-t">
             {catRows.length === 0 ? (
-              <div className="text-center py-8 text-muted-foreground text-sm">Is period me koi category data nahi.</div>
+              <div className="text-center py-8 text-muted-foreground text-sm">No category data in this period.</div>
             ) : (
               <div className="divide-y">
                 {catRows.map(r => (
@@ -728,14 +728,14 @@ function WorkTab({ work }: { work: WorkEntry[] }) {
                       <div className="text-xs text-muted-foreground">{r.count} entries</div>
                     </div>
                     <div className="text-right">
-                      <div className="font-semibold text-sm text-primary">{formatCurrency(r.netProfit)} kamai</div>
-                      <div className="text-xs text-muted-foreground">{formatCurrency(r.collected)} mila · {r.challan > 0 ? `${formatCurrency(r.challan)} challan` : 'no challan'}</div>
+                      <div className="font-semibold text-sm text-primary">{formatCurrency(r.netProfit)} profit</div>
+                      <div className="text-xs text-muted-foreground">{formatCurrency(r.collected)} collected · {r.challan > 0 ? `${formatCurrency(r.challan)} challan` : 'no challan'}</div>
                     </div>
                   </div>
                 ))}
                 <div className="flex items-center justify-between px-4 py-3 bg-muted/20 font-semibold text-sm">
                   <span>Total ({catRows.reduce((s, r) => s + r.count, 0)} entries)</span>
-                  <span className="text-primary">{formatCurrency(catRows.reduce((s, r) => s + r.netProfit, 0))} kamai</span>
+                  <span className="text-primary">{formatCurrency(catRows.reduce((s, r) => s + r.netProfit, 0))} profit</span>
                 </div>
               </div>
             )}
@@ -766,18 +766,18 @@ function AepsSection({ entries, dateRange }: { entries: AepsWithdrawal[]; dateRa
   return (
     <div className="space-y-4">
       <StatCards items={[
-        { label: 'Kul Withdrawals', value: String(entries.length) },
-        { label: 'Total Amount',    value: formatCurrency(totalAmount), cls: 'text-emerald-700', info: 'Customer ka apna paisa — shop ki kamai nahi' },
-        { label: 'Shop Ki Kamai',   value: formatCurrency(totalProfit), cls: 'text-primary font-bold', info: 'Har withdrawal par jo fee mili' },
+        { label: 'Total Withdrawals', value: String(entries.length) },
+        { label: 'Total Amount',      value: formatCurrency(totalAmount), cls: 'text-emerald-700', info: "Customer's own money — not shop earnings" },
+        { label: 'Shop Earnings',     value: formatCurrency(totalProfit), cls: 'text-primary font-bold', info: 'Fee earned on each withdrawal' },
       ]} />
-      <Card><CardHeader className="pb-2"><CardTitle className="text-sm">Roz ka Profit</CardTitle></CardHeader><CardContent><DailyTrendChart data={trendData} color="#10b981" label="Kamai" /></CardContent></Card>
+      <Card><CardHeader className="pb-2"><CardTitle className="text-sm">Daily Profit</CardTitle></CardHeader><CardContent><DailyTrendChart data={trendData} color="#10b981" label="Earnings" /></CardContent></Card>
       <div className="flex flex-col sm:flex-row gap-2 justify-between">
-        <div className="relative flex-1 max-w-sm"><Search className="absolute left-2.5 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" /><Input placeholder="Customer ya bank…" value={search} onChange={e => setSearch(e.target.value)} className="pl-8 h-10" /></div>
+        <div className="relative flex-1 max-w-sm"><Search className="absolute left-2.5 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" /><Input placeholder="Search by customer or bank…" value={search} onChange={e => setSearch(e.target.value)} className="pl-8 h-10" /></div>
         <Button variant="outline" size="sm" className="gap-1.5 h-10" onClick={exportCSV}><Download className="h-4 w-4" /> CSV Download</Button>
       </div>
       {/* Mobile cards */}
       <div className="block sm:hidden space-y-2">
-        {sorted.length === 0 ? <div className="text-center py-8 text-muted-foreground text-sm">Is period me koi data nahi.</div>
+        {sorted.length === 0 ? <div className="text-center py-8 text-muted-foreground text-sm">No data in this period.</div>
           : sorted.map(e => (
             <Card key={e.id}><CardContent className="p-4">
               <div className="flex justify-between items-start">
@@ -788,7 +788,7 @@ function AepsSection({ entries, dateRange }: { entries: AepsWithdrawal[]; dateRa
           ))}
       </div>
       {/* Desktop table */}
-      <Card className="hidden sm:block"><div className="overflow-x-auto"><Table><TableHeader><TableRow><Th col="date" label="Date"/><Th col="customer" label="Customer"/><Th col="bank" label="Bank"/><Th col="amount" label="Amount" align="right"/><Th col="profit" label="Kamai" align="right"/></TableRow></TableHeader><TableBody>{sorted.length===0?<TableRow><TableCell colSpan={5} className="text-center py-10 text-muted-foreground">Is period me koi data nahi.</TableCell></TableRow>:sorted.map(e=><TableRow key={e.id} className="hover:bg-muted/30"><TableCell className="text-xs text-muted-foreground whitespace-nowrap">{format(e.createdAt.toDate(),'dd MMM yyyy')}</TableCell><TableCell className="font-medium">{e.customerName}</TableCell><TableCell className="text-muted-foreground">{e.bankName}</TableCell><TableCell className="text-right tabular-nums font-medium">{formatCurrency(e.amount)}</TableCell><TableCell className="text-right tabular-nums text-emerald-700 font-semibold">{formatCurrency(e.profitMargin)}</TableCell></TableRow>)}</TableBody></Table></div>{sorted.length>0&&<div className="px-4 py-2 border-t text-xs text-muted-foreground">{sorted.length} transactions</div>}</Card>
+      <Card className="hidden sm:block"><div className="overflow-x-auto"><Table><TableHeader><TableRow><Th col="date" label="Date"/><Th col="customer" label="Customer"/><Th col="bank" label="Bank"/><Th col="amount" label="Amount" align="right"/><Th col="profit" label="Earnings" align="right"/></TableRow></TableHeader><TableBody>{sorted.length===0?<TableRow><TableCell colSpan={5} className="text-center py-10 text-muted-foreground">No data in this period.</TableCell></TableRow>:sorted.map(e=><TableRow key={e.id} className="hover:bg-muted/30"><TableCell className="text-xs text-muted-foreground whitespace-nowrap">{format(e.createdAt.toDate(),'dd MMM yyyy')}</TableCell><TableCell className="font-medium">{e.customerName}</TableCell><TableCell className="text-muted-foreground">{e.bankName}</TableCell><TableCell className="text-right tabular-nums font-medium">{formatCurrency(e.amount)}</TableCell><TableCell className="text-right tabular-nums text-emerald-700 font-semibold">{formatCurrency(e.profitMargin)}</TableCell></TableRow>)}</TableBody></Table></div>{sorted.length>0&&<div className="px-4 py-2 border-t text-xs text-muted-foreground">{sorted.length} transactions</div>}</Card>
     </div>
   );
 }
@@ -809,20 +809,20 @@ function RechargeSection({ entries, dateRange }: { entries: ElectricRecharge[]; 
   return (
     <div className="space-y-4">
       <StatCards items={[
-        { label: 'Kul Recharges',  value: String(entries.length) },
-        { label: 'Total Recharged',value: formatCurrency(totalAmount), cls: 'text-emerald-700', info: 'Customer ka bijli recharge amount' },
-        { label: 'Shop Ki Kamai',  value: formatCurrency(totalProfit), cls: 'text-primary font-bold', info: 'Har recharge par jo fee mili' },
+        { label: 'Total Recharges',  value: String(entries.length) },
+        { label: 'Total Recharged',  value: formatCurrency(totalAmount), cls: 'text-emerald-700', info: "Customer's electricity recharge amount" },
+        { label: 'Shop Earnings',    value: formatCurrency(totalProfit), cls: 'text-primary font-bold', info: 'Fee earned on each recharge' },
       ]} />
-      <Card><CardHeader className="pb-2"><CardTitle className="text-sm">Roz ka Profit</CardTitle></CardHeader><CardContent><DailyTrendChart data={trendData} color="#f59e0b" label="Kamai" /></CardContent></Card>
+      <Card><CardHeader className="pb-2"><CardTitle className="text-sm">Daily Profit</CardTitle></CardHeader><CardContent><DailyTrendChart data={trendData} color="#f59e0b" label="Earnings" /></CardContent></Card>
       <div className="flex flex-col sm:flex-row gap-2 justify-between">
-        <div className="relative flex-1 max-w-sm"><Search className="absolute left-2.5 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" /><Input placeholder="Customer ya consumer no…" value={search} onChange={e => setSearch(e.target.value)} className="pl-8 h-10" /></div>
+        <div className="relative flex-1 max-w-sm"><Search className="absolute left-2.5 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" /><Input placeholder="Search by customer or consumer no…" value={search} onChange={e => setSearch(e.target.value)} className="pl-8 h-10" /></div>
         <Button variant="outline" size="sm" className="gap-1.5 h-10" onClick={exportCSV}><Download className="h-4 w-4" /> CSV Download</Button>
       </div>
       <div className="block sm:hidden space-y-2">
-        {sorted.length === 0 ? <div className="text-center py-8 text-muted-foreground text-sm">Is period me koi data nahi.</div>
+        {sorted.length === 0 ? <div className="text-center py-8 text-muted-foreground text-sm">No data in this period.</div>
           : sorted.map(e => (<Card key={e.id}><CardContent className="p-4"><div className="flex justify-between items-start"><div><div className="font-semibold text-sm">{e.customerName}</div><div className="text-xs text-muted-foreground">{format(e.createdAt.toDate(),'dd MMM yyyy')} · {e.consumerNumber}</div></div><div className="text-right"><div className="font-semibold text-sm text-emerald-700">{formatCurrency(e.profitMargin)}</div><div className="text-xs text-muted-foreground">{formatCurrency(e.rechargeAmount)}</div></div></div></CardContent></Card>))}
       </div>
-      <Card className="hidden sm:block"><div className="overflow-x-auto"><Table><TableHeader><TableRow><Th col="date" label="Date"/><Th col="customer" label="Customer"/><Th col="consumer" label="Consumer No"/><Th col="amount" label="Recharge Amt" align="right"/><Th col="profit" label="Kamai" align="right"/></TableRow></TableHeader><TableBody>{sorted.length===0?<TableRow><TableCell colSpan={5} className="text-center py-10 text-muted-foreground">Is period me koi data nahi.</TableCell></TableRow>:sorted.map(e=><TableRow key={e.id} className="hover:bg-muted/30"><TableCell className="text-xs text-muted-foreground whitespace-nowrap">{format(e.createdAt.toDate(),'dd MMM yyyy')}</TableCell><TableCell className="font-medium">{e.customerName}</TableCell><TableCell className="text-muted-foreground font-mono text-sm">{e.consumerNumber}</TableCell><TableCell className="text-right tabular-nums font-medium">{formatCurrency(e.rechargeAmount)}</TableCell><TableCell className="text-right tabular-nums text-emerald-700 font-semibold">{formatCurrency(e.profitMargin)}</TableCell></TableRow>)}</TableBody></Table></div>{sorted.length>0&&<div className="px-4 py-2 border-t text-xs text-muted-foreground">{sorted.length} transactions</div>}</Card>
+      <Card className="hidden sm:block"><div className="overflow-x-auto"><Table><TableHeader><TableRow><Th col="date" label="Date"/><Th col="customer" label="Customer"/><Th col="consumer" label="Consumer No"/><Th col="amount" label="Recharge Amt" align="right"/><Th col="profit" label="Earnings" align="right"/></TableRow></TableHeader><TableBody>{sorted.length===0?<TableRow><TableCell colSpan={5} className="text-center py-10 text-muted-foreground">No data in this period.</TableCell></TableRow>:sorted.map(e=><TableRow key={e.id} className="hover:bg-muted/30"><TableCell className="text-xs text-muted-foreground whitespace-nowrap">{format(e.createdAt.toDate(),'dd MMM yyyy')}</TableCell><TableCell className="font-medium">{e.customerName}</TableCell><TableCell className="text-muted-foreground font-mono text-sm">{e.consumerNumber}</TableCell><TableCell className="text-right tabular-nums font-medium">{formatCurrency(e.rechargeAmount)}</TableCell><TableCell className="text-right tabular-nums text-emerald-700 font-semibold">{formatCurrency(e.profitMargin)}</TableCell></TableRow>)}</TableBody></Table></div>{sorted.length>0&&<div className="px-4 py-2 border-t text-xs text-muted-foreground">{sorted.length} transactions</div>}</Card>
     </div>
   );
 }
@@ -843,20 +843,20 @@ function TransferSection({ entries, dateRange }: { entries: MoneyTransfer[]; dat
   return (
     <div className="space-y-4">
       <StatCards items={[
-        { label: 'Kul Transfers',     value: String(entries.length) },
-        { label: 'Total Transferred', value: formatCurrency(totalAmount), cls: 'text-emerald-700', info: 'Customer ka paisa jo bheja gaya' },
-        { label: 'Shop Ki Kamai',     value: formatCurrency(totalProfit), cls: 'text-primary font-bold', info: 'Har transfer par jo fee mili' },
+        { label: 'Total Transfers',   value: String(entries.length) },
+        { label: 'Total Transferred', value: formatCurrency(totalAmount), cls: 'text-emerald-700', info: "Customer's money that was transferred" },
+        { label: 'Shop Earnings',     value: formatCurrency(totalProfit), cls: 'text-primary font-bold', info: 'Fee earned on each transfer' },
       ]} />
-      <Card><CardHeader className="pb-2"><CardTitle className="text-sm">Roz ka Profit</CardTitle></CardHeader><CardContent><DailyTrendChart data={trendData} color="#8b5cf6" label="Kamai" /></CardContent></Card>
+      <Card><CardHeader className="pb-2"><CardTitle className="text-sm">Daily Profit</CardTitle></CardHeader><CardContent><DailyTrendChart data={trendData} color="#8b5cf6" label="Earnings" /></CardContent></Card>
       <div className="flex flex-col sm:flex-row gap-2 justify-between">
-        <div className="relative flex-1 max-w-sm"><Search className="absolute left-2.5 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" /><Input placeholder="Naam ya account…" value={search} onChange={e => setSearch(e.target.value)} className="pl-8 h-10" /></div>
+        <div className="relative flex-1 max-w-sm"><Search className="absolute left-2.5 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" /><Input placeholder="Search by name or account…" value={search} onChange={e => setSearch(e.target.value)} className="pl-8 h-10" /></div>
         <Button variant="outline" size="sm" className="gap-1.5 h-10" onClick={exportCSV}><Download className="h-4 w-4" /> CSV Download</Button>
       </div>
       <div className="block sm:hidden space-y-2">
-        {sorted.length === 0 ? <div className="text-center py-8 text-muted-foreground text-sm">Is period me koi data nahi.</div>
+        {sorted.length === 0 ? <div className="text-center py-8 text-muted-foreground text-sm">No data in this period.</div>
           : sorted.map(e => (<Card key={e.id}><CardContent className="p-4"><div className="flex justify-between items-start"><div><div className="font-semibold text-sm">{e.name}</div><div className="text-xs text-muted-foreground">{format(e.createdAt.toDate(),'dd MMM yyyy')} · {e.mobileOrAccount}</div></div><div className="text-right"><div className="font-semibold text-sm text-emerald-700">{formatCurrency(e.profitMargin)}</div><div className="text-xs text-muted-foreground">{formatCurrency(e.amount)}</div></div></div></CardContent></Card>))}
       </div>
-      <Card className="hidden sm:block"><div className="overflow-x-auto"><Table><TableHeader><TableRow><Th col="date" label="Date"/><Th col="name" label="Naam"/><Th col="account" label="Mobile/Account"/><Th col="amount" label="Amount" align="right"/><Th col="profit" label="Kamai" align="right"/></TableRow></TableHeader><TableBody>{sorted.length===0?<TableRow><TableCell colSpan={5} className="text-center py-10 text-muted-foreground">Is period me koi data nahi.</TableCell></TableRow>:sorted.map(e=><TableRow key={e.id} className="hover:bg-muted/30"><TableCell className="text-xs text-muted-foreground whitespace-nowrap">{format(e.createdAt.toDate(),'dd MMM yyyy')}</TableCell><TableCell className="font-medium">{e.name}</TableCell><TableCell className="text-muted-foreground font-mono text-sm">{e.mobileOrAccount}</TableCell><TableCell className="text-right tabular-nums font-medium">{formatCurrency(e.amount)}</TableCell><TableCell className="text-right tabular-nums text-emerald-700 font-semibold">{formatCurrency(e.profitMargin)}</TableCell></TableRow>)}</TableBody></Table></div>{sorted.length>0&&<div className="px-4 py-2 border-t text-xs text-muted-foreground">{sorted.length} transactions</div>}</Card>
+      <Card className="hidden sm:block"><div className="overflow-x-auto"><Table><TableHeader><TableRow><Th col="date" label="Date"/><Th col="name" label="Name"/><Th col="account" label="Mobile/Account"/><Th col="amount" label="Amount" align="right"/><Th col="profit" label="Earnings" align="right"/></TableRow></TableHeader><TableBody>{sorted.length===0?<TableRow><TableCell colSpan={5} className="text-center py-10 text-muted-foreground">No data in this period.</TableCell></TableRow>:sorted.map(e=><TableRow key={e.id} className="hover:bg-muted/30"><TableCell className="text-xs text-muted-foreground whitespace-nowrap">{format(e.createdAt.toDate(),'dd MMM yyyy')}</TableCell><TableCell className="font-medium">{e.name}</TableCell><TableCell className="text-muted-foreground font-mono text-sm">{e.mobileOrAccount}</TableCell><TableCell className="text-right tabular-nums font-medium">{formatCurrency(e.amount)}</TableCell><TableCell className="text-right tabular-nums text-emerald-700 font-semibold">{formatCurrency(e.profitMargin)}</TableCell></TableRow>)}</TableBody></Table></div>{sorted.length>0&&<div className="px-4 py-2 border-t text-xs text-muted-foreground">{sorted.length} transactions</div>}</Card>
     </div>
   );
 }
@@ -874,17 +874,17 @@ function QuickSection({ entries }: { entries: QuickActionEntry[] }) {
   return (
     <div className="space-y-4">
       <StatCards items={[
-        { label: 'Kul Kaam',    value: String(entries.length) },
-        { label: 'Paid Kaam',   value: String(paid.length) },
-        { label: 'Kul Kamai',   value: formatCurrency(grandTotal), cls: 'text-primary font-bold', info: 'Quick work se jo paisa mila' },
+        { label: 'Total Jobs',    value: String(entries.length) },
+        { label: 'Paid Jobs',     value: String(paid.length) },
+        { label: 'Total Earnings', value: formatCurrency(grandTotal), cls: 'text-primary font-bold', info: 'Amount earned from Quick Work' },
       ]} />
       <div className="flex justify-end"><Button variant="outline" size="sm" className="gap-1.5 h-10" onClick={exportCSV}><Download className="h-4 w-4" /> CSV Download</Button></div>
       {/* Mobile: category cards */}
       <div className="block sm:hidden space-y-2">
-        {sorted.length === 0 ? <div className="text-center py-8 text-muted-foreground text-sm">Is period me koi data nahi.</div>
+        {sorted.length === 0 ? <div className="text-center py-8 text-muted-foreground text-sm">No data in this period.</div>
           : sorted.map(r => (<Card key={r.category}><CardContent className="p-4 flex justify-between items-center"><div><div className="font-semibold text-sm">{r.category}</div><div className="text-xs text-muted-foreground">{r.count} entries</div></div><div className="font-semibold text-emerald-700">{formatCurrency(r.total)}</div></CardContent></Card>))}
       </div>
-      <Card className="hidden sm:block"><div className="overflow-x-auto"><Table><TableHeader><TableRow><Th col="category" label="Category"/><Th col="count" label="Count" align="right"/><Th col="total" label="Total" align="right"/></TableRow></TableHeader><TableBody>{sorted.length===0?<TableRow><TableCell colSpan={3} className="text-center py-10 text-muted-foreground">Is period me koi data nahi.</TableCell></TableRow>:sorted.map(r=><TableRow key={r.category} className="hover:bg-muted/30"><TableCell className="font-medium">{r.category}</TableCell><TableCell className="text-right tabular-nums">{r.count}</TableCell><TableCell className="text-right tabular-nums text-emerald-700 font-semibold">{formatCurrency(r.total)}</TableCell></TableRow>)}</TableBody></Table></div>{sorted.length>0&&<div className="px-4 py-3 border-t bg-muted/20 flex justify-between text-sm font-semibold"><span>Total ({paid.length})</span><span className="text-primary">{formatCurrency(grandTotal)}</span></div>}</Card>
+      <Card className="hidden sm:block"><div className="overflow-x-auto"><Table><TableHeader><TableRow><Th col="category" label="Category"/><Th col="count" label="Count" align="right"/><Th col="total" label="Total" align="right"/></TableRow></TableHeader><TableBody>{sorted.length===0?<TableRow><TableCell colSpan={3} className="text-center py-10 text-muted-foreground">No data in this period.</TableCell></TableRow>:sorted.map(r=><TableRow key={r.category} className="hover:bg-muted/30"><TableCell className="font-medium">{r.category}</TableCell><TableCell className="text-right tabular-nums">{r.count}</TableCell><TableCell className="text-right tabular-nums text-emerald-700 font-semibold">{formatCurrency(r.total)}</TableCell></TableRow>)}</TableBody></Table></div>{sorted.length>0&&<div className="px-4 py-3 border-t bg-muted/20 flex justify-between text-sm font-semibold"><span>Total ({paid.length})</span><span className="text-primary">{formatCurrency(grandTotal)}</span></div>}</Card>
     </div>
   );
 }
@@ -904,20 +904,20 @@ function FlightSection({ entries, dateRange }: { entries: FlightBooking[]; dateR
   return (
     <div className="space-y-4">
       <StatCards items={[
-        { label: 'Kul Bookings',   value: String(entries.length) },
-        { label: 'Total Charged',  value: formatCurrency(totalCharged),  cls: 'text-emerald-700', info: 'Customer se jo paisa liya gaya' },
-        { label: 'Shop Ki Kamai',  value: formatCurrency(totalProfit),   cls: 'text-primary font-bold', info: 'Charged − Actual Fare = asli kamai' },
+        { label: 'Total Bookings',  value: String(entries.length) },
+        { label: 'Total Charged',   value: formatCurrency(totalCharged), cls: 'text-emerald-700', info: 'Amount charged to the customer' },
+        { label: 'Shop Earnings',   value: formatCurrency(totalProfit),  cls: 'text-primary font-bold', info: 'Charged minus Actual Fare = actual profit' },
       ]} />
-      <Card><CardHeader className="pb-2"><CardTitle className="text-sm">Roz ka Profit</CardTitle></CardHeader><CardContent><DailyTrendChart data={trendData} color="#f43f5e" label="Kamai" /></CardContent></Card>
+      <Card><CardHeader className="pb-2"><CardTitle className="text-sm">Daily Profit</CardTitle></CardHeader><CardContent><DailyTrendChart data={trendData} color="#f43f5e" label="Earnings" /></CardContent></Card>
       <div className="flex flex-col sm:flex-row gap-2 justify-between">
-        <div className="relative flex-1 max-w-sm"><Search className="absolute left-2.5 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" /><Input placeholder="Customer ya route…" value={search} onChange={e => setSearch(e.target.value)} className="pl-8 h-10" /></div>
+        <div className="relative flex-1 max-w-sm"><Search className="absolute left-2.5 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" /><Input placeholder="Search by customer or route…" value={search} onChange={e => setSearch(e.target.value)} className="pl-8 h-10" /></div>
         <Button variant="outline" size="sm" className="gap-1.5 h-10" onClick={exportCSV}><Download className="h-4 w-4" /> CSV Download</Button>
       </div>
       <div className="block sm:hidden space-y-2">
-        {sorted.length === 0 ? <div className="text-center py-8 text-muted-foreground text-sm">Is period me koi data nahi.</div>
+        {sorted.length === 0 ? <div className="text-center py-8 text-muted-foreground text-sm">No data in this period.</div>
           : sorted.map(e => (<Card key={e.id}><CardContent className="p-4"><div className="flex justify-between items-start mb-1"><div><div className="font-semibold text-sm">{e.customerName}</div><div className="text-xs text-muted-foreground">{e.flightFrom} → {e.flightTo} · {e.boardingDate ? format(new Date(e.boardingDate+'T00:00:00'),'dd MMM') : '—'}</div></div><div className="text-right"><div className="font-semibold text-sm text-emerald-700">{formatCurrency(e.profitMargin)}</div><div className="text-xs text-muted-foreground">Charged: {formatCurrency(e.amountCharged)}</div></div></div></CardContent></Card>))}
       </div>
-      <Card className="hidden sm:block"><div className="overflow-x-auto"><Table><TableHeader><TableRow><Th col="date" label="Date"/><Th col="customer" label="Customer"/><Th col="from" label="From"/><Th col="to" label="To"/><Th col="boarding" label="Boarding"/><Th col="fare" label="Actual Fare" align="right"/><Th col="charged" label="Charged" align="right"/><Th col="profit" label="Kamai" align="right"/></TableRow></TableHeader><TableBody>{sorted.length===0?<TableRow><TableCell colSpan={8} className="text-center py-10 text-muted-foreground">Is period me koi data nahi.</TableCell></TableRow>:sorted.map(e=><TableRow key={e.id} className="hover:bg-muted/30"><TableCell className="text-xs text-muted-foreground whitespace-nowrap">{format(e.createdAt.toDate(),'dd MMM yyyy')}</TableCell><TableCell className="font-medium">{e.customerName}</TableCell><TableCell className="text-muted-foreground">{e.flightFrom}</TableCell><TableCell className="text-muted-foreground">{e.flightTo}</TableCell><TableCell className="text-muted-foreground whitespace-nowrap">{e.boardingDate?format(new Date(e.boardingDate+'T00:00:00'),'dd MMM yyyy'):'—'}</TableCell><TableCell className="text-right tabular-nums">{formatCurrency(e.actualFare)}</TableCell><TableCell className="text-right tabular-nums">{formatCurrency(e.amountCharged)}</TableCell><TableCell className="text-right tabular-nums text-emerald-700 font-semibold">{formatCurrency(e.profitMargin)}</TableCell></TableRow>)}</TableBody></Table></div>{sorted.length>0&&<div className="px-4 py-2 border-t text-xs text-muted-foreground">{sorted.length} bookings</div>}</Card>
+      <Card className="hidden sm:block"><div className="overflow-x-auto"><Table><TableHeader><TableRow><Th col="date" label="Date"/><Th col="customer" label="Customer"/><Th col="from" label="From"/><Th col="to" label="To"/><Th col="boarding" label="Boarding"/><Th col="fare" label="Actual Fare" align="right"/><Th col="charged" label="Charged" align="right"/><Th col="profit" label="Earnings" align="right"/></TableRow></TableHeader><TableBody>{sorted.length===0?<TableRow><TableCell colSpan={8} className="text-center py-10 text-muted-foreground">No data in this period.</TableCell></TableRow>:sorted.map(e=><TableRow key={e.id} className="hover:bg-muted/30"><TableCell className="text-xs text-muted-foreground whitespace-nowrap">{format(e.createdAt.toDate(),'dd MMM yyyy')}</TableCell><TableCell className="font-medium">{e.customerName}</TableCell><TableCell className="text-muted-foreground">{e.flightFrom}</TableCell><TableCell className="text-muted-foreground">{e.flightTo}</TableCell><TableCell className="text-muted-foreground whitespace-nowrap">{e.boardingDate?format(new Date(e.boardingDate+'T00:00:00'),'dd MMM yyyy'):'—'}</TableCell><TableCell className="text-right tabular-nums">{formatCurrency(e.actualFare)}</TableCell><TableCell className="text-right tabular-nums">{formatCurrency(e.amountCharged)}</TableCell><TableCell className="text-right tabular-nums text-emerald-700 font-semibold">{formatCurrency(e.profitMargin)}</TableCell></TableRow>)}</TableBody></Table></div>{sorted.length>0&&<div className="px-4 py-2 border-t text-xs text-muted-foreground">{sorted.length} bookings</div>}</Card>
     </div>
   );
 }
@@ -1084,7 +1084,7 @@ function StaffTab({
     return (
       <div className="flex flex-col items-center justify-center py-20 text-muted-foreground gap-3">
         <Users className="h-10 w-10 opacity-20" />
-        <p className="text-sm">Is period me koi entry nahi.</p>
+        <p className="text-sm">No entries in this period.</p>
       </div>
     );
   }
@@ -1103,12 +1103,12 @@ function StaffTab({
       {!isOwner && (
         <div className="flex items-center gap-2 rounded-lg border bg-blue-50 px-4 py-3 text-sm text-blue-700">
           <Info className="h-4 w-4 shrink-0" />
-          <span>Sirf aapka apna performance dikh raha hai.</span>
+          <span>Showing your own performance only.</span>
         </div>
       )}
       {isOwner && (
         <p className="text-xs text-muted-foreground">
-          {visibleStats.length} staff · Sabse zyada kamai karne wale sabse upar · Sirf paid entries ka profit
+          {visibleStats.length} staff members · Sorted by highest earners · Paid entries only
         </p>
       )}
 
@@ -1135,7 +1135,7 @@ function StaffTab({
               <div className="flex items-center gap-4 shrink-0">
                 <div className="text-right">
                   <div className="font-bold text-base text-emerald-700">{formatCurrency(s.totalProfit)}</div>
-                  <div className="text-xs text-muted-foreground">kamai</div>
+                  <div className="text-xs text-muted-foreground">earnings</div>
                 </div>
                 {s.totalDue > 0 && (
                   <div className="text-right">
@@ -1167,7 +1167,7 @@ function StaffTab({
               {s.totalDue > 0 && (
                 <div className="flex items-center gap-2 rounded-lg border border-amber-200 bg-amber-50 px-3 py-2 text-sm">
                   <AlertTriangle className="h-4 w-4 text-amber-600 shrink-0" />
-                  <span className="text-amber-700">{formatCurrency(s.totalDue)} baaki hai (Work entries se)</span>
+                  <span className="text-amber-700">{formatCurrency(s.totalDue)} outstanding (from Work entries)</span>
                 </div>
               )}
             </div>
@@ -1233,7 +1233,7 @@ export default function ReportsPage() {
         <ShieldCheck className="h-8 w-8 text-muted-foreground" />
       </div>
       <h2 className="text-xl font-semibold">Access Restricted</h2>
-      <p className="text-muted-foreground max-w-xs">Reports sirf Owner dekh sakta hai.</p>
+      <p className="text-muted-foreground max-w-xs">Reports are only visible to the Owner.</p>
     </div>
   );
 
@@ -1285,18 +1285,18 @@ export default function ReportsPage() {
       <div className="flex items-start justify-between gap-4">
         <div>
           <h1 className="text-2xl font-bold" style={{ fontFamily: 'var(--app-font-display)' }}>Reports</h1>
-          <p className="text-muted-foreground text-sm mt-0.5">Kamai, collection aur service analytics</p>
+          <p className="text-muted-foreground text-sm mt-0.5">Earnings, collections and service analytics</p>
         </div>
         <Button variant="outline" size="sm" className="gap-1.5 h-10 shrink-0" onClick={exportAll}>
           <Download className="h-4 w-4" />
-          <span className="hidden sm:inline">Sab Download (CSV)</span>
+          <span className="hidden sm:inline">Download All (CSV)</span>
           <span className="sm:hidden">Export</span>
         </Button>
       </div>
 
       {/* Global date range filter — applies to ALL tabs */}
       <div className="rounded-xl border bg-card p-3">
-        <p className="text-xs text-muted-foreground mb-2 font-medium">Period chuno (sabhi tabs ke liye):</p>
+        <p className="text-xs text-muted-foreground mb-2 font-medium">Select period (applies to all tabs):</p>
         <DateRangeFilter value={dateRange} onChange={setDateRange} />
       </div>
 
