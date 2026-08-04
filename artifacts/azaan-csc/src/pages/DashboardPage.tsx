@@ -63,30 +63,29 @@ function ReminderRow({ entry }: { entry: WorkEntry & { daysPending: number } }) 
     : 'text-blue-600 bg-blue-50 border-blue-200';
 
   return (
-    <div className="rounded-xl border bg-card shadow-sm hover:shadow-md transition-all p-4 flex items-start sm:items-center justify-between gap-3">
-      <div className="min-w-0 flex-1">
-        <div className="flex flex-wrap items-center gap-2 mb-1">
-          <span className="font-bold text-sm text-foreground">{entry.customerName}</span>
-          <Badge variant="outline" className="text-[10px] font-normal px-1.5 py-0 text-muted-foreground border-muted">
-            {cat}
-          </Badge>
-        </div>
-        <div className="flex items-center gap-1.5 text-xs text-muted-foreground mb-2">
-          <Phone className="h-3 w-3 shrink-0" />
-          <span>{entry.mobile}</span>
-        </div>
-        <div className="flex flex-wrap items-center gap-2">
-          <span className={`text-xs font-semibold px-2 py-0.5 rounded-full border ${badgeCls}`}>
-            {entry.daysPending > 0 ? `${entry.daysPending}d pending` : 'Added today'}
-          </span>
-          {entry.dueAmount > 0 && (
-            <span className="text-sm font-bold text-red-600">Due: {formatCurrency(entry.dueAmount)}</span>
-          )}
-        </div>
-      </div>
+    <div className="flex flex-wrap sm:flex-nowrap items-center gap-x-2 gap-y-1 px-3 py-2 hover:bg-muted/30 transition-colors">
+      {/* Left cluster: name + category + phone */}
+      <span className="font-semibold text-sm text-foreground whitespace-nowrap">{entry.customerName}</span>
+      <Badge variant="outline" className="text-[10px] font-normal px-1.5 py-0 text-muted-foreground border-muted shrink-0">
+        {cat}
+      </Badge>
+      <span className="flex items-center gap-1 text-xs text-muted-foreground whitespace-nowrap">
+        <Phone className="h-3 w-3 shrink-0" />{entry.mobile}
+      </span>
+      {/* Spacer — pushes right-side items to the edge on desktop */}
+      <span className="hidden sm:block flex-1" />
+      {/* Right cluster: badge + due + edit */}
+      <span className={`text-[11px] font-semibold px-1.5 py-0.5 rounded-full border whitespace-nowrap shrink-0 ${badgeCls}`}>
+        {entry.daysPending > 0 ? `${entry.daysPending}d pending` : 'Today'}
+      </span>
+      {entry.dueAmount > 0 && (
+        <span className="text-xs font-bold text-red-600 whitespace-nowrap shrink-0">
+          Due: {formatCurrency(entry.dueAmount)}
+        </span>
+      )}
       <Link href={`/work/${entry.id}/edit`} className="shrink-0">
-        <Button size="sm" variant="ghost" className="h-8 w-8 p-0 text-muted-foreground hover:text-foreground hover:bg-muted rounded-lg">
-          <Pencil className="h-3.5 w-3.5" />
+        <Button size="sm" variant="ghost" className="h-6 w-6 p-0 text-muted-foreground hover:text-foreground hover:bg-muted rounded">
+          <Pencil className="h-3 w-3" />
         </Button>
       </Link>
     </div>
@@ -298,15 +297,15 @@ export default function DashboardPage() {
             <p className="text-sm text-emerald-800 font-medium">No urgent pending work — great job staying on top!</p>
           </div>
         ) : (
-          <div className="space-y-2">
-            {reminderEntries.slice(0, 5).map(entry => (
+          <div className="bg-card border rounded-xl overflow-hidden divide-y">
+            {reminderEntries.slice(0, 4).map(entry => (
               <ReminderRow key={entry.id} entry={entry} />
             ))}
-            {reminderEntries.length > 5 && (
-              <div className="text-center pt-1">
+            {reminderEntries.length > 4 && (
+              <div className="px-3 py-1.5 text-center bg-muted/20">
                 <Link href="/pending">
-                  <Button variant="ghost" size="sm" className="text-xs text-muted-foreground h-7 hover:text-foreground">
-                    +{reminderEntries.length - 5} more — View All
+                  <Button variant="ghost" size="sm" className="text-xs text-muted-foreground h-6 hover:text-foreground">
+                    +{reminderEntries.length - 4} more — View All
                   </Button>
                 </Link>
               </div>
