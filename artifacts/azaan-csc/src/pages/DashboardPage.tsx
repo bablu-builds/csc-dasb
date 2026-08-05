@@ -386,7 +386,7 @@ export default function DashboardPage() {
                   {formatCurrency(totalPendingDues)}
                 </div>
                 <p className="text-xs text-muted-foreground mt-1">
-                  {pendingDueCount} entr{pendingDueCount === 1 ? 'y' : 'ies'} · all sources
+                  {pendingDueCount} entr{pendingDueCount === 1 ? 'y' : 'ies'} · all sources · all time
                 </p>
               </CardContent>
             </Card>

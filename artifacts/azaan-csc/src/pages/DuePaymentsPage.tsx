@@ -103,7 +103,7 @@ export default function DuePaymentsPage() {
   const [rechargeEntries,  setRechargeEntries]  = useState<ElectricRecharge[]>([]);
   const [transferEntries,  setTransferEntries]  = useState<MoneyTransfer[]>([]);
   const [quickEntries,     setQuickEntries]     = useState<QuickActionEntry[]>([]);
-  const [,                 setStaffList]        = useState<UserProfile[]>([]);
+  const [staffList,        setStaffList]        = useState<UserProfile[]>([]);
 
   // ── UI state ─────────────────────────────────────────────────────────────────
   const [dateState,    setDateState]    = useState<DateState>(() => ({ preset: 'thisMonth', ...buildPresetRange('thisMonth') }));
@@ -130,9 +130,9 @@ export default function DuePaymentsPage() {
   const allDues = useMemo<DueItem[]>(() => {
     const items: DueItem[] = [];
 
-    // Work entries: due = paymentMode 'Due' + dueAmount > 0 + not rejected
+    // Work entries: any entry with outstanding dueAmount > 0 (matches Dashboard logic)
     workEntries.forEach(e => {
-      if (e.paymentMode !== 'Due' || (e.dueAmount ?? 0) <= 0 || e.status === 'Rejected') return;
+      if ((e.dueAmount ?? 0) <= 0 || e.status === 'Rejected') return;
       items.push({
         id: e.id!,
         source: 'Work',
@@ -259,10 +259,14 @@ export default function DuePaymentsPage() {
     return Object.entries(map).sort((a, b) => b[1].total - a[1].total);
   }, [filteredDues, isOwner]);
 
-  // Staff name options for dropdown
-  const staffOptions = useMemo(() =>
-    [...new Set(allDues.map(i => i.addedBy).filter(Boolean))].sort(),
-  [allDues]);
+  // Staff dropdown: built from the actual users collection, not from due entries.
+  // This ensures every account (including those with zero dues) is shown.
+  const staffOptions = useMemo(() => {
+    const names = new Set<string>();
+    if (user?.displayName) names.add(user.displayName);
+    staffList.forEach(s => { if (s.displayName) names.add(s.displayName); });
+    return [...names].sort();
+  }, [staffList, user]);
 
   // ── Date helpers ─────────────────────────────────────────────────────────────
   const applyPreset = (key: 'all' | 'today' | 'thisWeek' | 'thisMonth') => {

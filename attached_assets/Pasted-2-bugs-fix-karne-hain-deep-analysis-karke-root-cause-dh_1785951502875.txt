@@ -1,0 +1,65 @@
+2 bugs fix karne hain — deep analysis karke root cause dhundo, blind 
+fix mat karo:
+
+BUG 1 — Dashboard "Pending Dues" card aur Due Payments page ka amount 
+match nahi kar raha:
+- Dashboard "Pending Dues" card: ₹569, 11 entries (currently shown, 
+  seems to be "all time" total)
+- Due Payments page top summary card: ₹500, 9 entries (with "This 
+  Month" filter selected)
+- Ye 2 alag filters ke numbers ho sakte hain (all-time vs this-month), 
+  lekin ye clearly label honi chahiye taaki confusion na ho, aur 
+  agar same filter (jaise "All Time") lagayein dono jagah, to EXACT 
+  same number aana chahiye.
+
+Steps:
+1. DashboardPage.tsx me "Pending Dues" card ka exact calculation 
+   dhundo — ye kaun se sources include karta hai (Work, AEPS, 
+   Recharge, Transfer, Quick, Flight — sab 6?) aur kaun sa date 
+   range use karta hai (all-time ya koi aur).
+2. DuePaymentsPage (ya jo bhi file name hai) ka "All Time" filter 
+   select karke uska calculation compare karo — same 6 sources, same 
+   paymentStatus==='pending' filter use ho raha hai ki nahi.
+3. Jo bhi mismatch mile (jaise koi source missing, ya date range 
+   boundary alag, ya kisi collection ka query incomplete/paginated 
+   hai) — usko fix karo taaki dono jagah "All Time" pe EXACT same 
+   number (₹ amount aur entry count dono) aayein.
+4. Dashboard card ke neeche ek chhota subtitle clear karo ki ye 
+   "All Time" total hai (jaise "all sources, all time"), taaki future 
+   me confusion na ho jab Due Payments page pe alag filter (This 
+   Month) select ho.
+
+BUG 2 — Staff dropdown me ek staff missing hai:
+- Due Payments page ke "Staff" filter dropdown me sirf 2 staff 
+  members dikh rahe hain (BABLU KUMAR, JAKIR ALAM), lekin app me 
+  3 (ya usse zyada) staff/owner accounts exist karte hain.
+
+Steps:
+1. Staff dropdown ka data-source dhundo — kya ye Firestore "users" 
+   collection se saare users fetch kar raha hai (owner+staff+manager 
+   sab), ya sirf un users ko fetch kar raha hai jinki koi work entry 
+   already maujood hai (addedBy field se derive kiya gaya list)?
+2. Agar list "addedBy" field se derive ho rahi hai (matlab sirf 
+   unhi staff ke naam aa rahe hain jinka kam se kam ek entry ho), to 
+   isko fix karo — dropdown ko seedha "users" collection se saare 
+   active staff/owner/manager accounts fetch karna chahiye (jaise 
+   Settings → Staff tab me pura list dikhta hai), na ki sirf unhi 
+   ka jinke naam se koi entry hui ho.
+3. Confirm karo ki missing staff ka account Firestore "users" 
+   collection me maujood hai aur uska role sahi set hai (staff/
+   manager) — agar account hi missing hai to alag issue hai, batao.
+4. Fix karne ke baad dropdown me saare staff/owner members dikhne 
+   chahiye, chahe unki koi entry ho ya na ho.
+
+VERIFY:
+1. Dashboard "Pending Dues" aur Due Payments "All Time" — dono same 
+   ₹ amount aur entry count dikha rahe hain confirm karo.
+2. Staff dropdown me saare staff members (missing wala bhi) dikh 
+   rahe hain confirm karo.
+3. pnpm --filter @workspace/azaan-csc run build — zero errors.
+
+DEPLOY: Fix hone ke baad commit + push karo GitHub main branch par.
+
+Mujhe exact batao: (a) dono jagah amount kyun mismatch tha (root 
+cause), (b) missing staff kyun dropdown me nahi aa raha tha (root 
+cause) — dono ka reason clearly likhna.
