@@ -25,6 +25,7 @@ import ElectricRechargePage from '@/pages/ElectricRechargePage';
 import MoneyTransferPage from '@/pages/MoneyTransferPage';
 import FlightBookingPage from '@/pages/FlightBookingPage';
 import QuickWorkPage from '@/pages/QuickWorkPage';
+import DuePaymentsPage from '@/pages/DuePaymentsPage';
 
 const queryClient = new QueryClient();
 
@@ -52,6 +53,7 @@ function AuthenticatedApp() {
 
           <Route path="/work" component={WorkListPage} />
           <Route path="/pending" component={PendingWorkPage} />
+          <Route path="/due-payments" component={DuePaymentsPage} />
 
           <Route path="/quick-work">
             <PermissionRoute allowed={canAccessQuickWork} message="You don't have permission to access Quick Action Work. Contact the owner.">

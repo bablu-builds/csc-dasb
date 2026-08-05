@@ -1,0 +1,64 @@
+Create a new dedicated "Payment Due" management section in the app 
+(add it as a new sidebar menu item, e.g., "Due Payments", placed 
+near "Pending Work" or under "Admin").
+
+1. Due List Page:
+   - Show a list of all pending/due payments across all 6 sources 
+     (Work, AEPS, Recharge, Transfer, Quick Work, Flight Booking) 
+     where paymentStatus is 'pending' (Due).
+   - Each row/card should display: Customer Name, Mobile Number, 
+     Category/Work Type (e.g., "AAY", "PAN Card", "AEPS Withdrawal"), 
+     Due Amount (bold, red), how many days it's been pending (e.g., 
+     "3d pending"), the source (Work / AEPS / Recharge / Transfer / 
+     Quick / Flight), and who added the entry (staff name).
+   - Include a "Mark as Paid" button on each row (using the existing 
+     2-option Cash/Online settlement dialog already implemented in 
+     the app) so dues can be settled directly from this page.
+
+2. Date Filter (Today / This Week / This Month / Custom):
+   - Add a filter dropdown/tabs at the top: "Today", "This Week", 
+     "This Month", "Custom Range" (with From/To date pickers for 
+     custom).
+   - This filters the due list based on the date the entry was 
+     created (not when it's due), so the owner can see "which dues 
+     came in today" vs "this week" vs "this month" vs any custom 
+     range.
+   - Show a running total: "Total Due: ₹X across Y entries" that 
+     updates based on the selected filter.
+
+3. Staff-wise Search/Filter:
+   - Add a "Staff" filter dropdown (same pattern as the one already 
+     added to the All Work page) listing all staff/owner accounts.
+   - Selecting a staff member filters the due list to show only 
+     dues created by that specific staff member (using the existing 
+     "addedBy" field).
+   - This should combine with the date filter (AND logic) — e.g., 
+     "This Week" + "Staff: Sarfraj" shows only Sarfraj's dues from 
+     this week.
+   - Also show a small summary per staff (optional but useful): a 
+     "Due by Staff" breakdown showing each staff's name with their 
+     total due amount and entry count, so the owner can quickly see 
+     which staff has the most outstanding dues under their name.
+
+4. Search bar:
+   - Add a search box to filter by customer name or mobile number, 
+     working alongside the date and staff filters.
+
+5. Access control:
+   - This page should be visible to the Owner (full access across 
+     all staff). If a Staff member has financial-services access, 
+     they should only see dues for entries they themselves added 
+     (not other staff's dues) — consistent with the existing role 
+     system in the app.
+
+6. Verify:
+   - Test each date filter (Today/Week/Month/Custom) shows correct 
+     entries.
+   - Test staff filter shows only that staff's due entries.
+   - Test "Mark as Paid" correctly settles a due entry and removes 
+     it from this list, updating Dashboard/Reports in real time.
+   - Run pnpm --filter @workspace/azaan-csc run build and confirm 
+     zero errors.
+
+7. Deploy: After verifying, commit and push to the GitHub main 
+branch.
