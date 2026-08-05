@@ -147,6 +147,33 @@
   to   { background-position: 200% 0; }
 }
 
+/* Login page blob animations */
+@keyframes blobFloat1 {
+  0%, 100% { transform: translate(0, 0) scale(1); }
+  33%       { transform: translate(22px, -18px) scale(1.06); }
+  66%       { transform: translate(-12px, 22px) scale(0.96); }
+}
+@keyframes blobFloat2 {
+  0%, 100% { transform: translate(0, 0) scale(1) rotate(0deg); }
+  50%       { transform: translate(-28px, 18px) scale(1.09) rotate(12deg); }
+}
+@keyframes blobFloat3 {
+  0%, 100% { transform: translate(0, 0) scale(1); }
+  40%       { transform: translate(18px, 28px) scale(0.94); }
+  75%       { transform: translate(-18px, -12px) scale(1.05); }
+}
+
+/* Error shake */
+@keyframes shake {
+  0%, 100% { transform: translateX(0); }
+  15%       { transform: translateX(-7px); }
+  30%       { transform: translateX(7px); }
+  45%       { transform: translateX(-5px); }
+  60%       { transform: translateX(5px); }
+  75%       { transform: translateX(-2px); }
+  90%       { transform: translateX(2px); }
+}
+
 .animate-fade-in-up {
   animation: fadeInUp 0.25s ease-out both;
 }
@@ -159,6 +186,9 @@
 .animate-count-up {
   animation: countUp 0.3s ease-out both;
 }
+.animate-shake {
+  animation: shake 0.45s ease-in-out;
+}
 
 /* Staggered children */
 .stagger-children > *:nth-child(1) { animation-delay: 0ms; }
@@ -167,6 +197,49 @@
 .stagger-children > *:nth-child(4) { animation-delay: 120ms; }
 .stagger-children > *:nth-child(5) { animation-delay: 160ms; }
 .stagger-children > *:nth-child(6) { animation-delay: 200ms; }
+
+/* ── LOGIN HERO BLOBS ────────────────────────────────────────────── */
+.login-blob {
+  position: absolute;
+  border-radius: 50%;
+  filter: blur(70px);
+  pointer-events: none;
+  will-change: transform;
+}
+.login-blob-1 {
+  width: 380px; height: 380px;
+  background: hsl(var(--primary));
+  opacity: 0.28;
+  top: -100px; left: -80px;
+  animation: blobFloat1 14s ease-in-out infinite;
+}
+.login-blob-2 {
+  width: 280px; height: 280px;
+  background: hsl(var(--accent));
+  opacity: 0.18;
+  bottom: 80px; right: -60px;
+  animation: blobFloat2 18s ease-in-out infinite;
+}
+.login-blob-3 {
+  width: 220px; height: 220px;
+  background: hsl(263 70% 55%);
+  opacity: 0.16;
+  top: 45%; left: 35%;
+  animation: blobFloat3 11s ease-in-out infinite;
+}
+
+/* Respect reduced-motion preference */
+@media (prefers-reduced-motion: reduce) {
+  .login-blob,
+  .animate-fade-in-up,
+  .animate-fade-in,
+  .animate-slide-in-left,
+  .animate-shake {
+    animation: none !important;
+    opacity: 1 !important;
+    transform: none !important;
+  }
+}
 
 /* ── BASE STYLES ────────────────────────────────────────────────── */
 @layer base {

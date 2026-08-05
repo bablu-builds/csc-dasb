@@ -1,6 +1,6 @@
 import { useState, useEffect } from 'react';
 import { useAuth, consumeDeactivatedFlag } from '@/contexts/AuthContext';
-import { Link, useLocation } from 'wouter';
+import { useLocation } from 'wouter';
 import {
   signInWithEmailAndPassword, isSignInWithEmailLink, signInWithEmailLink,
   sendPasswordResetEmail,
@@ -10,7 +10,7 @@ import { useToast } from '@/hooks/use-toast';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
-import { Store, Loader2, Mail, ShieldCheck, AlertTriangle } from 'lucide-react';
+import { Store, Loader2, Mail, ShieldCheck, AlertTriangle, CheckCircle2 } from 'lucide-react';
 import { useSettings } from '@/contexts/SettingsContext';
 import { doc, setDoc, getDoc } from 'firebase/firestore';
 import { db } from '@/lib/firebase';
@@ -18,38 +18,150 @@ import { Timestamp } from 'firebase/firestore';
 
 const EMAIL_LINK_KEY = 'azaan_signin_email';
 
+// ── Branded hero panel (left side, desktop only) ──────────────────
+function HeroPanel({ shopName }: { shopName: string }) {
+  return (
+    <div
+      className="hidden lg:flex lg:w-[58%] relative overflow-hidden flex-col justify-between p-12"
+      style={{ background: 'hsl(var(--sidebar))' }}
+    >
+      {/* Floating gradient blobs */}
+      <div className="login-blob login-blob-1" aria-hidden="true" />
+      <div className="login-blob login-blob-2" aria-hidden="true" />
+      <div className="login-blob login-blob-3" aria-hidden="true" />
+
+      {/* Top bar */}
+      <div className="relative z-10 flex items-center gap-3">
+        <div className="h-10 w-10 rounded-xl bg-white/10 border border-white/20 flex items-center justify-center">
+          <Store className="h-5 w-5 text-white" />
+        </div>
+        <span className="text-white/60 text-sm font-medium tracking-wide">CSC Management Portal</span>
+      </div>
+
+      {/* Centre — main branding */}
+      <div className="relative z-10 space-y-5">
+        <div className="inline-flex items-center gap-2 px-3 py-1.5 rounded-full bg-white/10 border border-white/20 text-white/70 text-xs font-medium">
+          <ShieldCheck className="h-3.5 w-3.5 text-emerald-400" />
+          Secure Staff Access
+        </div>
+
+        <h1
+          className="text-5xl font-extrabold text-white leading-[1.1] tracking-tight"
+          style={{ fontFamily: 'var(--app-font-display)' }}
+        >
+          {shopName.split(' ').slice(0, 2).join(' ')}<br />
+          <span className="text-white/70">{shopName.split(' ').slice(2).join(' ') || 'TOUR AND TRAVEL'}</span>
+        </h1>
+
+        <p className="text-white/55 text-lg font-medium" style={{ fontFamily: 'var(--app-font-display)' }}>
+          CSC Management, simplified.
+        </p>
+        <p className="text-white/35 text-sm">
+          Track work &nbsp;·&nbsp; Manage customers &nbsp;·&nbsp; Monitor earnings
+        </p>
+
+        {/* Decorative feature pills */}
+        <div className="flex flex-wrap gap-2 pt-2">
+          {['Work Entries', 'Financial Services', 'Staff Roles', 'Reports'].map(f => (
+            <span
+              key={f}
+              className="px-2.5 py-1 rounded-full text-[11px] font-medium bg-white/8 border border-white/12 text-white/50"
+            >
+              {f}
+            </span>
+          ))}
+        </div>
+      </div>
+
+      {/* Bottom */}
+      <div className="relative z-10 text-white/25 text-xs">
+        Protected by Firebase Authentication
+      </div>
+    </div>
+  );
+}
+
+// ── Full-screen loading screens ───────────────────────────────────
+function FullScreenLoader({ message }: { message?: string }) {
+  return (
+    <div className="min-h-[100dvh] flex items-center justify-center bg-background">
+      <div className="flex flex-col items-center gap-4 text-center">
+        <Loader2 className="h-10 w-10 animate-spin text-primary" />
+        {message && <p className="text-muted-foreground font-medium text-sm">{message}</p>}
+      </div>
+    </div>
+  );
+}
+
+// ── Email-link confirm screen ─────────────────────────────────────
+function EmailLinkConfirmScreen({
+  emailLinkEmail, setEmailLinkEmail, onSubmit,
+}: {
+  emailLinkEmail: string;
+  setEmailLinkEmail: (v: string) => void;
+  onSubmit: (e: React.FormEvent) => void;
+}) {
+  return (
+    <div
+      className="min-h-[100dvh] flex flex-col items-center justify-center p-4 bg-background"
+      style={{ backgroundImage: 'radial-gradient(circle at 1px 1px, hsl(var(--border)) 1px, transparent 0)', backgroundSize: '28px 28px' }}
+    >
+      <div className="max-w-md w-full bg-card border rounded-2xl shadow-lg overflow-hidden animate-fade-in-up">
+        <div className="p-8 text-center border-b">
+          <div className="h-14 w-14 rounded-2xl bg-primary flex items-center justify-center mx-auto mb-4">
+            <Mail className="h-7 w-7 text-primary-foreground" />
+          </div>
+          <h1 className="text-xl font-bold">Confirm Your Email</h1>
+          <p className="text-muted-foreground text-sm mt-2">
+            You're signing in via an email link. Please confirm your email address to continue.
+          </p>
+        </div>
+        <form onSubmit={onSubmit} className="p-8 space-y-5">
+          <div className="space-y-2">
+            <Label htmlFor="confirm-email">Your Email Address</Label>
+            <Input
+              id="confirm-email" type="email" placeholder="staff@example.com"
+              value={emailLinkEmail} onChange={e => setEmailLinkEmail(e.target.value)}
+              required autoFocus
+            />
+          </div>
+          <Button type="submit" className="w-full">Continue Sign-in</Button>
+        </form>
+      </div>
+    </div>
+  );
+}
+
+// ── Main login page ───────────────────────────────────────────────
 export default function LoginPage() {
-  const [email, setEmail] = useState('');
-  const [password, setPassword] = useState('');
-  const [loading, setLoading] = useState(false);
-  const [resetSent, setResetSent] = useState(false);
+  const [email, setEmail]             = useState('');
+  const [password, setPassword]       = useState('');
+  const [loading, setLoading]         = useState(false);
+  const [resetSent, setResetSent]     = useState(false);
   const [sendingReset, setSendingReset] = useState(false);
   const [isDeactivated, setIsDeactivated] = useState(false);
+  const [loginError, setLoginError]   = useState<string | null>(null);
+  const [errorCount, setErrorCount]   = useState(0); // key-bump → re-triggers shake animation
+
   const { isConfigured, user, loading: authLoading } = useAuth();
   const { shopSettings } = useSettings();
   const [, setLocation] = useLocation();
   const { toast } = useToast();
 
   // Email-link sign-in state
-  const [isEmailLink, setIsEmailLink] = useState(false);
-  const [emailLinkEmail, setEmailLinkEmail] = useState('');
+  const [isEmailLink, setIsEmailLink]           = useState(false);
+  const [emailLinkEmail, setEmailLinkEmail]     = useState('');
   const [emailLinkLoading, setEmailLinkLoading] = useState(false);
   const [needsEmailConfirm, setNeedsEmailConfirm] = useState(false);
 
-  // Check for deactivated flag on mount
   useEffect(() => {
-    if (consumeDeactivatedFlag()) {
-      setIsDeactivated(true);
-    }
+    if (consumeDeactivatedFlag()) setIsDeactivated(true);
   }, []);
 
   useEffect(() => {
-    if (!authLoading && user) {
-      setLocation('/dashboard');
-    }
+    if (!authLoading && user) setLocation('/dashboard');
   }, [user, authLoading, setLocation]);
 
-  // Detect email link on mount
   useEffect(() => {
     if (!auth) return;
     if (isSignInWithEmailLink(auth, window.location.href)) {
@@ -96,7 +208,6 @@ export default function LoginPage() {
           await deleteDoc(inviteRef).catch(() => {});
         }
       }
-
       toast({ title: 'Welcome!', description: 'You have been signed in successfully.' });
       setLocation('/dashboard');
     } catch (err: any) {
@@ -115,13 +226,23 @@ export default function LoginPage() {
     e.preventDefault();
     if (!auth) return;
     setIsDeactivated(false);
+    setLoginError(null);
     setLoading(true);
     try {
       await authReady;
       await signInWithEmailAndPassword(auth, email, password);
       setLocation('/dashboard');
     } catch (err: any) {
-      toast({ variant: 'destructive', title: 'Login Failed', description: err.message });
+      const friendlyMsg =
+        err.code === 'auth/invalid-credential' || err.code === 'auth/wrong-password'
+          ? 'Incorrect email or password. Please try again.'
+          : err.code === 'auth/user-disabled'
+          ? 'This account has been disabled. Contact the shop owner.'
+          : err.code === 'auth/too-many-requests'
+          ? 'Too many failed attempts. Please wait a moment and try again.'
+          : err.message;
+      setLoginError(friendlyMsg);
+      setErrorCount(c => c + 1); // bumps key → remounts element → CSS animation re-runs
     } finally {
       setLoading(false);
     }
@@ -129,7 +250,11 @@ export default function LoginPage() {
 
   const handleForgotPassword = async () => {
     if (!auth || !email.trim()) {
-      toast({ variant: 'destructive', title: 'Enter your email first', description: 'Type your email address above, then click Forgot Password.' });
+      toast({
+        variant: 'destructive',
+        title: 'Enter your email first',
+        description: 'Type your email address above, then click Forgot Password.',
+      });
       return;
     }
     setSendingReset(true);
@@ -144,173 +269,193 @@ export default function LoginPage() {
     }
   };
 
-  if (authLoading) {
-    return (
-      <div className="min-h-[100dvh] flex items-center justify-center bg-background">
-        <Loader2 className="h-8 w-8 animate-spin text-primary" />
-      </div>
-    );
-  }
-
+  // ── Early returns ──────────────────────────────────────────────
+  if (authLoading) return <FullScreenLoader />;
   if (user) return null;
-
-  if (isEmailLink && emailLinkLoading) {
-    return (
-      <div className="min-h-[100dvh] flex items-center justify-center bg-background">
-        <div className="flex flex-col items-center gap-4 text-center">
-          <Loader2 className="h-10 w-10 animate-spin text-primary" />
-          <p className="text-muted-foreground font-medium">Signing you in…</p>
-        </div>
-      </div>
-    );
-  }
-
+  if (isEmailLink && emailLinkLoading) return <FullScreenLoader message="Signing you in…" />;
   if (isEmailLink && needsEmailConfirm) {
     return (
-      <div className="min-h-[100dvh] flex flex-col items-center justify-center p-4 bg-background"
-        style={{ backgroundImage: 'radial-gradient(circle at 1px 1px, hsl(var(--border)) 1px, transparent 0)', backgroundSize: '28px 28px' }}>
-        <div className="max-w-md w-full bg-card border rounded-2xl shadow-lg overflow-hidden">
-          <div className="p-8 text-center border-b">
-            <div className="h-14 w-14 rounded-2xl bg-primary flex items-center justify-center mx-auto mb-4">
-              <Mail className="h-7 w-7 text-primary-foreground" />
-            </div>
-            <h1 className="text-xl font-bold">Confirm Your Email</h1>
-            <p className="text-muted-foreground text-sm mt-2">
-              You're signing in via an email link. Please confirm your email address to continue.
-            </p>
-          </div>
-          <form onSubmit={handleEmailLinkConfirm} className="p-8 space-y-5">
-            <div className="space-y-2">
-              <Label htmlFor="confirm-email">Your Email Address</Label>
-              <Input
-                id="confirm-email"
-                type="email"
-                placeholder="staff@example.com"
-                value={emailLinkEmail}
-                onChange={e => setEmailLinkEmail(e.target.value)}
-                required autoFocus
-              />
-            </div>
-            <Button type="submit" className="w-full">Continue Sign-in</Button>
-          </form>
-        </div>
-      </div>
+      <EmailLinkConfirmScreen
+        emailLinkEmail={emailLinkEmail}
+        setEmailLinkEmail={setEmailLinkEmail}
+        onSubmit={handleEmailLinkConfirm}
+      />
     );
   }
 
+  const displayName = shopSettings?.shopName || 'AZAAN COMMUNICATION TOUR AND TRAVEL';
+
+  // ── Main split-screen render ───────────────────────────────────
   return (
-    <div className="min-h-[100dvh] flex bg-background">
-      {/* Left panel — branding */}
-      <div className="hidden lg:flex lg:w-[45%] flex-col justify-between p-12 relative overflow-hidden"
-        style={{ background: 'linear-gradient(145deg, #080f1f 0%, #0d1b3e 50%, #1a2a5e 100%)' }}>
-        <div className="absolute inset-0 opacity-5">
-          {Array.from({ length: 20 }).map((_, i) => (
-            <div key={i}
-              className="absolute rounded-full border border-white"
-              style={{
-                width: `${80 + i * 40}px`, height: `${80 + i * 40}px`,
-                left: '50%', top: '50%',
-                transform: 'translate(-50%, -50%)',
-                opacity: 1 / (i + 1),
-              }}
-            />
-          ))}
-        </div>
-        <div className="relative">
-          <div className="flex items-center gap-3">
-            <div className="h-10 w-10 rounded-xl bg-white/10 flex items-center justify-center border border-white/20">
-              <Store className="h-5 w-5 text-white" />
+    <div className="min-h-[100dvh] flex">
+      {/* Left — hero panel */}
+      <HeroPanel shopName={displayName} />
+
+      {/* Right — login form */}
+      <div className="flex-1 flex flex-col items-center justify-center px-6 py-10 lg:px-16 bg-background">
+
+        {/* Mobile-only branding header */}
+        <div
+          className="lg:hidden mb-8 flex flex-col items-center gap-3 animate-fade-in-up"
+          style={{ animationDelay: '0ms' }}
+        >
+          <div className="h-14 w-14 rounded-2xl bg-primary flex items-center justify-center shadow-lg shadow-primary/30">
+            <Store className="h-7 w-7 text-primary-foreground" />
+          </div>
+          <div className="text-center">
+            <div
+              className="font-extrabold text-base leading-tight"
+              style={{ fontFamily: 'var(--app-font-display)' }}
+            >
+              {displayName.split(' ').slice(0, 2).join(' ')}
             </div>
-            <span className="text-white/80 text-sm font-medium">CSC Management Portal</span>
+            <div className="text-xs text-muted-foreground mt-0.5">CSC Management, simplified</div>
           </div>
         </div>
-        <div className="relative space-y-6">
-          <div className="inline-flex items-center gap-2 px-3 py-1.5 rounded-full bg-white/10 border border-white/20 text-white/70 text-xs font-medium">
-            <ShieldCheck className="h-3.5 w-3.5" />
-            Secure Staff Access
-          </div>
-          <h2 className="text-4xl font-bold text-white leading-tight">
-            {shopSettings?.shopName || 'AZAAN COMMUNICATION TOUR AND TRAVEL'}
-          </h2>
-          <p className="text-white/60 text-base leading-relaxed">
-            Your complete CSC shop management solution — track work, manage customers, and monitor earnings in one place.
-          </p>
-        </div>
-        <div className="relative text-white/40 text-xs">Protected by Firebase Authentication</div>
-      </div>
 
-      {/* Right panel — login form */}
-      <div className="flex-1 flex flex-col items-center justify-center p-6 lg:p-12">
-        {!isConfigured && (
-          <div className="max-w-sm w-full bg-amber-50 border border-amber-200 text-amber-900 p-4 rounded-xl mb-6 text-sm">
-            <strong>Setup Required</strong> — Firebase secrets not yet configured.
-          </div>
-        )}
+        <div className="w-full max-w-sm">
 
-        {/* Deactivated account banner */}
-        {isDeactivated && (
-          <div className="max-w-sm w-full bg-rose-50 border border-rose-200 text-rose-800 p-4 rounded-xl mb-6 text-sm flex items-start gap-3">
-            <AlertTriangle className="h-5 w-5 shrink-0 text-rose-500 mt-0.5" />
-            <div>
-              <p className="font-semibold">Account Deactivated</p>
-              <p className="mt-0.5 text-rose-700">Your account has been deactivated. Please contact the shop owner to regain access.</p>
+          {/* Setup warning */}
+          {!isConfigured && (
+            <div className="bg-amber-50 border border-amber-200 text-amber-900 p-4 rounded-xl mb-6 text-sm animate-fade-in-up">
+              <strong>Setup Required</strong> — Firebase secrets not yet configured.
             </div>
-          </div>
-        )}
+          )}
 
-        <div className="w-full max-w-sm space-y-6">
-          <div className="lg:hidden flex items-center gap-3 mb-2">
-            <div className="h-10 w-10 rounded-xl bg-primary flex items-center justify-center">
+          {/* Deactivated banner */}
+          {isDeactivated && (
+            <div className="bg-rose-50 border border-rose-200 text-rose-800 p-4 rounded-xl mb-6 text-sm flex items-start gap-3 animate-shake">
+              <AlertTriangle className="h-5 w-5 shrink-0 text-rose-500 mt-0.5" />
+              <div>
+                <p className="font-semibold">Account Deactivated</p>
+                <p className="mt-0.5 text-rose-700">Your account has been deactivated. Please contact the shop owner to regain access.</p>
+              </div>
+            </div>
+          )}
+
+          {/* Desktop logo + heading */}
+          <div
+            className="hidden lg:flex items-center gap-3 mb-8 animate-fade-in-up"
+            style={{ animationDelay: '0ms' }}
+          >
+            <div className="h-11 w-11 rounded-xl bg-primary flex items-center justify-center shadow-md shadow-primary/25">
               <Store className="h-5 w-5 text-primary-foreground" />
             </div>
             <div>
-              <div className="font-bold text-sm">{shopSettings?.shopName || 'AZAAN CSC'}</div>
+              <div className="font-bold text-sm leading-tight" style={{ fontFamily: 'var(--app-font-display)' }}>
+                {displayName.split(' ').slice(0, 2).join(' ')}
+              </div>
               <div className="text-xs text-muted-foreground">Staff Portal</div>
             </div>
           </div>
 
-          <div>
-            <h1 className="text-2xl font-bold">Sign In</h1>
-            <p className="text-muted-foreground text-sm mt-1">Access your staff dashboard</p>
+          {/* Heading */}
+          <div
+            className="mb-7 animate-fade-in-up"
+            style={{ animationDelay: '60ms' }}
+          >
+            <h2
+              className="text-2xl font-bold tracking-tight"
+              style={{ fontFamily: 'var(--app-font-display)' }}
+            >
+              Welcome back
+            </h2>
+            <p className="text-muted-foreground text-sm mt-1">Sign in to access your dashboard</p>
           </div>
 
-          <form onSubmit={handleLogin} className="space-y-4">
-            <div className="space-y-2">
-              <Label htmlFor="email">Email Address</Label>
+          {/* Login form */}
+          <form onSubmit={handleLogin} className="space-y-4" noValidate>
+
+            {/* Email */}
+            <div
+              className="space-y-1.5 animate-fade-in-up"
+              style={{ animationDelay: '120ms' }}
+            >
+              <Label htmlFor="email" className="text-sm font-medium">Email Address</Label>
               <Input
                 id="email" type="email" placeholder="staff@example.com"
-                value={email} onChange={e => setEmail(e.target.value)}
+                value={email} onChange={e => { setEmail(e.target.value); setLoginError(null); }}
                 required disabled={!isConfigured || loading}
+                className="h-11 transition-shadow focus-visible:shadow-sm"
                 data-testid="input-email"
+                autoComplete="email"
               />
             </div>
-            <div className="space-y-2">
-              <Label htmlFor="password">Password</Label>
+
+            {/* Password */}
+            <div
+              className="space-y-1.5 animate-fade-in-up"
+              style={{ animationDelay: '180ms' }}
+            >
+              <Label htmlFor="password" className="text-sm font-medium">Password</Label>
               <Input
                 id="password" type="password"
-                value={password} onChange={e => setPassword(e.target.value)}
+                value={password} onChange={e => { setPassword(e.target.value); setLoginError(null); }}
                 required disabled={!isConfigured || loading}
+                className="h-11 transition-shadow focus-visible:shadow-sm"
                 data-testid="input-password"
+                autoComplete="current-password"
               />
             </div>
-            <div className="flex items-center justify-between text-sm">
+
+            {/* Inline error with shake */}
+            {loginError && (
+              <div
+                key={errorCount}
+                className="animate-shake flex items-start gap-2.5 bg-destructive/8 border border-destructive/25 text-destructive rounded-lg px-3.5 py-2.5 text-sm"
+              >
+                <AlertTriangle className="h-4 w-4 shrink-0 mt-0.5" />
+                <span>{loginError}</span>
+              </div>
+            )}
+
+            {/* Forgot password */}
+            <div
+              className="flex items-center justify-between animate-fade-in-up"
+              style={{ animationDelay: '240ms' }}
+            >
               <button
                 type="button" onClick={handleForgotPassword}
                 disabled={sendingReset || !isConfigured}
-                className="text-muted-foreground hover:text-primary transition-colors disabled:opacity-50 text-xs"
+                className="text-xs text-muted-foreground hover:text-primary transition-colors disabled:opacity-50 flex items-center gap-1"
               >
                 {sendingReset
-                  ? <span className="flex items-center gap-1"><Loader2 className="h-3 w-3 animate-spin" />Sending…</span>
+                  ? <><Loader2 className="h-3 w-3 animate-spin" />Sending…</>
                   : 'Forgot password?'}
               </button>
-              {resetSent && <span className="text-green-600 text-xs">Reset email sent ✓</span>}
+              {resetSent && (
+                <span className="flex items-center gap-1 text-xs text-emerald-600 font-medium">
+                  <CheckCircle2 className="h-3.5 w-3.5" />
+                  Reset email sent
+                </span>
+              )}
             </div>
-            <Button type="submit" className="w-full h-11 text-sm font-semibold" disabled={!isConfigured || loading} data-testid="button-login">
-              {loading ? <><Loader2 className="h-4 w-4 animate-spin mr-2" />Signing in...</> : 'Sign In'}
-            </Button>
+
+            {/* Submit button */}
+            <div
+              className="animate-fade-in-up pt-1"
+              style={{ animationDelay: '300ms' }}
+            >
+              <Button
+                type="submit"
+                className="w-full h-11 text-sm font-semibold shadow-md shadow-primary/20
+                           hover:shadow-lg hover:shadow-primary/30 hover:scale-[1.015]
+                           active:scale-[0.985] transition-all duration-150"
+                disabled={!isConfigured || loading}
+                data-testid="button-login"
+              >
+                {loading
+                  ? <><Loader2 className="h-4 w-4 animate-spin mr-2" />Signing in…</>
+                  : 'Sign In'}
+              </Button>
+            </div>
           </form>
 
-          <p className="text-center text-xs text-muted-foreground">
+          {/* Footer note */}
+          <p
+            className="mt-7 text-center text-xs text-muted-foreground animate-fade-in-up"
+            style={{ animationDelay: '380ms' }}
+          >
             Staff members can also sign in via the email link sent by the owner.
           </p>
         </div>
