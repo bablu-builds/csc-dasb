@@ -47,8 +47,8 @@ function StatCard({ label, value, sub, icon: Icon, gradient }: {
   );
 }
 
-// ── Reminder row ───────────────────────────────────────────────────
-function ReminderRow({ entry }: { entry: WorkEntry & { daysPending: number } }) {
+// ── Reminder card ──────────────────────────────────────────────────
+function ReminderCard({ entry }: { entry: WorkEntry & { daysPending: number } }) {
   const isVeryUrgent = entry.daysPending >= 7;
   const isUrgent     = entry.daysPending >= 3;
   const isModerate   = entry.daysPending >= 1;
@@ -63,28 +63,31 @@ function ReminderRow({ entry }: { entry: WorkEntry & { daysPending: number } }) 
     : 'text-blue-600 bg-blue-50 border-blue-200';
 
   return (
-    <div className="flex flex-wrap sm:flex-nowrap items-center gap-x-2 gap-y-1 px-3 py-2 hover:bg-muted/30 transition-colors">
-      {/* Left cluster: name + category + phone */}
-      <span className="font-semibold text-sm text-foreground whitespace-nowrap">{entry.customerName}</span>
-      <Badge variant="outline" className="text-[10px] font-normal px-1.5 py-0 text-muted-foreground border-muted shrink-0">
+    <div className="relative flex flex-col gap-1.5 rounded-xl border bg-card shadow-sm hover:shadow-md transition-shadow px-3 py-2.5">
+      {/* Top row: name + edit icon */}
+      <div className="flex items-start justify-between gap-1">
+        <span className="font-bold text-sm text-foreground leading-tight line-clamp-1">{entry.customerName}</span>
+        <Link href={`/work/${entry.id}/edit`} className="shrink-0 -mt-0.5">
+          <Button size="sm" variant="ghost" className="h-6 w-6 p-0 text-muted-foreground hover:text-foreground hover:bg-muted rounded">
+            <Pencil className="h-3 w-3" />
+          </Button>
+        </Link>
+      </div>
+      {/* Category badge */}
+      <Badge variant="outline" className="self-start text-[10px] font-normal px-1.5 py-0 text-muted-foreground border-muted">
         {cat}
       </Badge>
-      {/* Spacer — pushes right-side items to the edge on desktop */}
-      <span className="hidden sm:block flex-1" />
-      {/* Right cluster: badge + due + edit */}
-      <span className={`text-[11px] font-semibold px-1.5 py-0.5 rounded-full border whitespace-nowrap shrink-0 ${badgeCls}`}>
-        {entry.daysPending > 0 ? `${entry.daysPending}d pending` : 'Today'}
-      </span>
-      {entry.dueAmount > 0 && (
-        <span className="text-xs font-bold text-red-600 whitespace-nowrap shrink-0">
-          Due: {formatCurrency(entry.dueAmount)}
+      {/* Bottom row: pending badge + due amount */}
+      <div className="flex flex-wrap items-center gap-1.5 mt-0.5">
+        <span className={`text-[11px] font-semibold px-1.5 py-0.5 rounded-full border ${badgeCls}`}>
+          {entry.daysPending > 0 ? `${entry.daysPending}d pending` : 'Today'}
         </span>
-      )}
-      <Link href={`/work/${entry.id}/edit`} className="shrink-0">
-        <Button size="sm" variant="ghost" className="h-6 w-6 p-0 text-muted-foreground hover:text-foreground hover:bg-muted rounded">
-          <Pencil className="h-3 w-3" />
-        </Button>
-      </Link>
+        {entry.dueAmount > 0 && (
+          <span className="text-xs font-bold text-red-600">
+            Due: {formatCurrency(entry.dueAmount)}
+          </span>
+        )}
+      </div>
     </div>
   );
 }
@@ -294,15 +297,17 @@ export default function DashboardPage() {
             <p className="text-sm text-emerald-800 font-medium">No urgent pending work — great job staying on top!</p>
           </div>
         ) : (
-          <div className="bg-card border rounded-xl overflow-hidden divide-y">
-            {reminderEntries.slice(0, 4).map(entry => (
-              <ReminderRow key={entry.id} entry={entry} />
-            ))}
-            {reminderEntries.length > 4 && (
-              <div className="px-3 py-1.5 text-center bg-muted/20">
+          <div>
+            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3">
+              {reminderEntries.slice(0, 8).map(entry => (
+                <ReminderCard key={entry.id} entry={entry} />
+              ))}
+            </div>
+            {reminderEntries.length > 8 && (
+              <div className="pt-2 text-center">
                 <Link href="/pending">
-                  <Button variant="ghost" size="sm" className="text-xs text-muted-foreground h-6 hover:text-foreground">
-                    +{reminderEntries.length - 4} more — View All
+                  <Button variant="ghost" size="sm" className="text-xs text-muted-foreground h-7 hover:text-foreground">
+                    +{reminderEntries.length - 8} more — View All
                   </Button>
                 </Link>
               </div>
