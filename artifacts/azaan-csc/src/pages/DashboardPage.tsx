@@ -181,6 +181,23 @@ export default function DashboardPage() {
     transferEntries.filter(e => resolveStatus(e.paymentStatus) === 'pending').length +
     quickEntries.filter(e => resolveStatus(e.paymentStatus) === 'pending').length;
 
+  // ── Today's Due (entries created today with pending payment) ──────────────
+  const todayDueWork      = workEntries.filter(e => e.status !== 'Rejected' && e.dueAmount > 0 && isToday(e.date.toDate()));
+  const todayDueAeps      = aepsEntries.filter(e => resolveStatus(e.paymentStatus) === 'pending' && isToday(e.createdAt.toDate()));
+  const todayDueRecharge  = rechargeEntries.filter(e => resolveStatus(e.paymentStatus) === 'pending' && isToday(e.createdAt.toDate()));
+  const todayDueTransfer  = transferEntries.filter(e => resolveStatus(e.paymentStatus) === 'pending' && isToday(e.createdAt.toDate()));
+  const todayDueQuick     = quickEntries.filter(e => resolveStatus(e.paymentStatus) === 'pending' && isToday(e.createdAt.toDate()));
+
+  const todayDueAmount =
+    todayDueWork.reduce((s, e) => s + e.dueAmount, 0) +
+    todayDueAeps.reduce((s, e) => s + e.amount, 0) +
+    todayDueRecharge.reduce((s, e) => s + e.rechargeAmount, 0) +
+    todayDueTransfer.reduce((s, e) => s + e.amount, 0) +
+    todayDueQuick.reduce((s, e) => s + e.amount, 0);
+  const todayDueCount =
+    todayDueWork.length + todayDueAeps.length + todayDueRecharge.length +
+    todayDueTransfer.length + todayDueQuick.length;
+
   // ── Profit (exclude pending/free) ───────────────────────────────────────
   const todayAepsProfit = aepsEntries
     .filter(e => isToday(e.createdAt.toDate()) && resolveStatus(e.paymentStatus) === 'paid')
@@ -373,7 +390,7 @@ export default function DashboardPage() {
               </CardContent>
             </Card>
 
-            {/* UPGRADED: Total Pending Dues across all 5 sources */}
+            {/* Total Pending Dues across all sources — all time */}
             <Card className={`shadow-sm hover:shadow-md transition-shadow ${totalPendingDues > 0 ? 'border-amber-300 bg-amber-50/30' : ''}`}>
               <CardHeader className="flex flex-row items-center justify-between pb-2">
                 <CardTitle className="text-xs font-medium uppercase tracking-wide text-muted-foreground">Pending Dues</CardTitle>
@@ -390,6 +407,26 @@ export default function DashboardPage() {
                 </p>
               </CardContent>
             </Card>
+
+            {/* Today's Due — new entries created today that are still unpaid */}
+            <Link href="/due-payments?preset=today">
+              <Card className={`shadow-sm hover:shadow-md transition-shadow cursor-pointer ${todayDueAmount > 0 ? 'border-orange-300 bg-orange-50/30' : ''}`}>
+                <CardHeader className="flex flex-row items-center justify-between pb-2">
+                  <CardTitle className="text-xs font-medium uppercase tracking-wide text-muted-foreground">Today's Due</CardTitle>
+                  <div className="h-8 w-8 rounded-full bg-orange-50 flex items-center justify-center">
+                    <IndianRupee className="h-4 w-4 text-orange-600" />
+                  </div>
+                </CardHeader>
+                <CardContent>
+                  <div className={`text-2xl font-bold ${todayDueAmount > 0 ? 'text-orange-600' : ''}`}>
+                    {formatCurrency(todayDueAmount)}
+                  </div>
+                  <p className="text-xs text-muted-foreground mt-1">
+                    {todayDueCount} {todayDueCount === 1 ? 'entry' : 'entries'} today · tap to view
+                  </p>
+                </CardContent>
+              </Card>
+            </Link>
 
             <Card className="shadow-sm hover:shadow-md transition-shadow">
               <CardHeader className="flex flex-row items-center justify-between pb-2">

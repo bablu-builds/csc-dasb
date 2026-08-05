@@ -1,4 +1,5 @@
 import { useState, useEffect, useMemo } from 'react';
+import { useSearch } from 'wouter';
 import { useAuth } from '@/contexts/AuthContext';
 import {
   WorkEntry, subscribeToWorkEntries, addPaymentToEntry,
@@ -95,6 +96,7 @@ function pendingLabel(date: Date): string {
 export default function DuePaymentsPage() {
   const { user, isOwner } = useAuth();
   const { toast } = useToast();
+  const searchStr = useSearch();
 
   // ── Raw data ────────────────────────────────────────────────────────────────
   const [loading,          setLoading]          = useState(true);
@@ -105,8 +107,15 @@ export default function DuePaymentsPage() {
   const [quickEntries,     setQuickEntries]     = useState<QuickActionEntry[]>([]);
   const [staffList,        setStaffList]        = useState<UserProfile[]>([]);
 
-  // ── UI state ─────────────────────────────────────────────────────────────────
-  const [dateState,    setDateState]    = useState<DateState>(() => ({ preset: 'thisMonth', ...buildPresetRange('thisMonth') }));
+  // ── UI state — initialise date preset from URL ?preset= param ────────────────
+  const [dateState,    setDateState]    = useState<DateState>(() => {
+    const p = new URLSearchParams(searchStr).get('preset') as PresetKey | null;
+    if (p === 'today' || p === 'thisWeek' || p === 'thisMonth') {
+      return { preset: p, ...buildPresetRange(p) };
+    }
+    if (p === 'all') return { preset: 'all' };
+    return { preset: 'thisMonth', ...buildPresetRange('thisMonth') };
+  });
   const [calOpen,      setCalOpen]      = useState(false);
   const [calPending,   setCalPending]   = useState<DateRange | undefined>();
   const [staffFilter,  setStaffFilter]  = useState<string>('all');
