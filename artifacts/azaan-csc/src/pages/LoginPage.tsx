@@ -10,7 +10,8 @@ import { useToast } from '@/hooks/use-toast';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
-import { Store, Loader2, Mail, ShieldCheck, AlertTriangle, CheckCircle2 } from 'lucide-react';
+import { Loader2, Mail, ShieldCheck, AlertTriangle, CheckCircle2 } from 'lucide-react';
+import logoImg from '@/assets/logo.jpg';
 import { useSettings } from '@/contexts/SettingsContext';
 import { doc, setDoc, getDoc } from 'firebase/firestore';
 import { db } from '@/lib/firebase';
@@ -32,26 +33,23 @@ function HeroPanel({ shopName }: { shopName: string }) {
 
       {/* Top bar */}
       <div className="relative z-10 flex items-center gap-3">
-        <div className="h-10 w-10 rounded-xl bg-white/10 border border-white/20 flex items-center justify-center">
-          <Store className="h-5 w-5 text-white" />
+        <div className="h-10 w-10 rounded-xl bg-white overflow-hidden flex items-center justify-center shadow-md">
+          <img src={logoImg} alt="AZAAN" className="h-9 w-9 object-contain" />
         </div>
         <span className="text-white/60 text-sm font-medium tracking-wide">CSC Management Portal</span>
       </div>
 
       {/* Centre — main branding */}
       <div className="relative z-10 space-y-5">
+        {/* Full logo on white card */}
+        <div className="bg-white rounded-2xl p-4 inline-block shadow-2xl">
+          <img src={logoImg} alt="AZAAN Communication Tour and Travel" className="h-40 object-contain" />
+        </div>
+
         <div className="inline-flex items-center gap-2 px-3 py-1.5 rounded-full bg-white/10 border border-white/20 text-white/70 text-xs font-medium">
           <ShieldCheck className="h-3.5 w-3.5 text-emerald-400" />
           Secure Staff Access
         </div>
-
-        <h1
-          className="text-5xl font-extrabold text-white leading-[1.1] tracking-tight"
-          style={{ fontFamily: 'var(--app-font-display)' }}
-        >
-          {shopName.split(' ').slice(0, 2).join(' ')}<br />
-          <span className="text-white/70">{shopName.split(' ').slice(2).join(' ') || 'TOUR AND TRAVEL'}</span>
-        </h1>
 
         <p className="text-white/55 text-lg font-medium" style={{ fontFamily: 'var(--app-font-display)' }}>
           CSC Management, simplified.
@@ -299,8 +297,8 @@ export default function LoginPage() {
           className="lg:hidden mb-8 flex flex-col items-center gap-3 animate-fade-in-up"
           style={{ animationDelay: '0ms' }}
         >
-          <div className="h-14 w-14 rounded-2xl bg-primary flex items-center justify-center shadow-lg shadow-primary/30">
-            <Store className="h-7 w-7 text-primary-foreground" />
+          <div className="h-20 w-20 rounded-2xl bg-white overflow-hidden flex items-center justify-center shadow-lg">
+            <img src={logoImg} alt="AZAAN" className="h-18 w-18 object-contain" />
           </div>
           <div className="text-center">
             <div
@@ -338,8 +336,8 @@ export default function LoginPage() {
             className="hidden lg:flex items-center gap-3 mb-8 animate-fade-in-up"
             style={{ animationDelay: '0ms' }}
           >
-            <div className="h-11 w-11 rounded-xl bg-primary flex items-center justify-center shadow-md shadow-primary/25">
-              <Store className="h-5 w-5 text-primary-foreground" />
+            <div className="h-11 w-11 rounded-xl bg-white overflow-hidden flex items-center justify-center shadow-md">
+              <img src={logoImg} alt="AZAAN" className="h-10 w-10 object-contain" />
             </div>
             <div>
               <div className="font-bold text-sm leading-tight" style={{ fontFamily: 'var(--app-font-display)' }}>

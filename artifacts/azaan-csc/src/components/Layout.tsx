@@ -3,9 +3,10 @@ import { useAuth } from '@/contexts/AuthContext';
 import { useSettings } from '@/contexts/SettingsContext';
 import {
   LayoutDashboard, PlusCircle, List, Clock, BarChart3, Settings,
-  LogOut, Menu, Store, X, Trash2, Zap, ArrowRightLeft, ChevronRight,
+  LogOut, Menu, X, Trash2, Zap, ArrowRightLeft, ChevronRight,
   User2, Fingerprint, Printer, PlaneTakeoff, CreditCard,
 } from 'lucide-react';
+import logoImg from '@/assets/logo.jpg';
 import { useState } from 'react';
 
 interface NavItem {
@@ -97,8 +98,8 @@ function SidebarContent({ location, onNav, isOwner, isManager, canAccessFinancia
     <div className="flex flex-col h-full bg-sidebar">
       {/* Logo */}
       <div className="flex items-center gap-3 px-5 py-5 border-b border-sidebar-border">
-        <div className="h-9 w-9 rounded-lg bg-sidebar-primary flex items-center justify-center shrink-0 shadow">
-          <Store className="h-5 w-5 text-white" />
+        <div className="h-9 w-9 rounded-lg bg-white overflow-hidden flex items-center justify-center shrink-0 shadow-md">
+          <img src={logoImg} alt="AZAAN" className="h-8 w-8 object-contain" />
         </div>
         <div className="min-w-0">
           <div className="text-white font-bold text-sm leading-tight truncate" style={{ fontFamily: 'var(--app-font-display)' }}>

@@ -1,0 +1,56 @@
+I need to replace the logo image on my website. I've added a new 
+logo image "AZAAN COMMUNICATION - Tour and Travel" (flat indigo/amber 
+style, with an AC monogram, and Flight/Bus/Train/Hotel/Visa icons) 
+to the attached_assets folder (or I'll upload it — let me know the 
+exact path to place it in).
+
+STEP 1 — Add the logo image:
+1. Save the attached image to the project at src/assets/logo.png 
+   (or .svg if you can convert it).
+2. If the image has a white/off-white background and the app's 
+   background is also off-white (#f5f7fb), there won't be a 
+   transparency issue. But if it needs to be used on the dark 
+   sidebar (#080f1f), also create a transparent-background version 
+   (or place it inside a white rounded card via CSS so it still 
+   looks clean on the dark background).
+
+STEP 2 — Replace it in the Sidebar:
+1. Currently the sidebar's top-left has a small purple/indigo shop 
+   icon (home icon) next to the "AZAAN COMMUNICATION" text — replace 
+   this small icon with a compact/cropped version of the new logo 
+   (just the "AC" monogram part, not the full detailed logo, since 
+   the full logo with text would be unreadable in that small space).
+2. If the full logo (with name) doesn't fit in the narrow sidebar 
+   width, use only the AC monogram icon and keep the "AZAAN 
+   COMMUNICATION / CSC Management" text next to it as it currently 
+   is.
+
+STEP 3 — Replace it on the Login Page:
+1. On the login page's branding panel (assuming the animated login 
+   screen has already been implemented), prominently display the 
+   full new logo (larger size — AC monogram + AZAAN COMMUNICATION + 
+   Tour and Travel + service icons) since there's more space there 
+   for the full detailed logo.
+2. If it's on a dark background, add a subtle white/light rounded 
+   card/backdrop behind the logo so the colors pop correctly.
+
+STEP 4 — Update the favicon:
+1. Crop just the "AC" monogram part of the new logo and use it to 
+   update the favicon (browser tab icon) as well, so the browser 
+   tab also shows the new branding.
+
+STEP 5 — Consistency check:
+Check if the logo/branding is referenced anywhere else in the app 
+(e.g., Settings → Shop Info page, PDF/receipt exports if any, 
+loading screens) — update the logo consistently there too.
+
+STEP 6 — Verify:
+1. In dev preview, confirm the new logo displays correctly in the 
+   Sidebar, Login page, and browser tab (favicon).
+2. Confirm the logo doesn't get clipped or distorted on mobile view, 
+   and maintains proper aspect ratio.
+3. Run pnpm --filter @workspace/azaan-csc run build and confirm 
+   zero errors.
+
+STEP 7 — Deploy:
+After verifying, commit and push to the GitHub main branch.
