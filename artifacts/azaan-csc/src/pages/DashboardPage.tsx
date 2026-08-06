@@ -77,21 +77,11 @@ function ReminderCard({ entry }: { entry: WorkEntry & { daysPending: number } })
       <Badge variant="outline" className="self-start text-[10px] font-normal px-1.5 py-0 text-muted-foreground border-muted">
         {cat}
       </Badge>
-      {/* Bottom row: age badge + reason tags */}
+      {/* Bottom row: age badge only — this section is work-status only */}
       <div className="flex flex-wrap items-center gap-1.5 mt-0.5">
         <span className={`text-[11px] font-semibold px-1.5 py-0.5 rounded-full border ${badgeCls}`}>
           {entry.daysPending > 0 ? `${entry.daysPending}d ago` : 'Today'}
         </span>
-        {entry.status === 'Pending' && (
-          <span className="text-[11px] font-semibold px-1.5 py-0.5 rounded-full border bg-indigo-50 text-indigo-700 border-indigo-200">
-            Work Pending
-          </span>
-        )}
-        {entry.dueAmount > 0 && (
-          <span className="text-[11px] font-bold px-1.5 py-0.5 rounded-full border bg-red-50 text-red-600 border-red-200">
-            Due: {formatCurrency(entry.dueAmount)}
-          </span>
-        )}
       </div>
     </div>
   );
@@ -247,9 +237,9 @@ export default function DashboardPage() {
     .reduce((s, e) => s + e.profitMargin, 0);
   const monthTotalProfit = monthWorkProfit + monthAepsProfit + monthRechargeProfit + monthTransferProfit + monthQuickProfit + monthFlightProfit;
 
-  // Pending reminders: work not complete OR payment still owed (deduplicated via single .filter)
+  // Pending reminders: work not yet completed — mirrors the Pending Work page filter exactly
   const reminderEntries = workEntries
-    .filter(e => e.status === 'Pending' || (e.status !== 'Rejected' && e.dueAmount > 0))
+    .filter(e => e.status === 'Pending')
     .map(e => ({ ...e, daysPending: calendarDaysAgo(e.date) }))
     .sort((a, b) => b.daysPending - a.daysPending);
 
