@@ -1,41 +1,47 @@
 # AZAAN CSC Management
 
-A CSC (Common Service Centre) shop management dashboard for Azaan Communication Tour and Travel. Tracks work entries, manages staff, handles financial services (AEPS withdrawals, electricity recharges, money transfers), and generates reports.
+A business management dashboard for AZAAN COMMUNICATION TOUR AND TRAVEL — tracks work entries, staff, payments, and financial services (AEPS withdrawals, electric recharges, money transfers).
 
 ## Stack
 
-- **Frontend**: React + Vite + Tailwind CSS (shadcn/ui components), Wouter for routing
-- **Backend**: Express API server (Node.js, used for admin operations like staff password reset)
-- **Database**: Firebase Firestore (real-time data), Firebase Auth (authentication)
-- **Monorepo**: pnpm workspace with artifacts in `artifacts/`
+- **Frontend**: React + Vite + Tailwind CSS (shadcn/ui components)
+- **Backend**: Express API server (admin operations) + Firebase (Firestore + Auth)
+- **Workspace**: pnpm monorepo
 
-## Running the project
+## How to run
 
-Both workflows must be running:
+Two workflows run in parallel:
 
-- **`artifacts/azaan-csc: web`** — Vite dev server for the frontend (`pnpm --filter @workspace/azaan-csc run dev`)
-- **`artifacts/api-server: API Server`** — Express API server (`pnpm --filter @workspace/api-server run dev`)
+| Workflow | Command | Port |
+|----------|---------|------|
+| `artifacts/azaan-csc: web` | `pnpm --filter @workspace/azaan-csc run dev` | 5173 |
+| `artifacts/api-server: API Server` | `pnpm --filter @workspace/api-server run dev` | 8080 |
 
-## Environment variables / secrets
+Both start automatically. The frontend proxies `/api` requests to the Express server.
 
-All Firebase config values are set in `.replit` under `[userenv.shared]` except:
+## Required secrets
 
-| Key | Type | Notes |
-|-----|------|-------|
-| `VITE_FIREBASE_API_KEY` | Secret | Firebase web API key |
-| `FIREBASE_SERVICE_ACCOUNT_KEY` | Secret | Firebase Admin SDK JSON — needed for the API server (staff password reset) |
-| `SESSION_SECRET` | Secret | Express session secret |
+| Secret | Used by | Description |
+|--------|---------|-------------|
+| `VITE_FIREBASE_API_KEY` | Frontend | Firebase API key (Project Settings → Your apps → Web app → firebaseConfig → `apiKey`) |
+| `FIREBASE_SERVICE_ACCOUNT_KEY` | API server | Firebase Admin SDK JSON key (Project Settings → Service accounts → Generate new private key). Required for staff password reset (`/api/admin/reset-staff-password`). |
 
-## Key directories
+The following Firebase config values are already set as env vars in `.replit`:
+- `VITE_FIREBASE_PROJECT_ID`
+- `VITE_FIREBASE_AUTH_DOMAIN`
+- `VITE_FIREBASE_STORAGE_BUCKET`
+- `VITE_FIREBASE_MESSAGING_SENDER_ID`
+- `VITE_FIREBASE_APP_ID`
 
-- `artifacts/azaan-csc/src/` — React frontend source
-  - `pages/` — route-level page components
-  - `contexts/` — AuthContext (role system: owner / manager / staff)
-  - `lib/` — Firebase client, services, utilities
-- `artifacts/api-server/` — Express API server
-- `lib/` — shared workspace libraries (api-spec, api-zod, db)
-- `firestore.rules` — Firestore security rules (deploy via Firebase CLI or Firebase Console)
+## Architecture
+
+- `artifacts/azaan-csc/` — React/Vite frontend (port 5173)
+- `artifacts/api-server/` — Express API server (port 8080); handles admin operations that require Firebase Admin SDK (e.g. staff password reset)
+- Firebase Firestore — primary data store
+- Firebase Auth — email/password authentication
+
+## Role system
+
+3-tier roles: **owner** / **manager** / **staff**. Managers auto-get financial access. See `.agents/memory/role-system.md` for details.
 
 ## User preferences
-
-- Keep the existing project structure and stack — do not restructure or migrate.
