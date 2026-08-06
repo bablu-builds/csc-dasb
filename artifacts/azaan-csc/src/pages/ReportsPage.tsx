@@ -301,14 +301,21 @@ function OverviewTab({
   const rechargePaid   = recharge.filter(e => resolveStatus(e.paymentStatus) === 'paid');
   const transferPaid   = transfer.filter(e => resolveStatus(e.paymentStatus) === 'paid');
   const quickPaid      = quick.filter(e => resolveStatus(e.paymentStatus) === 'paid');
+  const flightPaid     = flight.filter(e => resolveStatus(e.paymentStatus) === 'paid');
 
   const aepsProfit     = aepsPaid.reduce((s, e) => s + e.profitMargin, 0);
   const rechargeProfit = rechargePaid.reduce((s, e) => s + e.profitMargin, 0);
   const transferProfit = transferPaid.reduce((s, e) => s + e.profitMargin, 0);
   const quickEarned    = quickPaid.reduce((s, e) => s + e.amount, 0);
-  const flightProfit   = flight.reduce((s, e) => s + e.profitMargin, 0);
+  const flightProfit   = flightPaid.reduce((s, e) => s + e.profitMargin, 0);
 
-  const totalDue    = activeWork.reduce((s, e) => s + Math.max(0, e.dueAmount), 0);
+  const workDue     = activeWork.reduce((s, e) => s + Math.max(0, e.dueAmount), 0);
+  const totalDue    = workDue
+    + aeps.filter(e => resolveStatus(e.paymentStatus) === 'pending').reduce((s, e) => s + e.amount, 0)
+    + recharge.filter(e => resolveStatus(e.paymentStatus) === 'pending').reduce((s, e) => s + e.rechargeAmount, 0)
+    + transfer.filter(e => resolveStatus(e.paymentStatus) === 'pending').reduce((s, e) => s + e.amount, 0)
+    + quick.filter(e => resolveStatus(e.paymentStatus) === 'pending').reduce((s, e) => s + e.amount, 0)
+    + flight.filter(e => resolveStatus(e.paymentStatus) === 'pending').reduce((s, e) => s + e.amountCharged, 0);
   const totalCredit = activeWork.reduce((s, e) => s + (e.dueAmount < 0 ? -e.dueAmount : 0), 0);
 
   const profitSources = [
@@ -317,7 +324,7 @@ function OverviewTab({
     ...(rechargeProfit !== 0 ? [{ label: 'Recharge',       profit: rechargeProfit, sub: `${rechargePaid.length} transactions` }] : []),
     ...(transferProfit !== 0 ? [{ label: 'Transfer',       profit: transferProfit, sub: `${transferPaid.length} transactions` }] : []),
     ...(quickEarned    !== 0 ? [{ label: 'Quick Work',     profit: quickEarned,    sub: `${quickPaid.length} transactions` }]    : []),
-    ...(flight.length   > 0  ? [{ label: 'Flight Booking', profit: flightProfit,   sub: `${flight.length} bookings` }]          : []),
+    ...(flightPaid.length > 0 ? [{ label: 'Flight Booking', profit: flightProfit, sub: `${flightPaid.length} bookings` }]       : []),
   ];
   const totalProfit = profitSources.reduce((s, src) => s + src.profit, 0);
   const breakdownData = profitSources.map(s => ({ name: s.label, profit: Math.round(s.profit) }));
@@ -893,9 +900,12 @@ function FlightSection({ entries, dateRange }: { entries: FlightBooking[]; dateR
   const [search, setSearch] = useState('');
   const sort = useSortState('date');
   const Th = makeTh(sort);
-  const totalProfit = entries.reduce((s, e) => s + e.profitMargin, 0);
-  const totalCharged = entries.reduce((s, e) => s + e.amountCharged, 0);
-  const trendData   = useMemo(() => buildDailyTrend(entries.map(e => ({ ts: e.createdAt.toDate(), value: e.profitMargin })), dateRange.from, dateRange.to), [entries, dateRange]);
+  const paid          = entries.filter(e => resolveStatus(e.paymentStatus) === 'paid');
+  const pending       = entries.filter(e => resolveStatus(e.paymentStatus) === 'pending');
+  const totalProfit   = paid.reduce((s, e) => s + e.profitMargin, 0);
+  const totalCharged  = paid.reduce((s, e) => s + e.amountCharged, 0);
+  const pendingAmount = pending.reduce((s, e) => s + e.amountCharged, 0);
+  const trendData   = useMemo(() => buildDailyTrend(paid.map(e => ({ ts: e.createdAt.toDate(), value: e.profitMargin })), dateRange.from, dateRange.to), [paid, dateRange]);
   const filtered    = useMemo(() => { const q = search.toLowerCase(); return entries.filter(e => !search || e.customerName.toLowerCase().includes(q) || e.flightFrom.toLowerCase().includes(q) || e.flightTo.toLowerCase().includes(q)); }, [entries, search]);
   const getValue    = useCallback((e: FlightBooking, col: string): string | number => { switch (col) { case 'date': return e.createdAt.toMillis(); case 'customer': return e.customerName; case 'from': return e.flightFrom; case 'to': return e.flightTo; case 'boarding': return e.boardingDate; case 'fare': return e.actualFare; case 'charged': return e.amountCharged; case 'profit': return e.profitMargin; default: return 0; } }, []);
   const sorted      = useMemo(() => sortRows(filtered, sort.col, sort.dir, getValue), [filtered, sort.col, sort.dir, getValue]);
@@ -904,9 +914,10 @@ function FlightSection({ entries, dateRange }: { entries: FlightBooking[]; dateR
   return (
     <div className="space-y-4">
       <StatCards items={[
-        { label: 'Total Bookings',  value: String(entries.length) },
-        { label: 'Total Charged',   value: formatCurrency(totalCharged), cls: 'text-emerald-700', info: 'Amount charged to the customer' },
-        { label: 'Shop Earnings',   value: formatCurrency(totalProfit),  cls: 'text-primary font-bold', info: 'Charged minus Actual Fare = actual profit' },
+        { label: 'Total Bookings',  value: String(entries.length), sub: pending.length > 0 ? `${paid.length} paid · ${pending.length} pending` : undefined },
+        { label: 'Total Charged',   value: formatCurrency(totalCharged), cls: 'text-emerald-700', info: 'Amount charged for paid bookings only' },
+        { label: 'Shop Earnings',   value: formatCurrency(totalProfit),  cls: 'text-primary font-bold', info: 'Charged minus Actual Fare = actual profit (paid only)' },
+        ...(pendingAmount > 0 ? [{ label: 'Pending Dues', value: formatCurrency(pendingAmount), cls: 'text-amber-700', info: 'Amount still owed by customers with Due payment mode' }] : []),
       ]} />
       <Card><CardHeader className="pb-2"><CardTitle className="text-sm">Daily Profit</CardTitle></CardHeader><CardContent><DailyTrendChart data={trendData} color="#f43f5e" label="Earnings" /></CardContent></Card>
       <div className="flex flex-col sm:flex-row gap-2 justify-between">
@@ -945,7 +956,7 @@ function FinancialTab({
     recharge: recharge.filter(e => resolveStatus(e.paymentStatus) === 'paid').reduce((s, e) => s + e.profitMargin, 0),
     transfer: transfer.filter(e => resolveStatus(e.paymentStatus) === 'paid').reduce((s, e) => s + e.profitMargin, 0),
     quick:    quick.filter(e => resolveStatus(e.paymentStatus) === 'paid').reduce((s, e) => s + e.amount, 0),
-    flight:   flight.reduce((s, e) => s + e.profitMargin, 0),
+    flight:   flight.filter(e => resolveStatus(e.paymentStatus) === 'paid').reduce((s, e) => s + e.profitMargin, 0),
   };
 
   return (
@@ -995,7 +1006,7 @@ interface StaffStat {
   rechargeCount: number; rechargeProfit: number;
   transferCount: number; transferProfit: number;
   quickCount: number;  quickProfit: number;
-  flightCount: number; flightProfit: number;
+  flightCount: number; flightProfit: number; flightDue: number;
   totalEntries: number;
   totalProfit: number;
   totalDue: number;
@@ -1018,7 +1029,7 @@ function StaffTab({
         name, workCount: 0, workProfit: 0, workDue: 0,
         aepsCount: 0, aepsProfit: 0, rechargeCount: 0, rechargeProfit: 0,
         transferCount: 0, transferProfit: 0, quickCount: 0, quickProfit: 0,
-        flightCount: 0, flightProfit: 0, totalEntries: 0, totalProfit: 0, totalDue: 0,
+        flightCount: 0, flightProfit: 0, flightDue: 0, totalEntries: 0, totalProfit: 0, totalDue: 0,
       });
       return map.get(name)!;
     };
@@ -1060,18 +1071,24 @@ function StaffTab({
       s.quickProfit += e.amount;
     });
 
-    // Flight Booking (all — no payment mode)
-    flight.forEach(e => {
+    // Flight Booking (paid only — same pattern as other services)
+    flight.filter(e => resolveStatus(e.paymentStatus) === 'paid').forEach(e => {
       const s = ensure(e.addedBy || 'Unknown');
       s.flightCount++;
       s.flightProfit += e.profitMargin;
+    });
+
+    // Flight Booking — track pending dues per staff
+    flight.filter(e => resolveStatus(e.paymentStatus) === 'pending').forEach(e => {
+      const s = ensure(e.addedBy || 'Unknown');
+      s.flightDue += e.amountCharged;
     });
 
     // Compute totals
     map.forEach(s => {
       s.totalEntries = s.workCount + s.aepsCount + s.rechargeCount + s.transferCount + s.quickCount + s.flightCount;
       s.totalProfit  = s.workProfit + s.aepsProfit + s.rechargeProfit + s.transferProfit + s.quickProfit + s.flightProfit;
-      s.totalDue     = s.workDue;
+      s.totalDue     = s.workDue + s.flightDue;
     });
 
     return Array.from(map.values()).sort((a, b) => b.totalProfit - a.totalProfit);
@@ -1167,7 +1184,7 @@ function StaffTab({
               {s.totalDue > 0 && (
                 <div className="flex items-center gap-2 rounded-lg border border-amber-200 bg-amber-50 px-3 py-2 text-sm">
                   <AlertTriangle className="h-4 w-4 text-amber-600 shrink-0" />
-                  <span className="text-amber-700">{formatCurrency(s.totalDue)} outstanding (from Work entries)</span>
+                  <span className="text-amber-700">{formatCurrency(s.totalDue)} outstanding dues</span>
                 </div>
               )}
             </div>

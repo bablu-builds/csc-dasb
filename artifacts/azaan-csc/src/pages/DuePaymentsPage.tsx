@@ -7,6 +7,7 @@ import {
   ElectricRecharge, subscribeToElectricRecharges,
   MoneyTransfer, subscribeToMoneyTransfers,
   QuickActionEntry, subscribeToQuickActions,
+  FlightBooking, subscribeToFlightBookings,
   settlePendingEntry, UserProfile, subscribeToStaff,
 } from '@/lib/firestore';
 import { SettlementMode, resolveStatus } from '@/lib/payments';
@@ -35,7 +36,7 @@ import type { DateRange } from 'react-day-picker';
 // Types
 // ─────────────────────────────────────────────────────────────────────────────
 
-type DueSource = 'Work' | 'AEPS' | 'Recharge' | 'Transfer' | 'Quick';
+type DueSource = 'Work' | 'AEPS' | 'Recharge' | 'Transfer' | 'Quick' | 'Flight';
 type PresetKey = 'all' | 'today' | 'thisWeek' | 'thisMonth' | 'custom';
 
 interface DateState { preset: PresetKey; from?: Date; to?: Date; }
@@ -62,6 +63,7 @@ const SOURCE_STYLE: Record<DueSource, string> = {
   Recharge: 'bg-amber-100 text-amber-700 border-amber-200',
   Transfer: 'bg-purple-100 text-purple-700 border-purple-200',
   Quick:    'bg-cyan-100 text-cyan-700 border-cyan-200',
+  Flight:   'bg-rose-100 text-rose-700 border-rose-200',
 };
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -105,6 +107,7 @@ export default function DuePaymentsPage() {
   const [rechargeEntries,  setRechargeEntries]  = useState<ElectricRecharge[]>([]);
   const [transferEntries,  setTransferEntries]  = useState<MoneyTransfer[]>([]);
   const [quickEntries,     setQuickEntries]     = useState<QuickActionEntry[]>([]);
+  const [flightEntries,    setFlightEntries]    = useState<FlightBooking[]>([]);
   const [staffList,        setStaffList]        = useState<UserProfile[]>([]);
 
   // ── UI state — initialise date preset from URL ?preset= param ────────────────
@@ -125,14 +128,15 @@ export default function DuePaymentsPage() {
   // ── Subscriptions ────────────────────────────────────────────────────────────
   useEffect(() => {
     let resolved = 0;
-    const done = () => { if (++resolved === 5) setLoading(false); };
+    const done = () => { if (++resolved === 6) setLoading(false); };
     const u1 = subscribeToWorkEntries(d => { setWorkEntries(d); done(); });
     const u2 = subscribeToAepsWithdrawals(d => { setAepsEntries(d); done(); });
     const u3 = subscribeToElectricRecharges(d => { setRechargeEntries(d); done(); });
     const u4 = subscribeToMoneyTransfers(d => { setTransferEntries(d); done(); });
     const u5 = subscribeToQuickActions(d => { setQuickEntries(d); done(); }, () => done());
-    const u6 = subscribeToStaff(setStaffList);
-    return () => { u1(); u2(); u3(); u4(); u5(); u6(); };
+    const u6 = subscribeToFlightBookings(d => { setFlightEntries(d); done(); });
+    const u7 = subscribeToStaff(setStaffList);
+    return () => { u1(); u2(); u3(); u4(); u5(); u6(); u7(); };
   }, []);
 
   // ── Build unified due list ───────────────────────────────────────────────────
@@ -227,13 +231,29 @@ export default function DuePaymentsPage() {
       });
     });
 
+    // Flight Booking
+    flightEntries.forEach(e => {
+      if (resolveStatus(e.paymentStatus) !== 'pending') return;
+      items.push({
+        id: e.id!,
+        source: 'Flight',
+        customerName: e.customerName,
+        workType: `Flight – ${e.flightFrom} → ${e.flightTo}`,
+        dueAmount: e.amountCharged,
+        entryDate: e.createdAt.toDate(),
+        addedBy: e.addedBy || '',
+        settle: async (mode, settledBy) =>
+          settlePendingEntry('flight', e.id!, mode, settledBy, { amount: e.amountCharged, customerName: e.customerName, category: 'Flight Booking' }),
+      });
+    });
+
     // Access control: non-owners see only their own
     if (!isOwner) {
       const me = [user?.displayName, user?.email].filter(Boolean) as string[];
       return items.filter(i => me.includes(i.addedBy));
     }
     return items;
-  }, [workEntries, aepsEntries, rechargeEntries, transferEntries, quickEntries, user, isOwner]);
+  }, [workEntries, aepsEntries, rechargeEntries, transferEntries, quickEntries, flightEntries, user, isOwner]);
 
   // ── Apply filters ────────────────────────────────────────────────────────────
   const filteredDues = useMemo(() => {

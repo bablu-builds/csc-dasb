@@ -863,7 +863,7 @@ export const subscribeToQuickActions = (
 
 // ─── PAYMENT HISTORY ─────────────────────────────────────────────────────────
 
-export type PaymentHistoryEntryType = 'aeps' | 'recharge' | 'transfer' | 'quickWork' | 'work';
+export type PaymentHistoryEntryType = 'aeps' | 'recharge' | 'transfer' | 'quickWork' | 'work' | 'flight';
 
 export interface PaymentHistoryRecord {
   id?: string;
@@ -884,6 +884,7 @@ const COLLECTION_MAP: Record<PaymentHistoryEntryType, string> = {
   transfer: 'moneyTransfers',
   quickWork: 'quickActionWork',
   work: 'workEntries',
+  flight: 'flightBookings',
 };
 
 export const settlePendingEntry = async (
@@ -933,14 +934,21 @@ export interface FlightBooking {
   actualFare: number;
   amountCharged: number;
   profitMargin: number; // auto-calculated: amountCharged - actualFare
+  paymentMode?: PaymentMode;
+  paymentStatus?: PaymentStatus;
+  settledVia?: SettlementMode;
+  settledAt?: Timestamp;
+  settledBy?: string;
   createdAt: Timestamp;
   addedBy: string;
 }
 
 export const createFlightBooking = async (data: Omit<FlightBooking, 'id' | 'createdAt'>): Promise<void> => {
   if (!db) throw new Error('Firebase not configured');
+  const paymentStatus: PaymentStatus = deriveStatus(data.paymentMode ?? 'Cash');
   await addDoc(collection(db, 'flightBookings'), {
     ...stripUndefined(data as Record<string, unknown>),
+    paymentStatus,
     createdAt: Timestamp.now(),
   });
 };

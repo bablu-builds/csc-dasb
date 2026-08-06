@@ -1,6 +1,7 @@
 import { useState, useEffect, useMemo } from 'react';
 import { useAuth } from '@/contexts/AuthContext';
 import { subscribeToFlightBookings, createFlightBooking, FlightBooking } from '@/lib/firestore';
+import { PaymentMode, PAYMENT_MODE_META } from '@/lib/payments';
 import { formatCurrency } from '@/lib/format';
 import { format, isToday, isThisMonth } from 'date-fns';
 import { useToast } from '@/hooks/use-toast';
@@ -43,6 +44,7 @@ export default function FlightBookingPage() {
   const [customerName, setCustomerName] = useState('');
   const [actualFare, setActualFare] = useState('');
   const [amountCharged, setAmountCharged] = useState('');
+  const [paymentMode, setPaymentMode] = useState<PaymentMode>('Cash');
   const [submitting, setSubmitting] = useState(false);
 
   // Filters
@@ -91,6 +93,7 @@ export default function FlightBookingPage() {
   const resetForm = () => {
     setFlightFrom(''); setFlightTo(''); setBoardingDate('');
     setCustomerName(''); setActualFare(''); setAmountCharged('');
+    setPaymentMode('Cash');
   };
 
   const handleSubmit = async (e: React.FormEvent) => {
@@ -128,6 +131,7 @@ export default function FlightBookingPage() {
         actualFare: fare,
         amountCharged: charged,
         profitMargin: profit,
+        paymentMode,
         addedBy: userProfile?.displayName || userProfile?.email || 'Unknown',
       });
       toast({
@@ -283,6 +287,30 @@ export default function FlightBookingPage() {
                   required
                 />
               </div>
+              {/* Payment Mode */}
+              <div className="sm:col-span-2 space-y-2">
+                <Label>Payment Mode *</Label>
+                <div className="flex gap-2 flex-wrap">
+                  {(['Cash', 'Online', 'Due'] as PaymentMode[]).map(mode => (
+                    <button
+                      key={mode}
+                      type="button"
+                      onClick={() => setPaymentMode(mode)}
+                      className={`px-4 py-2 rounded-lg text-sm font-medium border transition-all ${
+                        paymentMode === mode
+                          ? PAYMENT_MODE_META[mode].activeBg + ' border-transparent'
+                          : 'bg-card border-border hover:border-muted-foreground'
+                      }`}
+                    >
+                      {PAYMENT_MODE_META[mode].label}
+                    </button>
+                  ))}
+                </div>
+                {paymentMode === 'Due' && (
+                  <p className="text-xs text-amber-600">⚠ This entry will appear in Due Payments until collected.</p>
+                )}
+              </div>
+
               {/* Live profit preview */}
               <div className="sm:col-span-2">
                 <div className="flex items-center gap-3 rounded-lg border bg-emerald-50 border-emerald-200 px-4 py-3">

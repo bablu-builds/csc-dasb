@@ -156,7 +156,7 @@ export default function DashboardPage() {
   const totalRefunded = rejectedEntries.reduce((s, e) => s + (e.refundAmount || 0), 0);
   const uniqueCustomers = new Set(workEntries.map(e => e.mobile)).size;
 
-  // ── Total Pending Dues (all 5 sources) ──────────────────────────────────
+  // ── Total Pending Dues (all 6 sources) ──────────────────────────────────
   const workPendingDue = workEntries
     .filter(e => e.status !== 'Rejected' && e.dueAmount > 0)
     .reduce((s, e) => s + e.dueAmount, 0);
@@ -172,14 +172,18 @@ export default function DashboardPage() {
   const quickPendingDue = quickEntries
     .filter(e => resolveStatus(e.paymentStatus) === 'pending')
     .reduce((s, e) => s + e.amount, 0);
+  const flightPendingDue = flightEntries
+    .filter(e => resolveStatus(e.paymentStatus) === 'pending')
+    .reduce((s, e) => s + e.amountCharged, 0);
 
-  const totalPendingDues = workPendingDue + aepsPendingDue + rechargePendingDue + transferPendingDue + quickPendingDue;
+  const totalPendingDues = workPendingDue + aepsPendingDue + rechargePendingDue + transferPendingDue + quickPendingDue + flightPendingDue;
   const pendingDueCount =
     workEntries.filter(e => e.status !== 'Rejected' && e.dueAmount > 0).length +
     aepsEntries.filter(e => resolveStatus(e.paymentStatus) === 'pending').length +
     rechargeEntries.filter(e => resolveStatus(e.paymentStatus) === 'pending').length +
     transferEntries.filter(e => resolveStatus(e.paymentStatus) === 'pending').length +
-    quickEntries.filter(e => resolveStatus(e.paymentStatus) === 'pending').length;
+    quickEntries.filter(e => resolveStatus(e.paymentStatus) === 'pending').length +
+    flightEntries.filter(e => resolveStatus(e.paymentStatus) === 'pending').length;
 
   // ── Today's Due (entries created today with pending payment) ──────────────
   const todayDueWork      = workEntries.filter(e => e.status !== 'Rejected' && e.dueAmount > 0 && isToday(e.date.toDate()));
@@ -187,16 +191,18 @@ export default function DashboardPage() {
   const todayDueRecharge  = rechargeEntries.filter(e => resolveStatus(e.paymentStatus) === 'pending' && isToday(e.createdAt.toDate()));
   const todayDueTransfer  = transferEntries.filter(e => resolveStatus(e.paymentStatus) === 'pending' && isToday(e.createdAt.toDate()));
   const todayDueQuick     = quickEntries.filter(e => resolveStatus(e.paymentStatus) === 'pending' && isToday(e.createdAt.toDate()));
+  const todayDueFlight    = flightEntries.filter(e => resolveStatus(e.paymentStatus) === 'pending' && isToday(e.createdAt.toDate()));
 
   const todayDueAmount =
     todayDueWork.reduce((s, e) => s + e.dueAmount, 0) +
     todayDueAeps.reduce((s, e) => s + e.amount, 0) +
     todayDueRecharge.reduce((s, e) => s + e.rechargeAmount, 0) +
     todayDueTransfer.reduce((s, e) => s + e.amount, 0) +
-    todayDueQuick.reduce((s, e) => s + e.amount, 0);
+    todayDueQuick.reduce((s, e) => s + e.amount, 0) +
+    todayDueFlight.reduce((s, e) => s + e.amountCharged, 0);
   const todayDueCount =
     todayDueWork.length + todayDueAeps.length + todayDueRecharge.length +
-    todayDueTransfer.length + todayDueQuick.length;
+    todayDueTransfer.length + todayDueQuick.length + todayDueFlight.length;
 
   // ── Profit (exclude pending/free) ───────────────────────────────────────
   const todayAepsProfit = aepsEntries
@@ -213,7 +219,7 @@ export default function DashboardPage() {
   const todayWorkProfit = workTodayEarning - todayChallanCost;
   const todayQuickProfit = todayQuickEarning;
   const todayFlightProfit = flightEntries
-    .filter(e => isToday(e.createdAt.toDate()))
+    .filter(e => isToday(e.createdAt.toDate()) && resolveStatus(e.paymentStatus) === 'paid')
     .reduce((s, e) => s + e.profitMargin, 0);
   const todayTotalProfit = todayWorkProfit + todayAepsProfit + todayRechargeProfit + todayTransferProfit + todayQuickProfit + todayFlightProfit;
 
@@ -232,7 +238,7 @@ export default function DashboardPage() {
   const monthWorkProfit = workMonthEarning - monthChallanCost;
   const monthQuickProfit = monthQuickEarning;
   const monthFlightProfit = flightEntries
-    .filter(e => isThisMonth(e.createdAt.toDate()))
+    .filter(e => isThisMonth(e.createdAt.toDate()) && resolveStatus(e.paymentStatus) === 'paid')
     .reduce((s, e) => s + e.profitMargin, 0);
   const monthTotalProfit = monthWorkProfit + monthAepsProfit + monthRechargeProfit + monthTransferProfit + monthQuickProfit + monthFlightProfit;
 
